@@ -4,7 +4,9 @@ Helium's privacy and speed, with an Arc-inspired workspace you can make your own
 
 Arcium brings Spaces, Pins, Favorites, Peek, and Little Arc to [Helium](https://helium.computer/), with native macOS settings and more ways to shape the browser's colors and layout. This is an early preview, with the source included.
 
-![Arcium's pastel sidebar with Favorites, Pins, and a full-height page](docs/assets/arcium-layout.png)
+![Arcium's pastel sidebar with Favorites and Pins](docs/assets/arcium-layout.png)
+
+Screenshots show the October 22 development build with the newer glass styling. The download below is the October 17 preview.
 
 [Download the macOS preview](../../releases) · [Release notes](docs/preview-release.md) · [Build from source](docs/building.md)
 
@@ -34,7 +36,7 @@ These are planned directions, not features in the download. Chromium updates and
 
 Put navigation in the sidebar, choose your layout and collapse behavior, and tune colors, glass, grain, borders, and UI scale. Native Settings gives you direct control over the browser's appearance.
 
-![Native appearance settings and a pastel spatial color canvas](docs/assets/appearance.png)
+![Native appearance settings with Space colors and the Glass preset](docs/assets/appearance.png)
 
 ## Pins and Favorites
 
