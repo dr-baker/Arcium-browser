@@ -1,0 +1,700 @@
+--- /dev/null
++++ b/chrome/browser/ui/views/frame/mru_tab_performance.h
+@@ -0,0 +1,41 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PERFORMANCE_H_
++#define CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PERFORMANCE_H_
++
++#include "base/time/time.h"
++
++// Local diagnostic metrics, never UMA uploads. One pending presentation per
++// overlay bounds callback overhead even when Ctrl+Tab repeats faster than
++// frames. Latency starts at the first unmeasured Update, not at the native key
++// event.
++class MRUTabPresentationMetrics {
++ public:
++  enum class Outcome {
++    kPresented = 0,
++    kCoalesced = 1,
++    kClosedBeforeFeedback = 2,
++    kInvalidTimestamp = 3,
++    kMaxValue = kInvalidTimestamp,
++  };
++
++  MRUTabPresentationMetrics() = default;
++  MRUTabPresentationMetrics(const MRUTabPresentationMetrics&) = delete;
++  MRUTabPresentationMetrics& operator=(const MRUTabPresentationMetrics&) =
++      delete;
++  ~MRUTabPresentationMetrics();
++
++  bool Request(base::TimeTicks started, bool opening, bool glass);
++  void Presented(base::TimeTicks timestamp);
++
++ private:
++  void RecordOutcome(Outcome outcome);
++
++  base::TimeTicks started_;
++  bool opening_ = false;
++  bool glass_ = false;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PERFORMANCE_H_
+--- a/cc/paint/paint_filter.cc
++++ b/cc/paint/paint_filter.cc
+@@ -15,6 +15,7 @@
+ #include "base/memory/values_equivalent.h"
+ #include "base/no_destructor.h"
+ #include "base/notreached.h"
++#include "base/trace_event/trace_event.h"
+ #include "base/types/optional_util.h"
+ #include "build/build_config.h"
+ #include "cc/paint/draw_image.h"
+@@ -1515,6 +1516,10 @@ GlassmorphicPaintFilter::GlassmorphicPai
+ sk_sp<SkImageFilter> MakeGlassmorphicImageFilter(
+     const GlassmorphicPaintFilter& paint_filter,
+     const SkMatrix& local_matrix) {
++  // CPU filter construction, including first-use shader compilation. GPU work
++  // runs later; correlate with Viz/GPU trace tracks instead of timing this
++  // scope.
++  TRACE_EVENT("cc", "Arcium.Glass.BuildImageFilter");
+   if (!local_matrix.isScaleTranslate() || !local_matrix.isFinite() ||
+       local_matrix.getScaleX() == 0 || local_matrix.getScaleY() == 0) {
+     return nullptr;
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -4085,6 +4085,8 @@ static_library("ui") {
+       "views/frame/browser_view.h",
+       "views/frame/mru_tab_preview_cache.cc",
+       "views/frame/mru_tab_preview_cache.h",
++      "views/frame/mru_tab_performance.h",
++      "views/frame/mru_tab_performance.cc",
+       "views/frame/mru_tab_preview_rail.cc",
+       "views/frame/mru_tab_preview_rail.h",
+       "views/frame/browser_widget.cc",
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -120,6 +120,7 @@
+ #include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_view.h"
+ #include "chrome/browser/ui/side_panel/side_panel_registry.h"
+ #include "chrome/browser/ui/side_panel/side_panel_ui.h"
++#include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
+ #include "chrome/browser/ui/tabs/projects/projects_panel_state_controller.h"
+ #include "chrome/browser/ui/tabs/public/tab_dialog_manager.h"
+@@ -130,7 +131,6 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_utils.h"
+-#include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/toasts/toast_view.h"
+@@ -167,11 +167,9 @@
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout.h"
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.h"
+ #include "chrome/browser/ui/views/frame/main_background_region_view.h"
++#include "chrome/browser/ui/views/frame/mru_tab_performance.h"
+ #include "chrome/browser/ui/views/frame/mru_tab_preview_cache.h"
+ #include "chrome/browser/ui/views/frame/mru_tab_preview_rail.h"
+-#include "chrome/browser/ui/views/helium/glass_surface.h"
+-#include "ui/views/view_observer.h"
+-#include "ui/views/view_shadow.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view_delegate.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view_drop_target_controller.h"
+@@ -188,6 +186,7 @@
+ #include "chrome/browser/ui/views/glic/glic_button_interface.h"
+ #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button_view.h"
+ #include "chrome/browser/ui/views/hats/hats_next_web_dialog.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
+ #include "chrome/browser/ui/views/incognito_clear_browsing_data_dialog_coordinator.h"
+ #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+ #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
+@@ -376,6 +375,8 @@
+ #include "ui/views/style/typography.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
++#include "ui/views/view_observer.h"
++#include "ui/views/view_shadow.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/views_features.h"
+ #include "ui/views/widget/native_widget.h"
+@@ -936,6 +937,8 @@ class MRUTabSwitcherOverlay : public vie
+   ~MRUTabSwitcherOverlay() override {
+     browser_view_->RemoveObserver(this);
+     if (bubble_) {
++      TRACE_EVENT_INSTANT("ui", "Arcium.MRU.Visibility", "visible", false,
++                          "glass", use_glass_);
+       auto* bubble = bubble_.get();
+       bubble_ = nullptr;
+       browser_view_->RemoveChildViewT(bubble);
+@@ -944,6 +947,9 @@ class MRUTabSwitcherOverlay : public vie
+ 
+   void Update(const std::vector<content::WebContents*>& starting_tabs,
+               content::WebContents* selected_tab) {
++    TRACE_EVENT("ui", "Arcium.MRU.Update");
++    const auto started = base::TimeTicks::Now();
++    const bool opening = !bubble_;
+     if (!starting_tabs.empty()) {
+       tabs_ = starting_tabs;
+     }
+@@ -956,6 +962,11 @@ class MRUTabSwitcherOverlay : public vie
+     bubble_->Update(tabs_, selected_index_);
+     PositionView();
+     bubble_->SetVisible(true);
++    if (auto* compositor = browser_view_->GetWidget()->GetCompositor();
++        compositor && presentation_.Request(started, opening, use_glass_)) {
++      compositor->RequestSuccessfulPresentationTimeForNextFrame(base::BindOnce(
++          &MRUTabSwitcherOverlay::OnPresented, weak_factory_.GetWeakPtr()));
++    }
+   }
+ 
+   class BubbleView : public views::View {
+@@ -1005,7 +1016,11 @@ class MRUTabSwitcherOverlay : public vie
+       rail_->SetLabelContrast(background, uses_backdrop);
+     }
+ 
+-    private:
++    bool UsesBackdrop() const {
++      return glass_surface_->uses_backdrop();
++    }
++
++   private:
+     const raw_ptr<BrowserView> browser_view_;
+     raw_ptr<helium::GlassSurfaceView> glass_surface_ = nullptr;
+     raw_ptr<MRUTabPreviewRail> rail_ = nullptr;
+@@ -1013,6 +1028,10 @@ class MRUTabSwitcherOverlay : public vie
+   };
+ 
+  private:
++  void OnPresented(const viz::FrameTimingDetails& details) {
++    presentation_.Presented(details.presentation_feedback.timestamp);
++  }
++
+   void OnViewBoundsChanged(views::View*) override {
+     if (bubble_) {
+       bubble_->Update(tabs_, selected_index_);
+@@ -1026,12 +1045,15 @@ class MRUTabSwitcherOverlay : public vie
+       return;
+     }
+     auto bubble = std::make_unique<BubbleView>(browser_view_);
++    use_glass_ = bubble->UsesBackdrop();
+     bubble->SetProperty(views::kViewIgnoredByLayoutKey, true);
+     bubble->SetCanProcessEventsWithinSubtree(false);
+     bubble->SetVisible(false);
+     bubble->SetPaintToLayer();
+     bubble->layer()->SetFillsBoundsOpaquely(false);
+     bubble_ = browser_view_->AddChildView(std::move(bubble));
++    TRACE_EVENT_INSTANT("ui", "Arcium.MRU.Visibility", "visible", true, "glass",
++                        use_glass_);
+   }
+ 
+   void PositionView() {
+@@ -1049,6 +1071,9 @@ class MRUTabSwitcherOverlay : public vie
+   std::vector<content::WebContents*> tabs_;
+   size_t selected_index_ = 0;
+   raw_ptr<BubbleView> bubble_ = nullptr;
++  bool use_glass_ = false;
++  MRUTabPresentationMetrics presentation_;
++  base::WeakPtrFactory<MRUTabSwitcherOverlay> weak_factory_{this};
+ };
+ 
+ BEGIN_METADATA(MRUTabSwitcherOverlay, BubbleView)
+--- a/chrome/browser/ui/views/frame/browser_view_unittest.cc
++++ b/chrome/browser/ui/views/frame/browser_view_unittest.cc
+@@ -14,6 +14,7 @@
+ #include "base/strings/strcat.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/test/metrics/histogram_tester.h"
++#include "base/test/scoped_command_line.h"
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+@@ -37,11 +38,12 @@
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout.h"
+-#include "chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h"
+ #include "chrome/browser/ui/views/frame/mru_tab_preview_rail.h"
++#include "chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
+ #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+ #include "chrome/browser/ui/views/toolbar/app_menu_control.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+@@ -67,8 +69,8 @@
+ #include "ui/gfx/scrollbar_size.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+-#include "ui/views/controls/label.h"
+ #include "ui/views/bubble/bubble_dialog_model_host.h"
++#include "ui/views/controls/label.h"
+ #include "ui/views/controls/webview/webview.h"
+ #include "ui/views/focus/focus_manager.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+@@ -216,6 +218,29 @@ TEST_F(BrowserViewTest, MRUTabSwitcherSh
+   EXPECT_EQ(browser_view()->children().size(), original_child_count);
+ }
+ 
++TEST_F(BrowserViewTest, MRUGlobalOpaqueBackendUsesFallback) {
++  base::test::ScopedCommandLine command_line;
++  command_line.GetProcessCommandLine()->AppendSwitchASCII(
++      helium::kArciumGlassBackendSwitch, "opaque");
++  auto* active = browser()->tab_strip_model()->GetActiveWebContents();
++  browser_view()->SetSize(gfx::Size(1000, 800));
++  UpdateMRUTabSwitcherVisualizer(browser_view(), {active}, active);
++  helium::GlassSurfaceView* surface = nullptr;
++  std::vector<views::View*> descendants{browser_view()->children().back()};
++  while (!descendants.empty()) {
++    auto* view = descendants.back();
++    descendants.pop_back();
++    if (auto* candidate = views::AsViewClass<helium::GlassSurfaceView>(view)) {
++      surface = candidate;
++    }
++    descendants.insert(descendants.end(), view->children().begin(),
++                       view->children().end());
++  }
++  ASSERT_TRUE(surface);
++  EXPECT_FALSE(surface->uses_backdrop());
++  StopMRUTabSwitcherVisualizer(browser_view());
++}
++
+ TEST_F(BrowserViewTest, MRURailKeepsFiveCardsAndFitsNarrowWindows) {
+   std::vector<content::WebContents*> tabs;
+   for (int i = 0; i < 7; ++i) {
+--- src.orig/chrome/browser/ui/views/frame/mru_tab_preview_cache.cc
++++ src/chrome/browser/ui/views/frame/mru_tab_preview_cache.cc
+@@ -9,12 +9,15 @@
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
++#include "base/metrics/histogram_macros_local.h"
+ #include "base/numerics/checked_math.h"
+ #include "base/task/bind_post_task.h"
+ #include "base/time/time.h"
++#include "base/trace_event/trace_event.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/thumbnails/thumbnail_image.h"
+ #include "chrome/browser/ui/thumbnails/thumbnail_tab_helper.h"
++#include "components/tabs/public/temporary_tab.h"
+ #include "components/viz/common/frame_sinks/copy_output_result.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_widget_host_view.h"
+@@ -61,18 +64,23 @@
+ 
+ void MRUTabPreviewCache::Request(tabs::TabHandle handle,
+                                  gfx::Size size,
+-                                 ImageCallback callback, bool high_priority) {
++                                 ImageCallback callback,
++                                 bool high_priority) {
++  TRACE_EVENT("ui", "Arcium.MRU.CacheRequest", "selected", high_priority);
+   auto image = Get(handle);
+   if (!image.isNull()) {
+     auto* tab = handle.Get();
+     auto* helper = ThumbnailTabHelper::FromWebContents(tab->GetContents());
+     const auto& entry = entries_.front();
+     if (entry.sharp || !helper ||
+-        entry.thumbnail_generation == helper->thumbnail()->cached_data_generation()) {
++        entry.thumbnail_generation ==
++            helper->thumbnail()->cached_data_generation()) {
++      LOCAL_HISTOGRAM_BOOLEAN("Arcium.MRU.Cache.RequestHit", true);
+       std::move(callback).Run(std::move(image));
+       return;
+     }
+   }
++  LOCAL_HISTOGRAM_BOOLEAN("Arcium.MRU.Cache.RequestHit", false);
+   Enqueue(handle, size, std::move(callback), high_priority);
+ }
+ 
+@@ -118,11 +126,14 @@
+   // Keep a full five-card rail queued even while two stale decodes finish.
+   if (high_priority) {
+     if (queued_.size() >= 5) {
++      LOCAL_HISTOGRAM_BOOLEAN("Arcium.MRU.Decode.QueueDropped", true);
+       queued_.pop_back();
+     }
+     queued_.push_front(job);
+   } else if (queued_.size() < 5) {
+     queued_.push_back(job);
++  } else {
++    LOCAL_HISTOGRAM_BOOLEAN("Arcium.MRU.Decode.QueueDropped", true);
+   }
+   Pump();
+ }
+@@ -149,6 +160,9 @@
+     }
+     running_.push_back(job);
+     job->thumbnail = helper->thumbnail();
++    job->decode_started = base::TimeTicks::Now();
++    LOCAL_HISTOGRAM_TIMES("Arcium.MRU.Decode.QueueTime",
++                          job->decode_started - job->enqueued);
+     auto alive = weak_factory_.GetWeakPtr();
+     job->thumbnail->RequestCachedImage(
+         job->size,
+@@ -166,17 +180,24 @@
+     base::WeakPtr<content::WebContents> contents,
+     const content::WeakDocumentPtr& document) const {
+   auto* tab = handle.Get();
+-  return tab && model_->GetIndexOfTab(tab) != TabStripModel::kNoTab && contents &&
+-         tab->GetContents() == contents.get() &&
++  return tab && model_->GetIndexOfTab(tab) != TabStripModel::kNoTab &&
++         contents && tab->GetContents() == contents.get() &&
+          document.AsRenderFrameHostIfValid() &&
+          document.AsRenderFrameHostIfValid() == contents->GetPrimaryMainFrame();
+ }
+ 
+-void MRUTabPreviewCache::Decoded(
+-    std::shared_ptr<Job> job,
+-    base::WeakPtr<content::WebContents> contents,
+-    content::WeakDocumentPtr document,
+-    gfx::ImageSkia image) {
++void MRUTabPreviewCache::Decoded(std::shared_ptr<Job> job,
++                                 base::WeakPtr<content::WebContents> contents,
++                                 content::WeakDocumentPtr document,
++                                 gfx::ImageSkia image) {
++  TRACE_EVENT("ui", "Arcium.MRU.Decoded");
++  LOCAL_HISTOGRAM_TIMES("Arcium.MRU.Decode.CompletionTime",
++                        base::TimeTicks::Now() - job->decode_started);
++  // Includes worker scheduling and the reply hop; not JPEG CPU time alone.
++  LOCAL_HISTOGRAM_BOOLEAN("Arcium.MRU.Decode.Stale",
++                          job->generation != generation_ ||
++                              !IsCurrent(job->handle, contents, document));
++  LOCAL_HISTOGRAM_BOOLEAN("Arcium.MRU.Decode.Empty", image.isNull());
+   std::erase(running_, job);
+   job->thumbnail.reset();
+   if (job->generation == generation_) {
+@@ -214,8 +235,10 @@
+   // Running tasks still count toward the concurrency cap until they finish.
+ }
+ 
+-void MRUTabPreviewCache::Store(tabs::TabHandle handle, gfx::ImageSkia image,
++void MRUTabPreviewCache::Store(tabs::TabHandle handle,
++                               gfx::ImageSkia image,
+                                bool sharp) {
++  TRACE_EVENT("ui", "Arcium.MRU.Store", "capture", sharp);
+   auto* tab = handle.Get();
+   if (!tab || model_->GetIndexOfTab(tab) == TabStripModel::kNoTab ||
+       !tab->GetContents()->GetPrimaryMainFrame()) {
+@@ -260,18 +283,25 @@
+   }
+   auto* contents = tab->GetContents();
+   auto* helper = ThumbnailTabHelper::FromWebContents(contents);
+-  entries_.push_front({handle, std::move(image), bytes, contents->GetWeakPtr(),
+-                      contents->GetPrimaryMainFrame()->GetWeakDocumentPtr(),
+-                      sharp,
+-                      helper ? helper->thumbnail()->cached_data_generation() : 0});
++  entries_.push_front(
++      {handle, std::move(image), bytes, contents->GetWeakPtr(),
++       contents->GetPrimaryMainFrame()->GetWeakDocumentPtr(), sharp,
++       helper ? helper->thumbnail()->cached_data_generation() : 0});
+   bytes_ += bytes;
+   Trim();
++  LOCAL_HISTOGRAM_CUSTOM_COUNTS("Arcium.MRU.Cache.RetainedKiB", bytes_ / 1024,
++                                1, 24576, 50);
+ }
+ 
+ void MRUTabPreviewCache::Trim() {
++  int evicted = 0;
+   while (!entries_.empty() && (bytes_ > budget_ || entries_.size() > 64)) {
+     bytes_ -= entries_.back().bytes;
+     entries_.pop_back();
++    ++evicted;
++  }
++  if (evicted) {
++    LOCAL_HISTOGRAM_COUNTS_100("Arcium.MRU.Cache.Evicted", evicted);
+   }
+ }
+ 
+@@ -312,7 +342,8 @@
+ }
+ 
+ bool MRUTabPreviewCache::IsPageReadyForCapture(content::WebContents* contents) {
+-  if (!contents || contents->IsBeingDestroyed() ||
++  if (!contents || tabs::TemporaryTab::IsTemporary(contents) ||
++      contents->IsBeingDestroyed() ||
+       !contents->CompletedFirstVisuallyNonEmptyPaint()) {
+     return false;
+   }
+@@ -352,6 +383,9 @@
+     return;
+   }
+   capture_running_ = true;
++  capture_started_ = base::TimeTicks::Now();
++  TRACE_EVENT_INSTANT("ui", "Arcium.MRU.CaptureStarted", "width", size.width(),
++                      "height", size.height());
+   const gfx::Rect source_rect((source_size.width() - crop_width) / 2, 0,
+                               crop_width, crop_height);
+   view->CopyFromSurface(
+@@ -364,11 +398,13 @@
+             if (!self) {
+               return;
+             }
+-            self->Captured(handle, contents, document, generation,
+-                           result.has_value() && !result->bitmap.drawsNothing()
+-                               ? gfx::ImageSkia::CreateFrom1xBitmap(result->bitmap)
+-                               : gfx::ImageSkia());
+-          }, weak_factory_.GetWeakPtr(), tab->GetHandle(), contents->GetWeakPtr(),
++            self->Captured(
++                handle, contents, document, generation,
++                result.has_value() && !result->bitmap.drawsNothing()
++                    ? gfx::ImageSkia::CreateFrom1xBitmap(result->bitmap)
++                    : gfx::ImageSkia());
++          },
++          weak_factory_.GetWeakPtr(), tab->GetHandle(), contents->GetWeakPtr(),
+           contents->GetPrimaryMainFrame()->GetWeakDocumentPtr(),
+           capture_generation_)));
+ }
+@@ -381,6 +417,14 @@
+   const bool valid = generation == capture_generation_ && !image.isNull() &&
+                      IsCurrent(handle, contents, document) &&
+                      IsPageReadyForCapture(contents.get());
++  if (!capture_started_.is_null()) {
++    const auto latency = base::TimeTicks::Now() - capture_started_;
++    capture_started_ = {};
++    LOCAL_HISTOGRAM_TIMES("Arcium.MRU.Capture.CompletionTime", latency);
++    LOCAL_HISTOGRAM_BOOLEAN("Arcium.MRU.Capture.Accepted", valid);
++    TRACE_EVENT_INSTANT("ui", "Arcium.MRU.CaptureCompleted", "latency_us",
++                        latency.InMicroseconds(), "accepted", valid);
++  }
+   if (valid) {
+     Store(handle, image, true);
+     image = Get(handle);
+--- a/chrome/browser/ui/views/frame/mru_tab_preview_cache.h
++++ b/chrome/browser/ui/views/frame/mru_tab_preview_cache.h
+@@ -13,9 +13,10 @@
+ #include "base/callback_list.h"
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+-#include "base/memory/weak_ptr.h"
+ #include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
+ #include "base/memory_coordinator/memory_consumer.h"
++#include "base/time/time.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/weak_document_ptr.h"
+@@ -64,8 +65,12 @@ class MRUTabPreviewCache : public TabStr
+     uint64_t generation;
+     std::vector<ImageCallback> callbacks;
+     scoped_refptr<ThumbnailImage> thumbnail;
++    base::TimeTicks enqueued = base::TimeTicks::Now();
++    base::TimeTicks decode_started;
+   };
+-  void Enqueue(tabs::TabHandle handle, gfx::Size size, ImageCallback callback,
++  void Enqueue(tabs::TabHandle handle,
++               gfx::Size size,
++               ImageCallback callback,
+                bool high_priority);
+   void Pump();
+   void Decoded(std::shared_ptr<Job> job,
+@@ -99,6 +104,7 @@ class MRUTabPreviewCache : public TabStr
+   uint64_t generation_ = 0;
+   uint64_t capture_generation_ = 0;
+   bool capture_running_ = false;
++  base::TimeTicks capture_started_;
+   bool pending_active_capture_ = false;
+   base::RepeatingCallbackList<void(tabs::TabHandle, gfx::ImageSkia)>
+       capture_callbacks_;
+--- a/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
++++ b/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/views/frame/mru_tab_preview_cache.h"
+ 
+ #include "base/functional/bind.h"
++#include "base/test/metrics/histogram_tester.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -229,6 +230,23 @@ TEST_F(MRUTabPreviewCacheTest, DisabledR
+   EXPECT_EQ(0u, Bytes(*cache));
+ }
+ 
++TEST_F(MRUTabPreviewCacheTest,
++       CountsRequestsWithoutCountingInternalCacheReads) {
++  base::HistogramTester histograms;
++  const auto handle = AddHandle();
++  const auto missing = AddHandle();
++  auto cache = MakeCache();
++  Put(*cache, handle, 160);
++  EXPECT_FALSE(cache->Get(handle).isNull());
++  EXPECT_FALSE(cache->Get(handle).isNull());
++  histograms.ExpectTotalCount("Arcium.MRU.Cache.RequestHit", 0);
++  auto ignore = base::BindRepeating([](gfx::ImageSkia) {});
++  cache->Request(handle, {160, 90}, ignore);
++  cache->Request(missing, {160, 90}, ignore);
++  histograms.ExpectBucketCount("Arcium.MRU.Cache.RequestHit", true, 1);
++  histograms.ExpectBucketCount("Arcium.MRU.Cache.RequestHit", false, 1);
++}
++
+ TEST_F(MRUTabPreviewCacheTest, NavigationInvalidatesRetainedImage) {
+   auto handle = AddHandle();
+   auto cache = MakeCache();
+--- a/chrome/browser/ui/views/helium/glass_surface.cc
++++ b/chrome/browser/ui/views/helium/glass_surface.cc
+@@ -196,6 +197,8 @@ void GlassSurfaceView::SetCornerRadii(
+ }
+ 
+ void GlassSurfaceView::UpdateLayer() {
++  TRACE_EVENT("ui", "Arcium.Glass.UpdateLayer", "preset",
++              static_cast<int>(preset_));
+   if (!layer()) {
+     return;
+   }
+--- /dev/null
++++ b/chrome/browser/ui/views/frame/mru_tab_performance_unittest.cc
+@@ -0,0 +1,55 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/frame/mru_tab_performance.h"
++
++#include "base/metrics/histogram_base.h"
++#include "base/metrics/statistics_recorder.h"
++#include "base/test/metrics/histogram_tester.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++TEST(MRUTabPresentationMetricsTest, CoalescesWithoutMovingOriginalStart) {
++  base::HistogramTester histograms;
++  MRUTabPresentationMetrics metrics;
++  const auto start = base::TimeTicks::Now();
++  EXPECT_TRUE(metrics.Request(start, true, true));
++  EXPECT_FALSE(metrics.Request(start + base::Milliseconds(5), false, true));
++  metrics.Presented(start + base::Milliseconds(20));
++  histograms.ExpectTimeBucketCount("Arcium.MRU.Presentation.Open.Glass",
++                                   base::Milliseconds(20), 1);
++  histograms.ExpectBucketCount("Arcium.MRU.Presentation.Outcome.Glass", 0, 1);
++  histograms.ExpectBucketCount("Arcium.MRU.Presentation.Outcome.Glass", 1, 1);
++  histograms.ExpectTotalCount("Arcium.MRU.Presentation.Cycle.Glass", 0);
++  EXPECT_FALSE(base::StatisticsRecorder::FindHistogram(
++                   "Arcium.MRU.Presentation.Open.Glass")
++                   ->HasFlags(base::HistogramBase::kUmaTargetedHistogramFlag));
++}
++
++TEST(MRUTabPresentationMetricsTest, SeparatesModesAndRejectsInvalidFeedback) {
++  base::HistogramTester histograms;
++  MRUTabPresentationMetrics metrics;
++  const auto start = base::TimeTicks::Now();
++  EXPECT_TRUE(metrics.Request(start, true, false));
++  metrics.Presented(start + base::Milliseconds(10));
++  EXPECT_TRUE(metrics.Request(start, false, true));
++  metrics.Presented(start + base::Milliseconds(15));
++  EXPECT_TRUE(metrics.Request(start, false, false));
++  metrics.Presented(start + base::Milliseconds(25));
++  EXPECT_TRUE(metrics.Request(start, false, false));
++  metrics.Presented(start - base::Milliseconds(1));
++  histograms.ExpectTotalCount("Arcium.MRU.Presentation.Open.Opaque", 1);
++  histograms.ExpectTotalCount("Arcium.MRU.Presentation.Cycle.Glass", 1);
++  histograms.ExpectTotalCount("Arcium.MRU.Presentation.Cycle.Opaque", 1);
++  histograms.ExpectBucketCount("Arcium.MRU.Presentation.Outcome.Opaque", 3, 1);
++}
++
++TEST(MRUTabPresentationMetricsTest, CountsClosedRequestsWithoutLatency) {
++  base::HistogramTester histograms;
++  {
++    MRUTabPresentationMetrics metrics;
++    EXPECT_TRUE(metrics.Request(base::TimeTicks::Now(), true, true));
++  }
++  histograms.ExpectUniqueSample("Arcium.MRU.Presentation.Outcome.Glass", 2, 1);
++  histograms.ExpectTotalCount("Arcium.MRU.Presentation.Open.Glass", 0);
++}
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -10654,6 +10654,21 @@ if (!is_android && !is_chromeos_device)
+   }
+ }
+ 
++# Small enough to run on the product source archive without browser-test data.
++test("arcium_feature_performance_tests") {
++  sources = [
++    "../browser/ui/views/frame/mru_tab_performance.cc",
++    "../browser/ui/views/frame/mru_tab_performance.h",
++    "../browser/ui/views/frame/mru_tab_performance_unittest.cc",
++  ]
++  deps = [
++    "//base",
++    "//base/test:run_all_unittests",
++    "//base/test:test_support",
++    "//testing/gtest",
++  ]
++}
++
+ test("chrome_app_unittests") {
+   sources = [ "../app/resources/resources_unittest.cc" ]
+   deps = [
+--- /dev/null
++++ b/chrome/browser/ui/views/frame/mru_tab_performance.cc
+@@ -0,0 +1,68 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/frame/mru_tab_performance.h"
++
++#include "base/metrics/histogram_macros_local.h"
++#include "base/trace_event/trace_event.h"
++
++MRUTabPresentationMetrics::~MRUTabPresentationMetrics() {
++  if (!started_.is_null()) {
++    RecordOutcome(Outcome::kClosedBeforeFeedback);
++  }
++}
++
++bool MRUTabPresentationMetrics::Request(base::TimeTicks started,
++                                        bool opening,
++                                        bool glass) {
++  if (!started_.is_null()) {
++    RecordOutcome(Outcome::kCoalesced);
++    return false;
++  }
++  started_ = started;
++  opening_ = opening;
++  glass_ = glass;
++  return true;
++}
++
++void MRUTabPresentationMetrics::Presented(base::TimeTicks timestamp) {
++  if (started_.is_null()) {
++    return;
++  }
++  const auto started = started_;
++  started_ = {};
++  if (timestamp.is_null() || timestamp < started) {
++    RecordOutcome(Outcome::kInvalidTimestamp);
++    return;
++  }
++  const auto latency = timestamp - started;
++  RecordOutcome(Outcome::kPresented);
++  // Separate call sites keep static histogram pointers bound to fixed names.
++  if (opening_) {
++    if (glass_) {
++      LOCAL_HISTOGRAM_TIMES("Arcium.MRU.Presentation.Open.Glass", latency);
++    } else {
++      LOCAL_HISTOGRAM_TIMES("Arcium.MRU.Presentation.Open.Opaque", latency);
++    }
++  } else if (glass_) {
++    LOCAL_HISTOGRAM_TIMES("Arcium.MRU.Presentation.Cycle.Glass", latency);
++  } else {
++    LOCAL_HISTOGRAM_TIMES("Arcium.MRU.Presentation.Cycle.Opaque", latency);
++  }
++  TRACE_EVENT_INSTANT("ui", "Arcium.MRU.Presented", "latency_us",
++                      latency.InMicroseconds(), "opening", opening_, "glass",
++                      glass_);
++}
++
++void MRUTabPresentationMetrics::RecordOutcome(Outcome outcome) {
++  TRACE_EVENT_INSTANT("ui", "Arcium.MRU.PresentationOutcome", "outcome",
++                      static_cast<int>(outcome), "glass", glass_);
++  if (glass_) {
++    LOCAL_HISTOGRAM_ENUMERATION("Arcium.MRU.Presentation.Outcome.Glass",
++                                outcome);
++  } else {
++    LOCAL_HISTOGRAM_ENUMERATION("Arcium.MRU.Presentation.Outcome.Opaque",
++                                outcome);
++  }
++}

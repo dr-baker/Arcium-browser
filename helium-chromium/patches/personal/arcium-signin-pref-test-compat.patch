@@ -1,0 +1,359 @@
+diff --git a/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_browsertest.cc b/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_browsertest.cc
+--- a/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_browsertest.cc
++++ b/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_browsertest.cc
+@@ -41,7 +41,6 @@
+ #include "components/history/core/browser/history_types.h"
+ #include "components/keyed_service/core/service_access_type.h"
+ #include "components/prefs/testing_pref_service.h"
+-#include "components/signin/public/base/signin_pref_names.h"
+ #include "components/sync/base/pref_names.h"
+ #include "components/sync/service/sync_prefs.h"
+ #include "content/public/browser/browser_context.h"
+@@ -82,14 +81,8 @@
+ 
+ enum class BrowserType { Default, Incognito };
+ 
+-// The precondition required to delete browsing data.
+-enum class BrowsingDataDeletionCondition {
+-  SyncDisabled,
+-  BrowserSigninDisabled
+-};
+-
++// The profile mode exercised by browsing-data lifetime tests.
+ struct FeatureConditions {
+-  BrowsingDataDeletionCondition data_deletion_condition;
+   BrowserType browser_type;
+ };
+ 
+@@ -108,19 +101,8 @@
+ 
+   void SetUpOnMainThread() override {
+     BrowsingDataRemoverBrowserTestBase::SetUpOnMainThread();
+-    if (GetParam().data_deletion_condition ==
+-        BrowsingDataDeletionCondition::SyncDisabled) {
+-      GetProfile()->GetPrefs()->Set(syncer::prefs::internal::kSyncManaged,
+-                                    base::Value(true));
+-    } else if (GetParam().data_deletion_condition ==
+-               BrowsingDataDeletionCondition::BrowserSigninDisabled) {
+-#if BUILDFLAG(IS_ANDROID)
+-      GetProfile()->GetPrefs()->Set(prefs::kSigninAllowed, base::Value(false));
+-#else
+-      GetProfile()->GetPrefs()->Set(prefs::kSigninAllowedOnNextStartup,
+-                                    base::Value(false));
+-#endif  // BUILDFLAG(IS_ANDROID)
+-    }
++    GetProfile()->GetPrefs()->Set(syncer::prefs::internal::kSyncManaged,
++                                  base::Value(true));
+   }
+ 
+   void ApplyBrowsingDataLifetimeDeletion(std::string_view pref) {
+@@ -702,32 +684,15 @@
+   }
+ }
+ 
+-INSTANTIATE_TEST_SUITE_P(
+-    All,
+-    ChromeBrowsingDataLifetimeManagerShutdownTest,
+-    ::testing::ValuesIn(std::vector<FeatureConditions>{
+-        {BrowsingDataDeletionCondition::SyncDisabled, BrowserType::Incognito},
+-        {BrowsingDataDeletionCondition::SyncDisabled, BrowserType::Default},
+-#if !BUILDFLAG(IS_CHROMEOS)
+-        {BrowsingDataDeletionCondition::BrowserSigninDisabled,
+-         BrowserType::Incognito},
+-        {BrowsingDataDeletionCondition::BrowserSigninDisabled,
+-         BrowserType::Default}
+-#endif  // !BUILDFLAG(IS_CHROMEOS)
+-    }));
++INSTANTIATE_TEST_SUITE_P(All,
++                         ChromeBrowsingDataLifetimeManagerShutdownTest,
++                         ::testing::ValuesIn(std::vector<FeatureConditions>{
++                             {BrowserType::Incognito},
++                             {BrowserType::Default}}));
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+-// Browser signin can only be tested on desktop after restart.
+-INSTANTIATE_TEST_SUITE_P(
+-    All,
+-    ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
+-    ::testing::ValuesIn(std::vector<FeatureConditions>{
+-        {BrowsingDataDeletionCondition::SyncDisabled, BrowserType::Incognito},
+-        {BrowsingDataDeletionCondition::SyncDisabled, BrowserType::Default},
+-#if BUILDFLAG(IS_ANDROID)
+-        {BrowsingDataDeletionCondition::BrowserSigninDisabled,
+-         BrowserType::Incognito},
+-        {BrowsingDataDeletionCondition::BrowserSigninDisabled,
+-         BrowserType::Default}
+-#endif  // BUILDFLAG(IS_ANDROID)
+-    }));
++INSTANTIATE_TEST_SUITE_P(All,
++                         ChromeBrowsingDataLifetimeManagerScheduledRemovalTest,
++                         ::testing::ValuesIn(std::vector<FeatureConditions>{
++                             {BrowserType::Incognito},
++                             {BrowserType::Default}}));
+diff --git a/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_unittest.cc b/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_unittest.cc
+--- a/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_unittest.cc
++++ b/chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_unittest.cc
+@@ -18,7 +18,6 @@
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/browsing_data/core/pref_names.h"
+ #include "components/prefs/testing_pref_service.h"
+-#include "components/signin/public/base/signin_pref_names.h"
+ #include "components/sync/base/pref_names.h"
+ #include "components/sync/test/test_sync_service.h"
+ #include "components/sync/test/test_sync_user_settings.h"
+@@ -135,7 +134,7 @@
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+ TEST(ChromeBrowsingDataLifetimeManager,
+-     ScheduledRemovalWithBrowserSigninDisabled) {
++     ScheduledRemovalDoesNotDependOnSigninPrefs) {
+   signin_util::ResetForceSigninForTesting();
+   content::BrowserTaskEnvironment browser_task_environment{
+       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+@@ -174,9 +173,8 @@
+   delegate.ExpectCallDontCareAboutFilterBuilder(
+       delete_start_time, delete_end_time_2, remove_mask_2, origin_mask_2);
+ 
+-  // If browser sign in is disabled, the scheduled deletions should proceed as
+-  // usual.
+-  testing_profile->GetPrefs()->Set(prefs::kSigninAllowed, base::Value(false));
++  // This product has no browser sign-in policy pref; scheduled deletion
++  // still runs with the normal profile configuration.
+ 
+   testing_profile->GetPrefs()->Set(
+       browsing_data::prefs::kBrowsingDataLifetime,
+diff --git a/chrome/browser/signin/accounts_policy_manager_unittest.cc b/chrome/browser/signin/accounts_policy_manager_unittest.cc
+--- a/chrome/browser/signin/accounts_policy_manager_unittest.cc
++++ b/chrome/browser/signin/accounts_policy_manager_unittest.cc
+@@ -18,7 +18,6 @@
+ #include "components/policy/core/common/features.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/signin/public/base/signin_metrics.h"
+-#include "components/signin/public/base/signin_pref_names.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+@@ -99,6 +98,12 @@
+             signin_metrics::ProfileSignout::kSigninNotAllowedOnProfileInit);
+   }
+ 
++  void RemoveUnallowedAccounts() {
++    AccountsPolicyManager* manager =
++        AccountsPolicyManagerFactory::GetForProfile(GetProfile());
++    manager->RemoveUnallowedAccounts();
++  }
++
+  private:
+   content::BrowserTaskEnvironment task_environment_;
+   TestingProfileManager profile_manager_;
+@@ -143,7 +148,7 @@
+   EXPECT_EQ(1u, GetProfileManager()->profile_manager()->GetNumberOfProfiles());
+ }
+ 
+-TEST_F(AccountsPolicyManagerTest, ClearProfileUnallowedAccounts) {
++TEST_F(AccountsPolicyManagerTest, AccountsRemainWhenDomainPolicyUnavailable) {
+   base::test::ScopedFeatureList feature_list(
+       policy::features::kProfileSeparationDomainExceptionListRetroactive);
+   GetIdentityTestEnv()->SetPrimaryAccount(kTestEmail,
+@@ -166,22 +171,15 @@
+   GetIdentityTestEnv()->SetRefreshTokenForAccount(account_id3);
+   EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id3));
+ 
+-  // Set prefs to only allow example.com secondary accounts
+-  base::ListValue profile_separation_domain_exception_list;
+-  profile_separation_domain_exception_list.Append("example.com");
+-  GetProfile()->GetPrefs()->SetList(
+-      prefs::kProfileSeparationDomainExceptionList,
+-      std::move(profile_separation_domain_exception_list));
+-
+-  base::RunLoop run_loop;
+-  run_loop.RunUntilIdle();
++  ASSERT_TRUE(identity_manager()->AreRefreshTokensLoaded());
++  RemoveUnallowedAccounts();
+ 
+   // Primary account not removed.
+   EXPECT_TRUE(
+       identity_manager()->HasAccountWithRefreshToken(primary_account_id));
+-  // @gmail account removed.
+-  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id2));
+-  // @example.com account not removed.
++  // Domain-based removal is unavailable in this product configuration.
++  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id2));
++  // @example.com account remains as well.
+   EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id3));
+ }
+ 
+@@ -209,15 +207,8 @@
+   GetIdentityTestEnv()->SetRefreshTokenForAccount(account_id3);
+   EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id3));
+ 
+-  // Set prefs to only allow example.com secondary accounts
+-  base::ListValue profile_separation_domain_exception_list;
+-  profile_separation_domain_exception_list.Append("example.com");
+-  GetProfile()->GetPrefs()->SetList(
+-      prefs::kProfileSeparationDomainExceptionList,
+-      std::move(profile_separation_domain_exception_list));
+-
+-  base::RunLoop run_loop;
+-  run_loop.RunUntilIdle();
++  ASSERT_TRUE(identity_manager()->AreRefreshTokensLoaded());
++  RemoveUnallowedAccounts();
+ 
+   // No accounts were removed.
+   EXPECT_TRUE(
+diff --git a/chrome/browser/ui/views/toolbar/app_menu_browsertest.cc b/chrome/browser/ui/views/toolbar/app_menu_browsertest.cc
+--- a/chrome/browser/ui/views/toolbar/app_menu_browsertest.cc
++++ b/chrome/browser/ui/views/toolbar/app_menu_browsertest.cc
+@@ -55,7 +55,6 @@
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/password_manager/core/common/password_manager_features.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/signin/public/base/signin_pref_names.h"
+ #include "components/signin/public/identity_manager/identity_manager.h"
+ #include "components/signin/public/identity_manager/identity_test_utils.h"
+ #include "components/subscription_eligibility/subscription_eligibility_prefs.h"
+@@ -444,7 +443,6 @@
+ 
+ IN_PROC_BROWSER_TEST_F(AppMenuBrowserTest,
+                        InvokeUi_profile_menu_in_app_menu_signin_not_allowed) {
+-  browser()->profile()->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
+   ShowAndVerifyUi();
+ }
+ 
+diff --git a/chrome/browser/signin/signin_util_unittest.cc b/chrome/browser/signin/signin_util_unittest.cc
+index f6ff878b8e..43ce498034 100644
+--- a/chrome/browser/signin/signin_util_unittest.cc
++++ b/chrome/browser/signin/signin_util_unittest.cc
+@@ -207,61 +207,17 @@ TEST_F(
+   }
+ }
+ 
+-TEST_F(SigninUtilTest, IsSecondaryAccountAllowed) {
+-  const std::string consumer_email = "bob@gmail.com";
+-  const std::string enterprise_email = "bob@example.com";
+-  const std::string other_enterprise_email = "bob@bob.com";
++TEST_F(SigninUtilTest, AccountDomainsAreExemptWithoutExceptionListPref) {
++  // The Arcium build removes the profile-separation domain exception pref.
++  // Accounts therefore remain exempt from this particular separation policy.
+   EXPECT_TRUE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-      profile(), consumer_email));
++      profile(), "bob@gmail.com"));
+   EXPECT_TRUE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-      profile(), enterprise_email));
++      profile(), "bob@example.com"));
+   EXPECT_TRUE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-      profile(), other_enterprise_email));
+-
+-  {
+-    profile()->GetPrefs()->SetList(prefs::kProfileSeparationDomainExceptionList,
+-                                   base::ListValue());
+-
+-    EXPECT_FALSE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), consumer_email));
+-    EXPECT_FALSE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), enterprise_email));
+-    EXPECT_FALSE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), other_enterprise_email));
+-  }
+-  {
+-    base::ListValue profile_separation_exception_list;
+-    profile_separation_exception_list.Append(base::Value("bob.com"));
+-    profile()->GetPrefs()->SetList(
+-        prefs::kProfileSeparationDomainExceptionList,
+-        std::move(profile_separation_exception_list));
+-
+-    EXPECT_FALSE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), consumer_email));
+-    EXPECT_FALSE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), enterprise_email));
+-    EXPECT_TRUE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), other_enterprise_email));
+-  }
+-  {
+-    base::ListValue profile_separation_exception_list;
+-    profile_separation_exception_list.Append(base::Value("bob.com"));
+-    profile_separation_exception_list.Append(base::Value("gmail.com"));
+-    profile()->GetPrefs()->SetList(
+-        prefs::kProfileSeparationDomainExceptionList,
+-        std::move(profile_separation_exception_list));
+-
+-    EXPECT_TRUE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), consumer_email));
+-    EXPECT_FALSE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), enterprise_email));
+-    EXPECT_TRUE(signin_util::IsAccountExemptedFromEnterpriseProfileSeparation(
+-        profile(), other_enterprise_email));
+-  }
++      profile(), "bob@bob.com"));
+ }
+-
+-TEST_F(SigninUtilTest,
+-       IsProfileSeparationEnforcedByProfileSecondaryAccountNotAllowed) {
++TEST_F(SigninUtilTest, IsProfileSeparationEnforcedByProfileLegacyPolicy) {
+   const std::string consumer_email = "bob@gmail.com";
+   const std::string enterprise_email = "bob@example.com";
+   const std::string other_enterprise_email = "bob@bob.com";
+@@ -283,47 +239,6 @@ TEST_F(SigninUtilTest,
+               SeparationEnforcedByExistingProfileExpected(policy))
+         << policy;
+   }
+-
+-  profile()->GetPrefs()->SetList(prefs::kProfileSeparationDomainExceptionList,
+-                                 base::ListValue());
+-
+-  for (const auto& policy : all_policies) {
+-    profile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
+-                                     policy);
+-
+-    EXPECT_TRUE(signin_util::IsProfileSeparationEnforcedByProfile(
+-        profile(), consumer_email))
+-        << policy;
+-    EXPECT_TRUE(signin_util::IsProfileSeparationEnforcedByProfile(
+-        profile(), enterprise_email))
+-        << policy;
+-    EXPECT_TRUE(signin_util::IsProfileSeparationEnforcedByProfile(
+-        profile(), other_enterprise_email))
+-        << policy;
+-  }
+-
+-  base::ListValue profile_separation_exception_list;
+-  profile_separation_exception_list.Append(base::Value("example.com"));
+-  profile()->GetPrefs()->SetList(prefs::kProfileSeparationDomainExceptionList,
+-                                 std::move(profile_separation_exception_list));
+-
+-  for (const auto& policy : all_policies) {
+-    profile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
+-                                     policy);
+-
+-    EXPECT_TRUE(signin_util::IsProfileSeparationEnforcedByProfile(
+-        profile(), consumer_email))
+-        << policy;
+-
+-    EXPECT_EQ(signin_util::IsProfileSeparationEnforcedByProfile(
+-                  profile(), enterprise_email),
+-              SeparationEnforcedByExistingProfileExpected(policy))
+-        << policy;
+-
+-    EXPECT_TRUE(signin_util::IsProfileSeparationEnforcedByProfile(
+-        profile(), other_enterprise_email))
+-        << policy;
+-  }
+ }
+ 
+ TEST_F(SigninUtilTest, IsProfileSeparationEnforced) {
+diff --git a/chrome/browser/ui/webui/signin/managed_user_profile_notice_handler_unittest.cc b/chrome/browser/ui/webui/signin/managed_user_profile_notice_handler_unittest.cc
+index ede5469d68..ebae7d567d 100644
+--- a/chrome/browser/ui/webui/signin/managed_user_profile_notice_handler_unittest.cc
++++ b/chrome/browser/ui/webui/signin/managed_user_profile_notice_handler_unittest.cc
+@@ -394,11 +394,6 @@ TEST_F(ManagedUserProfileNoticeHandlerTest,
+   auto& unmanaged_profile = profiles::testing::CreateProfileSync(
+       profile_manager(), profile_manager()->GenerateNextProfileDirectoryPath());
+ 
+-  managed_profile.GetPrefs()->SetList(
+-      prefs::kProfileSeparationDomainExceptionList, base::ListValue());
+-  unmanaged_profile.GetPrefs()->SetList(
+-      prefs::kProfileSeparationDomainExceptionList, base::ListValue());
+-
+   // No account manager, no device manager
+   {
+     const std::string unknown_device_manager = "";

@@ -1,0 +1,5 @@
+{
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.autocomplete": "disabled",
+    "mojom.enableLanguageServer": "Disabled"
+}

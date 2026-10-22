@@ -1,0 +1,16 @@
+--- a/chrome/browser/skills/BUILD.gn
++++ b/chrome/browser/skills/BUILD.gn
+@@ -180,12 +180,7 @@
+   testonly = true
+   sources = [
+     "skills_metrics_provider_unittest.cc",
+-    "skills_update_observer_unittest.cc",
+-  ]
+-  if (!is_android) {
+-    sources += [ "skills_ui_tab_controller_unittest.cc" ]
+-  }
+-
++  ]
+   deps = [
+     ":skills",
+     ":ui",

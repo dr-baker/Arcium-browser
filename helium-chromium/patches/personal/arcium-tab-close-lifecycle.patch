@@ -1,0 +1,271 @@
+# Requires arcium-peek.
+# Preserve live tab subscriptions until the unload decision accepts removal.
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -396,7 +396,7 @@ struct TabStripModel::DetachNotification
+   std::vector<std::unique_ptr<DetachedTab>> detached_tab;
+ 
+   // The selection model prior to any tabs being detached.
+-  const ui::ListSelectionModel selection_model;
++  ui::ListSelectionModel selection_model;
+ };
+ 
+ ///////////////////////////////////////////////////////////////////////////////
+@@ -4254,19 +4254,14 @@ bool TabStripModel::CloseWebContentses(
+     return true;
+   }
+ 
++  bool closed_all = true;
++  std::vector<base::WeakPtr<WebContents>> accepted_contents;
++  accepted_contents.reserve(items.size());
++  std::vector<base::WeakPtr<WebContents>> attempted_contents;
++  attempted_contents.reserve(items.size());
+   for (WebContents* contents : items) {
+-    const int index = GetIndexOfWebContents(contents);
+-    tabs::TabModel* tab_model = GetTabModelAtIndex(index);
+-    if (index == active_index() && !closing_all_) {
+-      tab_model->WillDeactivate(base::PassKey<TabStripModel>());
+-    }
+-    if (tab_model->IsVisible() && !closing_all_) {
+-      tab_model->WillBecomeHidden(base::PassKey<TabStripModel>());
+-    }
+-    tab_model->WillDetach(base::PassKey<TabStripModel>(),
+-                          tabs::TabInterface::DetachReason::kDelete);
++    attempted_contents.push_back(contents->GetWeakPtr());
+   }
+-
+   // We only try the fast shutdown path if the whole browser process is *not*
+   // shutting down. Fast shutdown during browser termination is handled in
+   // browser_shutdown::OnShutdownStarting.
+@@ -4274,8 +4269,9 @@ bool TabStripModel::CloseWebContentses(
+     // Construct a map of processes to the number of associated tabs that are
+     // closing.
+     base::flat_map<content::RenderProcessHost*, size_t> processes;
+-    for (content::WebContents* contents : items) {
+-      if (ShouldRunUnloadListenerBeforeClosing(contents)) {
++    for (const auto& contents : attempted_contents) {
++      if (!contents || GetIndexOfWebContents(contents.get()) == kNoTab ||
++          ShouldRunUnloadListenerBeforeClosing(contents.get())) {
+         continue;
+       }
+       content::RenderProcessHost* process =
+@@ -4289,36 +4285,73 @@ bool TabStripModel::CloseWebContentses(
+     }
+   }
+ 
+-  // We now return to our regularly scheduled shutdown procedure.
+-  bool closed_all = true;
+-
+-  // The indices of WebContents prior to any modification of the internal state.
+-  std::vector<int> original_indices;
+-  original_indices.resize(items.size());
+-  for (size_t i = 0; i < items.size(); ++i) {
+-    original_indices[i] = GetIndexOfWebContents(items[i]);
++  for (const auto& contents : attempted_contents) {
++    if (!contents || GetIndexOfWebContents(contents.get()) == kNoTab) {
++      continue;
++    }
++    // A close attempt is still cancellable while its unload handler runs.
++    // Preserve the live tab's subscriptions and presentation until it accepts.
++    if (!contents->GetClosedByUserGesture()) {
++      contents->SetClosedByUserGesture(close_types &
++                                       TabCloseTypes::CLOSE_USER_GESTURE);
++    }
++    if (RunUnloadListenerBeforeClosing(contents.get())) {
++      TabCloseTypesData::CreateForWebContents(contents.get(), close_types);
++      closed_all = false;
++      continue;
++    }
++    accepted_contents.push_back(contents);
+   }
+ 
+-  std::vector<std::unique_ptr<DetachedTab>> detached_tab;
+-  for (size_t i = 0; i < items.size(); ++i) {
+-    WebContents* closing_contents = items[i];
++  // Notify only tabs whose unload decision permits removal. Do this for the
++  // whole accepted batch before recording indices: subscribers may add tabs.
++  for (const auto& contents : accepted_contents) {
++    if (!contents) {
++      continue;
++    }
++    const int index = GetIndexOfWebContents(contents.get());
++    if (index == kNoTab) {
++      continue;
++    }
++    tabs::TabModel* tab_model = GetTabModelAtIndex(index);
++    if (index == active_index() && !closing_all_) {
++      tab_model->WillDeactivate(base::PassKey<TabStripModel>());
++    }
++    if (tab_model->IsVisible() && !closing_all_) {
++      tab_model->WillBecomeHidden(base::PassKey<TabStripModel>());
++    }
++    tab_model->WillDetach(base::PassKey<TabStripModel>(),
++                          tabs::TabInterface::DetachReason::kDelete);
++  }
+ 
+-    // The index into contents_data_.
+-    int current_index = GetIndexOfWebContents(closing_contents);
+-    CHECK_NE(current_index, kNoTab);
+-
+-    // Update the explicitly closed state. If the unload handlers cancel the
+-    // close the state is reset in Browser. We don't update the explicitly
+-    // closed state if already marked as explicitly closed as unload handlers
+-    // call back to this if the close is allowed.
+-    if (!closing_contents->GetClosedByUserGesture()) {
+-      closing_contents->SetClosedByUserGesture(
+-          close_types & TabCloseTypes::CLOSE_USER_GESTURE);
++  // CloseTabs supplies a fresh notification batch. Subscriber callbacks may
++  // add or select tabs, so snapshot its active/selection state and removal
++  // indices together after those callbacks, before any accepted member leaves.
++  CHECK(notifications->detached_tab.empty());
++  notifications->initially_active_tab = GetActiveTab();
++  notifications->selection_model = selection_model().GetListSelectionModel();
++
++  // Capture the accepted batch's indices at this same boundary.
++  // Current indices are reacquired
++  // separately for each removal as earlier members leave the model.
++  std::vector<std::pair<base::WeakPtr<WebContents>, int>> original_indices;
++  original_indices.reserve(accepted_contents.size());
++  for (const auto& contents : accepted_contents) {
++    if (contents) {
++      const int index = GetIndexOfWebContents(contents.get());
++      if (index != kNoTab) {
++        original_indices.emplace_back(contents, index);
++      }
+     }
++  }
+ 
+-    if (RunUnloadListenerBeforeClosing(closing_contents)) {
+-      TabCloseTypesData::CreateForWebContents(closing_contents, close_types);
+-      closed_all = false;
++  std::vector<std::unique_ptr<DetachedTab>> detached_tab;
++  for (const auto& [contents, original_index] : original_indices) {
++    if (!contents) {
++      continue;
++    }
++    const int current_index = GetIndexOfWebContents(contents.get());
++    if (current_index == kNoTab) {
+       continue;
+     }
+ 
+@@ -4326,7 +4359,7 @@ bool TabStripModel::CloseWebContentses(
+         close_types & TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
+ 
+     auto dt =
+-        DetachTabImpl(original_indices[i], current_index, create_historical_tab,
++        DetachTabImpl(original_index, current_index, create_historical_tab,
+                       close_types & TabCloseTypes::CLOSE_EXPAND_SIDE_PANEL
+                           ? TabRemovedReason::kDeletedAndExpandSidePanel
+                           : TabRemovedReason::kDeleted,
+--- a/chrome/browser/ui/unload_controller.cc
++++ b/chrome/browser/ui/unload_controller.cc
+@@ -14,6 +14,8 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_tabstrip.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/tabs/tab_close_types_data.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+@@ -222,6 +224,9 @@ bool UnloadController::RunUnloadEventsHe
+ bool UnloadController::BeforeUnloadFired(content::WebContents* contents,
+                                          bool proceed) {
+   if (!proceed) {
++    // A cancelled attempt has no pending close types. Keep this marker scoped
++    // to the outstanding unload decision so later navigations are ordinary.
++    contents->RemoveUserData(TabCloseTypesData::UserDataKey());
+     DevToolsWindow::OnPageCloseCanceled(contents);
+ 
+     // Inform PerformanceManager that page close was aborted. Any priority boost
+@@ -437,6 +442,9 @@ void UnloadController::OnTabStripModelCh
+ }
+ 
+ void UnloadController::TabStripEmpty() {
++  if (helium::HeliumSpaceService::ShouldDeferEmptyTabStripClose(browser_)) {
++    return;
++  }
+   // Set is_attempting_to_close_browser_ here, so that extensions, etc, do not
+   // attempt to add tabs to the browser before it closes.
+   is_attempting_to_close_browser_ = true;
+--- a/chrome/browser/ui/views/helium/peek_controller_browsertest.cc
++++ b/chrome/browser/ui/views/helium/peek_controller_browsertest.cc
+@@ -31,6 +31,8 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/contents_container_view.h"
++#include "chrome/browser/ui/views/tabs/common/tab_view.h"
++#include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+@@ -61,6 +63,7 @@
+ #include "net/test/embedded_test_server/http_request.h"
+ #include "net/test/embedded_test_server/http_response.h"
+ #include "ui/views/controls/webview/webview.h"
++#include "ui/views/view_utils.h"
+ 
+ namespace helium {
+ namespace {
+@@ -74,12 +77,20 @@ content::NavigationController::LoadURLPa
+ 
+ }  // namespace
+ 
+-class PeekControllerBrowserTest : public InProcessBrowserTest {
++class PeekControllerBrowserTest
++    : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+  protected:
+   void SetUpOnMainThread() override {
+-    InProcessBrowserTest::SetUpOnMainThread();
++    VerticalTabsBrowserTestMixin<InProcessBrowserTest>::SetUpOnMainThread();
+     host_resolver()->AddRule("*", "127.0.0.1");
+   }
++
++  TabView* SidebarTabViewFor(content::WebContents* contents) {
++    tabs::TabInterface* tab = tabs::TabInterface::GetFromContents(contents);
++    TabCollectionNode* node =
++        tab ? root_node()->GetNodeForHandle(tab->GetHandle()) : nullptr;
++    return node ? views::AsViewClass<TabView>(node->view()) : nullptr;
++  }
+ };
+ 
+ IN_PROC_BROWSER_TEST_F(PeekControllerBrowserTest,
+@@ -406,6 +417,38 @@ IN_PROC_BROWSER_TEST_F(PeekControllerBro
+   EXPECT_FALSE(tabs::TemporaryTab::IsTemporary(preview));
+   EXPECT_EQ(2, browser()->GetFeatures().live_tab_context()->GetTabCount());
+   EXPECT_EQ("unsaved", content::EvalJs(preview, "window.peekState"));
++  // A retained model member must also enroll in the actual ordinary sidebar.
++  // Closing used to disconnect all tab-data observers before this promotion.
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    TabView* view = SidebarTabViewFor(preview);
++    return view && view->GetVisible() && !view->data().is_temporary;
++  }));
++  ASSERT_TRUE(
++      content::ExecJs(preview, "document.title = 'Promoted after Cancel'"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    TabView* view = SidebarTabViewFor(preview);
++    return view && view->data().title == u"Promoted after Cancel";
++  }));
++  model->ActivateTabAt(model->GetIndexOfWebContents(source));
++  model->ActivateTabAt(model->GetIndexOfWebContents(preview));
++  ASSERT_TRUE(SidebarTabViewFor(preview));
++  EXPECT_TRUE(SidebarTabViewFor(preview)->GetVisible());
++  EXPECT_EQ("unsaved", content::EvalJs(preview, "window.peekState"));
++
++  // Removing the source must not leave an active full page with an empty
++  // sidebar. The promoted document keeps its ordinary row and subscriptions.
++  model->CloseWebContentsAt(model->GetIndexOfWebContents(source),
++                            TabCloseTypes::CLOSE_NONE);
++  EXPECT_EQ(1, model->count());
++  EXPECT_EQ(preview, model->GetActiveWebContents());
++  ASSERT_TRUE(SidebarTabViewFor(preview));
++  EXPECT_TRUE(SidebarTabViewFor(preview)->GetVisible());
++  ASSERT_TRUE(
++      content::ExecJs(preview, "document.title = 'Source closed, still live'"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    TabView* view = SidebarTabViewFor(preview);
++    return view && view->data().title == u"Source closed, still live";
++  }));
+   ASSERT_TRUE(content::ExecJs(preview, "window.onbeforeunload = null"));
+ }
+ 

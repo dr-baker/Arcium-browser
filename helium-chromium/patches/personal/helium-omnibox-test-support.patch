@@ -1,0 +1,23 @@
+--- a/components/omnibox/browser/test_location_bar_model.cc
++++ b/components/omnibox/browser/test_location_bar_model.cc
+@@ -36,6 +36,10 @@ std::u16string TestLocationBarModel::Get
+   return *url_for_display_;
+ }
+ 
++std::u16string TestLocationBarModel::GetURLForDisplay(bool) const {
++  return GetURLForDisplay();
++}
++
+ GURL TestLocationBarModel::GetURL() const {
+   return url_;
+ }
+--- a/components/omnibox/browser/test_location_bar_model.h
++++ b/components/omnibox/browser/test_location_bar_model.h
+@@ -28,6 +28,7 @@ class TestLocationBarModel : public Loca
+   TestLocationBarModel& operator=(const TestLocationBarModel&) = delete;
+   std::u16string GetFormattedFullURL() const override;
+   std::u16string GetURLForDisplay() const override;
++  std::u16string GetURLForDisplay(bool trim_after_host_name) const override;
+   GURL GetURL() const override;
+   bool IsContextualTasksPage() const override;
+   GURL GetContextualTasksInnerFrameURL() const override;

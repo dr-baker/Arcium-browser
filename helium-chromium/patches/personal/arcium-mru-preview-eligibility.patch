@@ -1,0 +1,212 @@
+# Requires arcium-mru-tab-switcher, arcium-feature-performance and arcium-mru-test-paint-public-api.
+# Keep bounded preview imagery available for explicit Recent Tab actions.
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1273,12 +1273,6 @@ BrowserView::BrowserView(Browser* browse
+             return gfx::ScaleToCeiledSize(CalculateMRUPreviewSize(view),
+                                           std::clamp(scale, 1.0f, 2.0f));
+           },
+-          base::Unretained(this)),
+-      base::BindRepeating(
+-          [](BrowserView* view) {
+-            return view->browser()->profile()->GetPrefs()->GetBoolean(
+-                prefs::kTabCyclingMRU);
+-          },
+           base::Unretained(this)));
+ 
+   main_background_region_ =
+--- a/chrome/browser/ui/views/frame/mru_tab_preview_cache.cc
++++ b/chrome/browser/ui/views/frame/mru_tab_preview_cache.cc
+@@ -26,11 +26,9 @@
+ 
+ MRUTabPreviewCache::MRUTabPreviewCache(
+     TabStripModel* model,
+-    base::RepeatingCallback<gfx::Size()> capture_size_pixels,
+-    base::RepeatingCallback<bool()> enabled)
++    base::RepeatingCallback<gfx::Size()> capture_size_pixels)
+     : model_(model),
+       capture_size_pixels_(std::move(capture_size_pixels)),
+-      enabled_(std::move(enabled)),
+       memory_registration_("MRUTabPreviewCache", std::nullopt, this) {
+   OnUpdateMemoryLimit();
+   model_->AddObserver(this);
+@@ -100,7 +98,7 @@ void MRUTabPreviewCache::Enqueue(tabs::T
+                                  gfx::Size size,
+                                  ImageCallback callback, bool high_priority) {
+   size = BoundCaptureSize(size, size);
+-  if (!enabled_.Run() || !budget_ || size.IsEmpty()) {
++  if (!budget_ || size.IsEmpty()) {
+     if (callback) {
+       std::move(callback).Run({});
+     }
+@@ -353,7 +351,7 @@ bool MRUTabPreviewCache::IsPageReadyForC
+ }
+ 
+ void MRUTabPreviewCache::CaptureDepartingTab(tabs::TabInterface* tab) {
+-  if (!enabled_.Run() || !budget_ || capture_running_ || model_->closing_all()) {
++  if (!budget_ || capture_running_ || model_->closing_all()) {
+     return;
+   }
+   auto* contents = tab->GetContents();
+--- a/chrome/browser/ui/views/frame/mru_tab_preview_cache.h
++++ b/chrome/browser/ui/views/frame/mru_tab_preview_cache.h
+@@ -26,15 +26,16 @@
+ class TabStripModel;
+ class ThumbnailImage;
+ 
+-// Window-owned, bounded last-good previews. Reading/prefetching never subscribes
+-// to thumbnail capture, activates a tab, or loads a background page.
++// Window-owned, bounded last-good previews for standard and explicit Recent Tab
++// actions. Imagery is independent of the standard cycling-order preference.
++// Reading/prefetching never subscribes to thumbnail capture, activates a tab,
++// or loads a background page.
+ class MRUTabPreviewCache : public TabStripModelObserver,
+                            public base::MemoryConsumer {
+  public:
+   using ImageCallback = base::OnceCallback<void(gfx::ImageSkia)>;
+   MRUTabPreviewCache(TabStripModel* model,
+-                    base::RepeatingCallback<gfx::Size()> capture_size_pixels,
+-                    base::RepeatingCallback<bool()> enabled);
++                     base::RepeatingCallback<gfx::Size()> capture_size_pixels);
+   ~MRUTabPreviewCache() override;
+   gfx::ImageSkia Get(tabs::TabHandle handle);
+   void Request(tabs::TabHandle handle, gfx::Size size, ImageCallback callback,
+@@ -97,7 +98,6 @@ class MRUTabPreviewCache : public TabStr
+ 
+   const raw_ptr<TabStripModel> model_;
+   base::RepeatingCallback<gfx::Size()> capture_size_pixels_;
+-  base::RepeatingCallback<bool()> enabled_;
+   std::list<Entry> entries_;
+   size_t bytes_ = 0;
+   size_t budget_ = 24 * 1024 * 1024;
+--- a/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
++++ b/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
+@@ -10,7 +10,9 @@
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/thumbnails/thumbnail_tab_helper.h"
++#include "chrome/common/pref_names.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
++#include "components/prefs/pref_service.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
+ #include "content/public/test/navigation_simulator.h"
+@@ -22,11 +24,10 @@
+ 
+ class MRUTabPreviewCacheTest : public BrowserWithTestWindowTest {
+  protected:
+-  std::unique_ptr<MRUTabPreviewCache> MakeCache(bool enabled = false) {
++  std::unique_ptr<MRUTabPreviewCache> MakeCache() {
+     return std::make_unique<MRUTabPreviewCache>(
+         browser()->tab_strip_model(),
+-        base::BindRepeating([] { return gfx::Size(800, 450); }),
+-        base::BindRepeating([](bool enabled) { return enabled; }, enabled));
++        base::BindRepeating([] { return gfx::Size(800, 450); }));
+   }
+   tabs::TabHandle AddHandle() {
+     AddTab(browser(), GURL("https://example.test/"));
+@@ -92,7 +93,7 @@ TEST_F(MRUTabPreviewCacheTest, ActiveCap
+   auto* contents = handle.Get()->GetContents();
+   SimulateFirstVisuallyNonEmptyPaint(contents);
+   ASSERT_TRUE(ReadyToCapture(contents));
+-  auto cache = MakeCache(true);
++  auto cache = MakeCache();
+   ASSERT_TRUE(cache->Get(handle).isNull());
+   int updates = 0;
+   auto subscription = cache->SubscribeToCaptures(base::BindRepeating(
+@@ -117,7 +118,7 @@ TEST_F(MRUTabPreviewCacheTest, ActiveCap
+   auto* contents = handle.Get()->GetContents();
+   SimulateFirstVisuallyNonEmptyPaint(contents);
+   auto document = contents->GetPrimaryMainFrame()->GetWeakDocumentPtr();
+-  auto cache = MakeCache(true);
++  auto cache = MakeCache();
+   int updates = 0;
+   auto subscription = cache->SubscribeToCaptures(base::BindRepeating(
+       [](int* updates, tabs::TabHandle, gfx::ImageSkia) { ++*updates; },
+@@ -140,7 +141,7 @@ TEST_F(MRUTabPreviewCacheTest, FiveVisib
+     handles.push_back(AddHandle());
+     SeedThumbnail(handles.back());
+   }
+-  auto cache = MakeCache(true);
++  auto cache = MakeCache();
+   const gfx::Size size(160, 90);
+   int obsolete_callbacks = 0;
+   for (size_t i = 0; i < 2; ++i) {
+@@ -221,20 +222,28 @@ TEST_F(MRUTabPreviewCacheTest, ReleaseDr
+   EXPECT_EQ(0u, Bytes(*cache));
+ }
+ 
+-TEST_F(MRUTabPreviewCacheTest, DisabledRequestAndPrefetchDoNotActivateTabs) {
++TEST_F(MRUTabPreviewCacheTest, CyclingDisabledRequestsAndPrefetchDoNotActivateTabs) {
++  // Disabling ordinary MRU cycling does not disable explicit Recent Tab images.
++  profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, false);
+   auto first = AddHandle();
+   auto second = AddHandle();
++  SeedThumbnail(first);
++  PreviewLoadObserver loads(first.Get()->GetContents());
+   auto cache = MakeCache();
+   bool replied = false;
+-  cache->Request(first, {800, 450}, base::BindOnce(
+-      [](bool* replied, gfx::ImageSkia image) {
+-        *replied = true;
+-        EXPECT_TRUE(image.isNull());
+-      }, &replied));
+-  cache->Prefetch(first, {800, 450});
++  cache->Request(first, {160, 90},
++                 base::BindOnce(
++                     [](bool* replied, gfx::ImageSkia image) {
++                       *replied = true;
++                       EXPECT_FALSE(image.isNull());
++                     },
++                     &replied));
++  cache->Prefetch(first, {160, 90});
++  content::RunAllTasksUntilIdle();
+   EXPECT_TRUE(replied);
++  EXPECT_FALSE(cache->Get(first).isNull());
+   EXPECT_EQ(second, browser()->tab_strip_model()->GetActiveTab()->GetHandle());
+-  EXPECT_EQ(0u, Bytes(*cache));
++  EXPECT_EQ(0, loads.loads);
+ }
+ 
+ TEST_F(MRUTabPreviewCacheTest,
+@@ -277,7 +286,8 @@ TEST_F(MRUTabPreviewCacheTest, ClosingTa
+   EXPECT_EQ(0u, Bytes(*cache));
+ }
+ 
+-TEST_F(MRUTabPreviewCacheTest, EnabledReadsDecodeWithoutActivationOrLoading) {
++TEST_F(MRUTabPreviewCacheTest, CyclingEnabledReadsDecodeWithoutActivationOrLoading) {
++  profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, true);
+   auto requested = AddHandle();
+   auto prefetched = AddHandle();
+   auto active = AddHandle();
+@@ -285,13 +295,15 @@ TEST_F(MRUTabPreviewCacheTest, EnabledRe
+   SeedThumbnail(prefetched);
+   PreviewLoadObserver requested_loads(requested.Get()->GetContents());
+   PreviewLoadObserver prefetched_loads(prefetched.Get()->GetContents());
+-  auto cache = MakeCache(true);
++  auto cache = MakeCache();
+   bool replied = false;
+-  cache->Request(requested, {160, 90}, base::BindOnce(
+-      [](bool* replied, gfx::ImageSkia image) {
+-        *replied = true;
+-        EXPECT_FALSE(image.isNull());
+-      }, &replied));
++  cache->Request(requested, {160, 90},
++                 base::BindOnce(
++                     [](bool* replied, gfx::ImageSkia image) {
++                       *replied = true;
++                       EXPECT_FALSE(image.isNull());
++                     },
++                     &replied));
+   cache->Prefetch(prefetched, {160, 90});
+   content::RunAllTasksUntilIdle();
+   EXPECT_TRUE(replied);
+@@ -304,7 +316,7 @@ TEST_F(MRUTabPreviewCacheTest, EnabledRe
+ TEST_F(MRUTabPreviewCacheTest, CancellationSuppressesDecodeCallbackAndRefill) {
+   auto handle = AddHandle();
+   SeedThumbnail(handle);
+-  auto cache = MakeCache(true);
++  auto cache = MakeCache();
+   bool replied = false;
+   cache->Request(handle, {160, 90}, base::BindOnce(
+       [](bool* replied, gfx::ImageSkia) { *replied = true; }, &replied));

@@ -1,0 +1,153 @@
+--- src.orig/chrome/browser/ui/sessions/session_service_browser_helper.cc
++++ src/chrome/browser/ui/sessions/session_service_browser_helper.cc
+@@ -164,10 +164,13 @@
+       break;
+   }
+ 
+-  if (!selection.active_tab_changed()) {
+-    return;
+-  }
+-
++  if (!selection.active_tab_changed() &&
++      selection.old_model.active() == selection.new_model.active()) {
++    return;
++  }
++
++  // Moving the active tab changes its saved index even when its contents stay
++  // active. Update that index without treating a move as a new activation.
+   // Update sessions (selected tab index and last active time). Don't force
+   // creation of sessions. If sessions doesn't exist, the change will be picked
+   // up by sessions when created.
+--- src.orig/chrome/browser/ui/tabs/tab_strip_model.cc
++++ src/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -1156,10 +1156,9 @@
+ 
+ int TabStripModel::CompletePinCollectionMove(tabs::TabInterface* tab,
+                                              int initial_index,
+-                                             size_t final_index) {
++                                             size_t final_index,
++                                             TabStripSelectionChange selection) {
+   const int final_index_as_int = base::checked_cast<int>(final_index);
+-  TabStripSelectionChange selection(GetActiveTab(),
+-                                    selection_model().GetListSelectionModel());
+   UpdateSelectionModelForMove(initial_index, final_index_as_int,
+                               /*select_after_move=*/false);
+   CompleteModelUpdateTransaction();
+@@ -1178,8 +1177,13 @@
+   CHECK(!tab->IsSplit());
+   CHECK(!tab->GetGroup().has_value());
+   FixOpeners(initial_index);
++  // Collection callbacks can refresh cached indices during the move. Snapshot
++  // selection first so session observers see the previous active index.
++  TabStripSelectionChange selection(GetActiveTab(),
++                                    selection_model().GetListSelectionModel());
+   return CompletePinCollectionMove(
+-      tab, initial_index, contents_data_->MoveTabToPin(tab, direct_index));
++      tab, initial_index, contents_data_->MoveTabToPin(tab, direct_index),
++      std::move(selection));
+ }
+ 
+ int TabStripModel::MoveTabToPinCollection(tabs::TabInterface* tab,
+@@ -1191,9 +1195,14 @@
+   CHECK(!tab->IsSplit());
+   CHECK(!tab->GetGroup().has_value());
+   FixOpeners(initial_index);
++  // Collection callbacks can refresh cached indices during the move. Snapshot
++  // selection first so session observers see the previous active index.
++  TabStripSelectionChange selection(GetActiveTab(),
++                                    selection_model().GetListSelectionModel());
+   return CompletePinCollectionMove(
+       tab, initial_index,
+-      contents_data_->MoveTabToCollection(tab, parent, direct_index));
++      contents_data_->MoveTabToCollection(tab, parent, direct_index),
++      std::move(selection));
+ }
+ 
+ int TabStripModel::MoveTabFromPin(tabs::TabInterface* tab) {
+@@ -1201,8 +1210,13 @@
+   const int initial_index = GetIndexOfTab(tab);
+   CHECK(ContainsIndex(initial_index));
+   FixOpeners(initial_index);
++  // Collection callbacks can refresh cached indices during the move. Snapshot
++  // selection first so session observers see the previous active index.
++  TabStripSelectionChange selection(GetActiveTab(),
++                                    selection_model().GetListSelectionModel());
+   return CompletePinCollectionMove(tab, initial_index,
+-                                   contents_data_->MoveTabFromPin(tab));
++                                   contents_data_->MoveTabFromPin(tab),
++                                   std::move(selection));
+ }
+ 
+ void TabStripModel::MoveSelectedTabsTo(
+--- a/chrome/browser/ui/tabs/tab_strip_model.h
++++ b/chrome/browser/ui/tabs/tab_strip_model.h
+@@ -1337,7 +1337,8 @@
+ 
+   int CompletePinCollectionMove(tabs::TabInterface* tab,
+                                 int initial_index,
+-                                size_t final_index);
++                                size_t final_index,
++                                TabStripSelectionChange selection);
+ 
+   void SendMoveNotificationForTab(
+       int index,
+--- a/chrome/browser/ui/views/tabs/common/tab_view_browsertest.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view_browsertest.cc
+@@ -602,6 +602,57 @@
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(HeliumPersistentTabViewTest,
++                       PinMoveReportsPreviousSelectedIndex) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  AppendTab();
++  AppendTab();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++  TabStripModel* model = tab_strip_model();
++  tabs::TabInterface* tab = model->GetActiveTab();
++  const int initial_index = model->GetIndexOfTab(tab);
++  ASSERT_GT(initial_index, 0);
++
++  class MoveObserver : public TabStripModelObserver {
++   public:
++    explicit MoveObserver(TabStripModel* model) : model_(model) {
++      model_->AddObserver(this);
++    }
++    ~MoveObserver() override { model_->RemoveObserver(this); }
++    void OnTabStripModelChanged(
++        TabStripModel*,
++        const TabStripModelChange& change,
++        const TabStripSelectionChange& selection) override {
++      if (change.type() == TabStripModelChange::kMoved) {
++        previous_active = selection.old_model.active();
++        next_active = selection.new_model.active();
++      }
++    }
++    std::optional<size_t> previous_active;
++    std::optional<size_t> next_active;
++
++   private:
++    raw_ptr<TabStripModel> model_;
++  } observer(model);
++
++  auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(
++      browser()->profile());
++  ASSERT_TRUE(service);
++  ASSERT_TRUE(service->AddPinFromTab(tab));
++  const int pin_index = model->GetIndexOfTab(tab);
++  ASSERT_LT(pin_index, initial_index);
++  EXPECT_EQ(static_cast<size_t>(initial_index), observer.previous_active);
++  EXPECT_EQ(static_cast<size_t>(pin_index), observer.next_active);
++  EXPECT_EQ(tab, model->GetActiveTab());
++
++  ASSERT_TRUE(service->RemovePersistentItem(tab));
++  EXPECT_EQ(static_cast<size_t>(pin_index), observer.previous_active);
++  EXPECT_EQ(static_cast<size_t>(model->GetIndexOfTab(tab)),
++            observer.next_active);
++  EXPECT_EQ(tab, model->GetActiveTab());
++}
++
++IN_PROC_BROWSER_TEST_F(HeliumPersistentTabViewTest,
+                        ProjectedLivePinRemainsVisibleAfterUnpin) {
+   ASSERT_TRUE(embedded_test_server()->Start());
+   ASSERT_TRUE(ui_test_utils::NavigateToURL(

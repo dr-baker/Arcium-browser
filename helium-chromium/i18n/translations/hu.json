@@ -1,0 +1,1232 @@
+[
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "A Helium felszabadítja az inaktív lapok által használt memóriát. Így az aktív lapok és más alkalmazások több számítógépes erőforrást kapnak, és a Helium gyors marad. Az inaktív lapok automatikusan újra aktívvá válnak, amikor visszatér hozzájuk."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "A Helium kíméli az akkumulátort a háttértevékenység és a vizuális effektusok, például a sima görgetés és a videók képkockasebességének korlátozásával."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "Helium preloads pages which makes browsing and searching faster.",
+    "message": "A Helium előre betölti az oldalakat, ami gyorsabbá teszi a böngészést és a keresést."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
+    "source": "Sites you add will always stay active and memory won't be freed up from them.",
+    "message": "A hozzáadott webhelyek mindig aktívak maradnak, és nem szabadul fel az általuk használt memória."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_DISCARD_RING_TREATMENT_ENABLED_DESCRIPTION_WITH_LEARN_LINK",
+    "source": "A dotted circle appears around site icons.",
+    "message": "Pontozott kör jelenik meg a webhelyikonok körül."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_INTERVENTION_NOTIFICATION_ENABLED_DESCRIPTION",
+    "source": "Get notifications that suggest ways to improve detected performance issues.",
+    "message": "Értesítéseket kaphat az észlelt teljesítményproblémák javítására vonatkozó javaslatokkal."
+  },
+  {
+    "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
+    "message": "Importálva innen: <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
+    "source": "Import profile still in use",
+    "message": "Az importálási profil még használatban van"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TEXT",
+    "source": "To continue importing data, first close the browser you're importing from.",
+    "message": "Az adatok importálásának folytatásához először zárja be a böngészőt, amelyből importál."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES",
+    "source": "Helium services",
+    "message": "Helium szolgáltatások"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
+    "source": "Manage what Helium services are allowed in your browser",
+    "message": "A böngészőjében engedélyezett Helium szolgáltatások kezelése"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
+    "source": "Updates to Helium services:",
+    "message": "A Helium szolgáltatások frissítései:"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
+    "source": "These changes are not active until you dismiss this notice.",
+    "message": "Ezek a módosítások nem lépnek érvénybe, amíg el nem utasítja ezt az értesítést."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_IGNORE",
+    "source": "Don't notify me again",
+    "message": "Ne értesítsen újra"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Csatlakozás engedélyezése a Helium szolgáltatásokhoz"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Ha engedélyezve van, a Helium anonim webszolgáltatásokhoz csatlakozhat, hogy kiegészítő funkciókat biztosítson. Ha le van tiltva, ezek a funkciók nem működnek."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
+    "source": "Use your own instance of Helium services",
+    "message": "Saját Helium szolgáltatáspéldány használata"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Használhatja saját Helium szolgáltatási példányát is, amelyet Ön maga üzemeltet, és ezt a böngészőjében az alapértelmezett helyett használhatja. Kizárólag HTTPS kapcsolaton keresztül működik."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
+    "source": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.",
+    "message": "Ne használja ezt a mezőt, hacsak nem tudja pontosan, mit csinál. Soha ne illesszen be mások által megadott URL-eket ide, mert az adatait próbálják ellopni. Nem vállalunk felelősséget az egyéni szerver használatából eredő károkért, és nem tudunk segíteni."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
+    "source": "Custom origin URL for Helium services",
+    "message": "Egyéni origin URL a Helium szolgáltatásokhoz"
+  },
+  {
+    "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
+    "source": "Helium services have been updated. Please review the changes.",
+    "message": "A Helium szolgáltatások frissültek. Kérjük, tekintse át a módosításokat."
+  },
+  {
+    "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
+    "source": "Review Helium services updates",
+    "message": "A Helium szolgáltatások frissítéseinek áttekintése"
+  },
+  {
+    "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
+    "source": "Services updated",
+    "message": "Szolgáltatások frissítve"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT",
+    "source": "Helium services are not available until setup is complete to ensure your privacy and consent.",
+    "message": "A Helium szolgáltatások nem érhetők el, amíg a beállítás be nem fejeződik, az adatvédelem és a hozzájárulás biztosítása érdekében."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON",
+    "source": "Complete setup",
+    "message": "Beállítás befejezése"
+  },
+  {
+    "name": "IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE_HELIUM",
+    "source": "This list of search engines is shown in random order.",
+    "message": "A keresőmotorok listája véletlenszerű sorrendben jelenik meg."
+  },
+  {
+    "name": "IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR",
+    "source": "Appearance and behavior",
+    "message": "Megjelenés és viselkedés"
+  },
+  {
+    "name": "IDS_SETTINGS_BEHAVIOR",
+    "source": "Behavior",
+    "message": "Viselkedés"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with ⌘+Shift+C",
+    "message": "Gyors oldalhivatkozás-másolás engedélyezése a ⌘+Shift+C billentyűkkel"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with Ctrl+Shift+C",
+    "message": "Gyors oldalhivatkozás-másolás engedélyezése a Ctrl+Shift+C billentyűkkel"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Bővítményletöltések és -frissítések proxykapcsolaton keresztül"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Ha engedélyezve van, a Helium proxykapcsolaton keresztül tölti le és frissíti a bővítményeket az adatvédelem érdekében. Ha le van tiltva, a bővítmények letöltése és frissítése nem fog működni."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "A !bangek listájának letöltésének engedélyezése"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "A Helium letölti a bangek listáját, amelyek segítenek gyorsabban böngészni az interneten, például !w vagy !gh. Ha le van tiltva, a bangek nem fognak működni."
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM",
+    "source": "Please check that Helium services are enabled (including spell check downloads) and make sure that the firewall is not blocking downloads from Helium servers.",
+    "message": "Kérjük, ellenőrizze, hogy a Helium szolgáltatások engedélyezve vannak-e (beleértve a helyesírás-ellenőrző szótárak letöltését), és győződjön meg róla, hogy a tűzfal nem blokkolja a Helium szerverekről történő letöltéseket."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Szótárfájlok letöltésének engedélyezése a helyesírás-ellenőrzéshez"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "A Helium kérésre letölti a helyesírás-ellenőrzéshez használt szótárfájlokat. Ha le van tiltva, a helyesírás-ellenőrzés nem fog működni."
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",
+    "source": "Version <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>",
+    "message": "Verzió: <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Szűrőlisták letöltésének engedélyezése a uBlock Origin számára"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO_DESCRIPTION",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "A Helium friss szűrőlistákat tölt be a uBlock Originba. A listákra irányuló összes kérés proxykapcsolaton keresztül történik az adatvédelem érdekében. Ha le van tiltva, az alapértelmezett szűrőlisták a helyi tárhelyről töltődnek be, amelyek csak a Helium frissítéseivel együtt frissülnek. Az opcionális szűrőlisták proxy nélkül kerülnek lekérésre."
+  },
+  {
+    "name": "IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON",
+    "source": "Open new tabs next to the active tab",
+    "message": "Új lapok megnyitása az aktív lap mellett"
+  },
+  {
+    "name": "IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER",
+    "source": "Cycle through tabs in most recently used order with Ctrl+Tab",
+    "message": "Lapok váltása a legutóbb használt sorrendben a Ctrl+Tab billentyűvel"
+  },
+  {
+    "name": "IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES",
+    "source": "Component updates are disabled. See Helium services in settings.",
+    "message": "A komponensek frissítése le van tiltva. Lásd a Helium szolgáltatások menüpontot a beállításokban."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE",
+    "source": "Hibernate",
+    "message": "Hibernálás"
+  },
+  {
+    "name": "IDS_SETTINGS_PERMISSIONS_DESCRIPTION_NORMAL",
+    "source": "Manage site permissions and content settings (cookies, pop-ups, and more)",
+    "message": "Webhelyengedélyek és tartalombeállítások kezelése (sütik, felugró ablakok és egyebek)"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_DESCRIPTION_NORMAL",
+    "source": "Connection security, DNS settings, certificate management, and other security settings",
+    "message": "Kapcsolatbiztonság, DNS-beállítások, tanúsítványkezelés és egyéb biztonsági beállítások"
+  },
+  {
+    "name": "IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT_HELIUM",
+    "source": "Enabling \"Do Not Track\" means that Helium will include a request not to be tracked with your browsing traffic. Whether this request is honored depends on whether a website responds to it and on how it is interpreted. For example, some websites may respond by showing you ads that aren't personalized using your previous browsing data. Many websites may still track you regardless of the request.",
+    "message": "A „Do Not Track” engedélyezése azt jelenti, hogy a Helium egy nyomon követést tiltó kérést küld a böngészési forgalommal együtt. Az, hogy ezt a kérést figyelembe veszik-e, a webhelytől függ, illetve attól, hogyan értelmezik azt. Egyes webhelyek például úgy reagálhatnak, hogy nem a korábbi böngészési adatokon alapuló személyre szabott hirdetéseket jelenítik meg. Sok webhely a kérés ellenére továbbra is nyomon követheti Önt."
+  },
+  {
+    "name": "IDS_SETTINGS_ALLOWED_THIRD_PARTY_COOKIES_DESCRIPTION_HELIUM",
+    "source": "Affects the sites listed here. Inserting “[*.]” before a domain name creates an exception for the entire domain. For example, adding “[*.]example.com” means that third-party cookies can also be active for second.example.com, because it’s part of example.com.",
+    "message": "Az itt felsorolt webhelyeket érinti. A „[*.]” beszúrása a domain név elé kivételt hoz létre a teljes domainre. Például a „[*.]example.com” hozzáadása azt jelenti, hogy a harmadik féltől származó sütik a second.example.com esetében is aktívak lehetnek, mert az az example.com része."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC_HELIUM",
+    "source": "When you type in the address bar, Helium sends what you type to your default search engine to get suggestions. This is off in Incognito.",
+    "message": "Amikor a címsorba gépel, a Helium elküldi a beírt szöveget az alapértelmezett keresőmotornak, hogy javaslatokat kapjon. Inkognitó módban ez ki van kapcsolva."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_HELIUM",
+    "source": "Suggestions from the search engine",
+    "message": "Javaslatok a keresőmotortól"
+  },
+  {
+    "name": "IDS_SETTINGS_AUTO_PIN_NEW_TAB_GROUPS_HELIUM",
+    "source": "Automatically pin new tab groups to the bookmarks bar",
+    "message": "Új lapcsoportok automatikus rögzítése a könyvjelzősávon"
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE",
+    "source": "Add search engine",
+    "message": "Keresőmotor hozzáadása"
+  },
+  {
+    "name": "IDS_ADD_AS_DEFAULT",
+    "source": "Add as default",
+    "message": "Hozzáadás alapértelmezettként"
+  },
+  {
+    "name": "IDS_POLICY_SOURCE_HOP",
+    "source": "Helium defaults",
+    "message": "Helium alapértelmezések"
+  },
+  {
+    "name": "IDS_ACCNAME_APP_MENU",
+    "source": "Main Menu",
+    "message": "Főmenü"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_HELIUM_SERVICES_DISABLED",
+    "source": "Extension downloads are disabled. Enable this feature in Helium services settings and try again.",
+    "message": "A bővítmények letöltése le van tiltva. Engedélyezze ezt a funkciót a Helium szolgáltatások beállításaiban, és próbálja újra."
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_EXTENSION_DL_DISABLED",
+    "source": "Extension downloads are disabled",
+    "message": "A bővítmények letöltése le van tiltva"
+  },
+  {
+    "name": "IDS_NTP_CUSTOMIZE_CHROME_CHANGE_WALLPAPER_LABEL",
+    "source": "Change wallpaper",
+    "message": "Háttérkép módosítása"
+  },
+  {
+    "name": "IDS_NEW_TAB_OTR_SUBTITLE_HELIUM",
+    "source": "Helium will not save anything about your browsing in Incognito, but downloads and bookmarks will stick around. Your browsing won't leave any traces on this device, and other users won't be able to see your activity.",
+    "message": "A Helium inkognitó módban nem ment el semmit a böngészéséről, de a letöltések és könyvjelzők megmaradnak. A böngészés nem hagy nyomot ezen az eszközön, és más felhasználók nem fogják látni a tevékenységét."
+  },
+  {
+    "name": "IDS_EXTENSIONS_INSTALL_LOCATION_HELIUM",
+    "source": "Helium component",
+    "message": "Helium komponens"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT",
+    "source": "Browser layout",
+    "message": "Böngésző elrendezése"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klasszikus"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Dinamikus"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Kompakt"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Függőleges"
+  },
+  {
+    "name": "IDS_SETTINGS_TAB_STRIP_RIGHT_ALIGN",
+    "source": "Show vertical tabs on right side",
+    "message": "Függőleges lapok megjelenítése a jobb oldalon"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser Layout",
+    "message": "Böngésző elrendezése"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klasszikus"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Dinamikus"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Kompakt"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Függőleges"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on Right Side",
+    "message": "Lapok a jobb oldalon"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser layout",
+    "message": "Böngésző elrendezése"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on right side",
+    "message": "Lapok a jobb oldalon"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use ⌘+S to toggle vertical tabs in Vertical layout",
+    "message": "A ⌘+S használata a függőleges lapok be- és kikapcsolásához függőleges elrendezésben"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use Ctrl+S to toggle vertical tabs in Vertical layout",
+    "message": "A Ctrl+S használata a függőleges lapok be- és kikapcsolásához függőleges elrendezésben"
+  },
+  {
+    "name": "IDS_SETTINGS_CENTERED_LOCATION_BAR",
+    "source": "Center the address bar",
+    "message": "Címsor középre igazítása"
+  },
+  {
+    "name": "IDS_SETTINGS_MINIMAL_LOCATION_BAR",
+    "source": "Minimal address bar",
+    "message": "Minimális címsor"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "Helium cannot be set as default, because no <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.",
+    "message": "A Helium nem állítható be alapértelmezettként, mert nem található <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> fájl a következő helyeken: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications."
+  },
+  {
+    "name": "IDS_SETTINGS_CHOOSE_CUSTOM_AVATAR_FILE",
+    "source": "Choose file",
+    "message": "Fájl kiválasztása"
+  },
+  {
+    "name": "IDS_SETTINGS_CLEAR_CUSTOM_AVATAR_DIALOG_TITLE",
+    "source": "Clear custom avatar?",
+    "message": "Törli az egyéni avatart?"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_FILE_TOO_LARGE",
+    "source": "Selected file is too large. Please select a file smaller than 30MB.",
+    "message": "A kiválasztott fájl túl nagy. Válasszon 30 MB-nál kisebb fájlt."
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_ERROR",
+    "source": "Image could not be loaded",
+    "message": "A kép nem tölthető be"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_LABEL",
+    "source": "Custom avatar",
+    "message": "Egyéni avatar"
+  },
+  {
+    "name": "IDS_SETTINGS_ROUNDED_FRAME",
+    "source": "Show a rounded frame around web contents",
+    "message": "Lekerekített keret megjelenítése a webes tartalom körül"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_SIDEBAR",
+    "source": "Always show the sidebar",
+    "message": "Oldalsáv mindig látható"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_TOP_TOOLBAR",
+    "source": "Always show the top bar",
+    "message": "Felső sáv mindig látható"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close tabs above",
+    "message": "Fenti lapok bezárása"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close Tabs Above",
+    "message": "Fenti lapok bezárása"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_TITLE",
+    "source": "Full Disk Access required",
+    "message": "Teljes lemezhozzáférés szükséges"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
+    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "A Heliumnek teljes lemezhozzáférésre van szüksége a könyvjelzőid Safariból való importálásához."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
+    "source": "Learn how to grant Full Disk Access from your System Preferences.",
+    "message": "Tudd meg, hogyan adhatsz teljes lemezhozzáférést a Rendszerbeállításokban."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_OPEN_SETTINGS",
+    "source": "Open System Preferences",
+    "message": "Rendszerbeállítások megnyitása"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
+    "source": "Invalid origin",
+    "message": "Érvénytelen origin"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_NEXT_TAB",
+    "source": "Next tab",
+    "message": "Következő lap"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_PREVIOUS_TAB",
+    "source": "Previous tab",
+    "message": "Előző lap"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_LOCATION",
+    "source": "Focus address bar",
+    "message": "Címsáv fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_NEXT",
+    "source": "Find next",
+    "message": "Következő találat keresése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_PREVIOUS",
+    "source": "Find previous",
+    "message": "Előző találat keresése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_BACK",
+    "source": "Back",
+    "message": "Vissza"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FORWARD",
+    "source": "Forward",
+    "message": "Előre"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_HOME",
+    "source": "Home",
+    "message": "Kezdőlap"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB",
+    "source": "New split tab",
+    "message": "Új osztott lap"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_LAST_TAB",
+    "source": "Last tab",
+    "message": "Utolsó lap"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_TAB",
+    "source": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>",
+    "message": "Lap <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_NEXT",
+    "source": "Move tab right",
+    "message": "Lap mozgatása jobbra"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_PREVIOUS",
+    "source": "Move tab left",
+    "message": "Lap mozgatása balra"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_TAB_GROUP",
+    "source": "Next tab group",
+    "message": "Következő lapcsoport"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_TAB_GROUP",
+    "source": "Previous tab group",
+    "message": "Előző lapcsoport"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_TAB_GROUP",
+    "source": "Close tab group",
+    "message": "Lapcsoport bezárása"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_BOOKMARKS",
+    "source": "Focus bookmarks bar",
+    "message": "Könyvjelzősáv fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS",
+    "source": "Toggle vertical tabs",
+    "message": "Függőleges lapok be-/kikapcsolása"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP",
+    "source": "Close find bar or stop loading",
+    "message": "Keresősáv bezárása vagy a betöltés leállítása"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_SEARCH",
+    "source": "Focus search",
+    "message": "Keresés fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_PANE",
+    "source": "Focus next pane",
+    "message": "Következő panel fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_PANE",
+    "source": "Focus previous pane",
+    "message": "Előző panel fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_WEB_CONTENTS_PANE",
+    "source": "Focus page content",
+    "message": "Oldaltartalom fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_MENU_BAR",
+    "source": "Focus menu bar",
+    "message": "Menüsáv fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_TOOLBAR",
+    "source": "Focus toolbar",
+    "message": "Eszköztár fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_INACTIVE_POPUP",
+    "source": "Focus inactive popup",
+    "message": "Inaktív felugró ablak fókuszba helyezése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_AVATAR_MENU",
+    "source": "Profile menu",
+    "message": "Profilmenü"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_APP_MENU",
+    "source": "App menu",
+    "message": "Alkalmazásmenü"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_ZEN_MODE_TOP_CHROME_PIN",
+    "source": "Pin top toolbar",
+    "message": "Felső eszköztár rögzítése"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_DEV_TOOLS",
+    "source": "Toggle developer tools",
+    "message": "Fejlesztői eszközök be-/kikapcsolása"
+  },
+  {
+    "name": "IDS_APP_PLUS_KEY",
+    "source": "Plus",
+    "message": "Plusz"
+  },
+  {
+    "name": "IDS_APP_NUMPAD_KEY",
+    "source": "Numpad <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>",
+    "message": "Számbillentyűzet <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_TITLE",
+    "source": "Keyboard shortcuts",
+    "message": "Billentyűparancsok"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SEARCH_LABEL",
+    "source": "Search shortcuts",
+    "message": "Billentyűparancsok keresése"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_REMOVE_A11Y_LABEL",
+    "source": "Remove <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> from <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>",
+    "message": "A(z) <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> eltávolítása innen: <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_ALL",
+    "source": "Reset all to defaults",
+    "message": "Összes visszaállítása alapértelmezettre"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_ADD_DIALOG_TITLE",
+    "source": "Add shortcut",
+    "message": "Billentyűparancs hozzáadása"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_DIALOG_DESCRIPTION",
+    "source": "All keyboard shortcuts will be reset to their default values. Any custom shortcuts you've set will be lost.",
+    "message": "Az összes billentyűparancs visszaáll az alapértelmezett értékére. Minden beállított egyéni billentyűparancs elvész."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_PRESS_SHORTCUT",
+    "source": "Press a combination of keys to create a new shortcut",
+    "message": "Nyomj le egy billentyűkombinációt új billentyűparancs létrehozásához"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_NEED_KEY",
+    "source": "Include a key that is not a modifier.",
+    "message": "Olyan billentyűt is adj meg, amely nem módosító."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_WILL_OVERRIDE",
+    "source": "Saving will remove this shortcut from <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>.",
+    "message": "A mentés eltávolítja ezt a billentyűparancsot innen: <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SYSTEM_CONFLICT",
+    "source": "This shortcut is managed by <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> and cannot be changed.",
+    "message": "Ezt a billentyűparancsot a(z) <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> kezeli, és nem módosítható."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_INVALID",
+    "source": "This shortcut cannot be saved.",
+    "message": "Ez a billentyűparancs nem menthető."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_NOTICE",
+    "source": "Some keyboard shortcuts are protected and can't be changed here. To change them, go to:",
+    "message": "Egyes billentyűparancsok védettek, és itt nem módosíthatók. A módosításukhoz nyisd meg:"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_LINK",
+    "source": "System Settings &gt; Keyboard &gt; Keyboard Shortcuts &gt; App Shortcuts",
+    "message": "Rendszerbeállítások &gt; Billentyűzet &gt; Billentyűparancsok &gt; Alkalmazásparancsok"
+  },
+  {
+    "name": "IDS_ZEN_MODE_NEW_TAB_CREATED_TOAST_BODY",
+    "source": "New tab opened",
+    "message": "Új lap nyílt meg"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic browser updates",
+    "message": "Automatikus böngésző frissítések engedélyezése"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "A Helium automatikusan ellenőrzi és telepíteni fogja a frissítéseket. Ez a böngésző- és komponensfrissítéseket is magába foglalja. Javasoljuk, hogy hagyd bekapcsolva ezt a beállítást, hogy mindig megkapd a legújabb funkciókat és biztonsági frissítéseket."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic component updates",
+    "message": "Automatikus komponensfrissítések engedélyezése"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "A Helium automatikusan ellenőrzi és telepíteni fogja a komponensfrissítéseket. Javasoljuk, hogy hagyd bekapcsolva ezt a beállítást. Linuxon a böngésző frissítését a disztribúciód csomagkezelője végzi. Legalább hetente ellenőrizd, hogy elérhető-e frissítés a Helium csomagjához."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate other tabs",
+    "message": "Többi lap hibernálása"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate Other Tabs",
+    "message": "Többi lap hibernálása"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URL",
+    "source": "Copy URL",
+    "message": "URL másolása"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URLS",
+    "source": "Copy URLs",
+    "message": "URL-ek másolása"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_TITLE",
+    "source": "Background action confirmation toasts",
+    "message": "Háttérműveletek megerősítő értesítései"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_DESCRIPTION",
+    "source": "Shows a toast notification when you copy content, such as links and images, or open a new background tab in Frameless mode",
+    "message": "Értesítést jelenít meg tartalmak, például linkek és képek másolásakor, illetve új háttérlap megnyitásakor keretmentes módban"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE",
+    "source": "Frameless mode",
+    "message": "Keretmentes mód"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE_DESCRIPTION",
+    "source": "Automatically hide browser UI until you hover the window edge",
+    "message": "Automatikusan elrejti a böngészőfelületet, amíg az ablak szélére nem viszed az egeret"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_NEXT",
+    "source": "Next",
+    "message": "Tovább"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES",
+    "source": "Yes",
+    "message": "Igen"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_HISTORY",
+    "source": "History",
+    "message": "Előzmények"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALLED",
+    "source": "Installed",
+    "message": "Telepítve"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALL",
+    "source": "Install",
+    "message": "Telepítés"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_BACK",
+    "source": "Back",
+    "message": "Vissza"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO",
+    "source": "No",
+    "message": "Nem"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_PRIVACY",
+    "source": "Privacy",
+    "message": "Adatvédelem"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_EXTENSIONS",
+    "source": "Extensions",
+    "message": "Bővítmények"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_CONFIGURE",
+    "source": "Configure",
+    "message": "Konfigurálás"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_IMPORT_GUIDE",
+    "source": "Import",
+    "message": "Importálás"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_BOOKMARKS",
+    "source": "Bookmarks",
+    "message": "Könyvjelzők"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SEARCHWEBWITH",
+    "source": "&amp;Search with <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>",
+    "message": "&amp;Keresés a következővel: <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force paste",
+    "message": "Beillesztés kényszerítése"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force Paste",
+    "message": "Beillesztés kényszerítése"
+  },
+  {
+    "name": "IDS_SETTINGS_SHIFT_RIGHT_CLICK_CONTEXT_MENU",
+    "source": "Force context menu with Shift+Right Click",
+    "message": "Helyi menü kényszerítése Shift+jobb kattintással"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_TITLE",
+    "source": "Crash reporting",
+    "message": "Összeomlások jelentése"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DESCRIPTION",
+    "source": "Choose whether Helium can ask to send crash reports or send them automatically. Disabling reports will delete all pending reports.",
+    "message": "Válaszd ki, hogy a Helium kérdezzen-e az összeomlási jelentések elküldése előtt, vagy automatikusan küldje őket. A jelentések letiltása törli az összes függőben lévő jelentést."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED",
+    "source": "Disabled",
+    "message": "Letiltva"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_ASK",
+    "source": "Ask after a crash",
+    "message": "Kérdezzen összeomlás után"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC",
+    "source": "Send automatically",
+    "message": "Automatikus küldés"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_TITLE",
+    "source": "{COUNT, plural, =1 {Would you like to send a crash report?} other {Would you like to send # crash reports?}}",
+    "message": "{COUNT, plural, =1 {Szeretnél elküldeni egy összeomlási jelentést?} other {Szeretnél elküldeni # összeomlási jelentést?}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_DESCRIPTION",
+    "source": "Helium closed unexpectedly. A crash report could help us fix the issue you ran into and prevent it from happening again.",
+    "message": "A Helium váratlanul bezárult. Egy összeomlási jelentés segíthet nekünk kijavítani a felmerült hibát, és megelőzni annak újbóli előfordulását."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_PRIVACY",
+    "source": "A crash report may incidentally include some sensitive data present in Helium's memory at the time of crash.",
+    "message": "Egy összeomlási jelentés véletlenül tartalmazhat érzékeny adatokat, amelyek az összeomlás pillanatában a Helium memóriájában voltak."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_OPTIONAL",
+    "source": "Nothing has been sent yet. Sending a crash report is optional.",
+    "message": "Egyelőre semmi sem lett elküldve. Az összeomlási jelentés elküldése opcionális."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send Report} other {Send # Reports}}",
+    "message": "{COUNT, plural, =1 {Jelentés küldése} other {# jelentés küldése}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send report} other {Send # reports}}",
+    "message": "{COUNT, plural, =1 {Jelentés küldése} other {# jelentés küldése}}"
+  },
+  {
+    "name": "IDS_CRASH_DISABLED_MESSAGE",
+    "source": "Crash reporting is disabled in Helium settings or by policy.",
+    "message": "Az összeomlások jelentése le van tiltva a Helium beállításaiban vagy házirend által."
+  },
+  {
+    "name": "IDS_CRASH_BUG_LINK_LABEL",
+    "source": "Create an issue with details",
+    "message": "Hibajegy létrehozása részletekkel"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS",
+    "source": "Use native frame materials (experimental)",
+    "message": "Natív keretanyagok használata (kísérleti)"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION",
+    "source": "Applies native materials to the browser frame surfaces. May cause UI clarity issues.",
+    "message": "Natív anyagokat alkalmaz a böngésző keretének felületein. A felület olvashatóságával kapcsolatos problémákat okozhat."
+  },
+  {
+    "name": "IDS_SETTINGS_SHOW_ZOOM_INDICATOR",
+    "source": "Show the zoom indicator in the address bar",
+    "message": "Nagyítás jelző megjelenítése a címsávban"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
+    "source": "Translate “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”",
+    "message": "„<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>” fordítása"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PAGE_TITLE",
+    "source": "Helium Setup",
+    "message": "Helium beállítása"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_USE_DEFAULTS",
+    "source": "Use defaults",
+    "message": "Alapértelmezett beállítások használata"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_LETS_GO",
+    "source": "Let's go!",
+    "message": "Vágjunk bele!"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TITLE",
+    "source": "Helium Partner",
+    "message": "Helium partner"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TOOLTIP",
+    "source": "Paying for this service will support the development of Helium.",
+    "message": "A szolgáltatásért fizetve támogatod a Helium fejlesztését."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_GREETING",
+    "source": "Meet Helium",
+    "message": "Ismerd meg a Heliumot"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_FINISH_TITLE",
+    "source": "Ready to browse?",
+    "message": "Készen állsz a böngészésre?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_TITLE",
+    "source": "Helium services",
+    "message": "Helium szolgáltatások"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SUBTITLE",
+    "source": "Services are not active until you consent to using them. Changes will be applied after you go to the next page.",
+    "message": "A szolgáltatások nem aktívak, amíg nem járulsz hozzá a használatukhoz. A módosítások a következő oldalra lépés után lépnek életbe."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_TITLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Csatlakozás engedélyezése a Helium szolgáltatásokhoz"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_DESC",
+    "source": "Helium services provide additional functionality, such as: extension downloads, native !bangs, filter list updates, and browser updates. When disabled, none of these features will work, but Helium will not make any web requests.",
+    "message": "A Helium szolgáltatások további funkciókat biztosítanak, mint például: bővítmények letöltése, natív !bang parancsok, a szűrőlisták és a böngésző frissítése. Letiltás esetén ezek egyike sem fog működni, de a Helium semmilyen webes kérést nem indít."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_TITLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "A !bangs lista letöltésének engedélyezése"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_DESC",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "A Helium letölt egy bang-parancsok listáját, amelyek segítenek gyorsabban böngészni az interneten, például !w vagy !gh. Letiltás esetén a bang-parancsok nem működnek."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_TITLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Bővítmények letöltésének és frissítésének proxyzása"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_DESC",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Bekapcsolva a Helium proxyn keresztül tölti le és frissíti a bővítményeket az adataid védelme érdekében. Kikapcsolva a bővítmények letöltése és frissítése nem működik."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_TITLE",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Szűrőlisták letöltésének engedélyezése a uBlock Originhoz"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_DESC",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "A Helium friss szűrőlistákat tölt le a uBlock Originhoz. A listákhoz intézett összes kérés proxyn keresztül halad az adataid védelme érdekében. Letiltás esetén az alapértelmezett szűrőlisták a helyi tárolóból töltődnek be, amelyek csak a Heliummal együtt frissülnek. Az opcionális szűrőlisták proxy nélkül lesznek lekérve."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE",
+    "source": "Allow automatic browser updates",
+    "message": "Automatikus böngészőfrissítések engedélyezése"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "A Helium automatikusan keresi és telepíti a frissítéseket. Ez magában foglalja a böngésző- és komponensfrissítéseket is. Javasoljuk, hogy hagyd bekapcsolva ezt a beállítást, hogy mindig megkapd a legújabb funkciókat és biztonsági frissítéseket."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE_LINUX",
+    "source": "Allow automatic component updates",
+    "message": "Automatikus komponensfrissítések engedélyezése"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC_LINUX",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "A Helium automatikusan keresi és telepíti a komponensfrissítéseket. Javasoljuk, hogy hagyd bekapcsolva ezt a beállítást. Linuxon a böngészőfrissítéseket a disztribúciód csomagkezelője kezeli. Kérjük, legalább hetente ellenőrizd a Helium csomagfrissítéseit."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_TITLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Szótárfájlok letöltésének engedélyezése a helyesírás-ellenőrzéshez"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_DESC",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "A Helium szükség esetén letölti a helyesírás-ellenőrzéshez használt szótárfájlokat. Letiltás esetén a helyesírás-ellenőrzés nem működik."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_TITLE",
+    "source": "Use your own instance of Helium services",
+    "message": "Saját Helium szolgáltatás-példány használata"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_DESC",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the pre-hosted server. If you have one, you can set it in Helium settings.",
+    "message": "Üzemeltetheted a Helium szolgáltatások saját példányát, és a böngésződben az előre üzemeltetett kiszolgáló helyett ezt használhatod. Ha van ilyened, beállíthatod a Helium beállításaiban."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_PRIVATE",
+    "source": "A privacy-first search engine which doesn't profile or track you.",
+    "message": "Adatvédelem-központú keresőmotor, amely nem profiloz és nem követ téged."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_SMALL",
+    "source": "Transparent, but not privacy-focused. Offers better privacy than mainstream search engines.",
+    "message": "Átlátható, de nem adatvédelem-központú. Jobb adatvédelmet nyújt, mint a népszerű keresőmotorok."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_MAINSTREAM",
+    "source": "A mainstream search engine which collects extensive personal data.",
+    "message": "Széles körben használt keresőmotor, amely nagy mennyiségű személyes adatot gyűjt."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_CUSTOM",
+    "source": "A custom search engine. Its privacy wasn't verified by Helium.",
+    "message": "Egyéni keresőmotor. Az adatvédelmét nem ellenőrizte a Helium."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BING",
+    "source": "Collects extensive personal data. Privacy controls are buried and limited. Subjectively overwhelming UI.",
+    "message": "Kiterjedt személyes adatokat gyűjt. Az adatvédelmi beállítások el vannak rejtve és korlátozottak. Szubjektíven túlzsúfolt felület."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_GOOGLE",
+    "source": "It's Google. It dominates the search market, collects extensive personal data, and profiles you.",
+    "message": "Ez a Google. Uralja a keresőpiacot, nagy mennyiségű személyes adatot gyűjt, és profilt készít rólad."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_TITLE",
+    "source": "Ready to switch to Helium?",
+    "message": "Készen állsz a Heliumra váltásra?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES_DESC",
+    "source": "Make Helium my default browser.",
+    "message": "A Helium legyen az alapértelmezett böngészőm."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO_DESC",
+    "source": "Just trying Helium for now.",
+    "message": "Egyelőre csak kipróbálom a Heliumot."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_TITLE",
+    "source": "Take your stuff with you",
+    "message": "Vidd magaddal a dolgaidat"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_SUBTITLE",
+    "source": "Transfer your most important bookmarks, history, and extensions from other browsers.",
+    "message": "Vidd át a legfontosabb könyvjelzőidet, előzményeidet és bővítményeidet más böngészőkből."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_TITLE",
+    "source": "Password manager",
+    "message": "Jelszókezelő"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_SETUP_GUIDE",
+    "source": "Setup",
+    "message": "Beállítás"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_ERROR",
+    "source": "Error:",
+    "message": "Hiba:"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_MANAGERS_DASHLANE",
+    "source": "Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.",
+    "message": "Népszerű, fizetős és zárt forráskódú jelszókezelő. Az adatokat Európában tárolja. Agresszív ráértékesítési taktikáiról ismert."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE",
+    "source": "Fingerprinting protection",
+    "message": "Ujjlenyomat-védelem"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_LINK_DESCRIPTION",
+    "source": "Manage how Helium protects you against fingerprinting",
+    "message": "Annak kezelése, hogy a Helium hogyan védjen az ujjlenyomatvétel ellen"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_TOGGLE_DESCRIPTION",
+    "source": "Make it harder for sites to fingerprint your browser and device",
+    "message": "Megnehezíti, hogy a webhelyek ujjlenyomatot vegyenek a böngésződről és az eszközödről"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you. Each site sees consistent randomized information during your browsing session to reduce the chances of detection.",
+    "message": "Ha az ujjlenyomat-védelem be van kapcsolva, a Helium zajt ad bizonyos böngészőfunkciókhoz, hogy megnehezítse a webhelyek számára a követésedet és a profilozásodat. Minden webhely következetes, véletlenszerűsített információkat lát a böngészési munkamenet során, így kisebb az esélye annak, hogy ez kiderüljön."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DISCLAIMER",
+    "source": "Fingerprinting cannot be fully prevented, but Helium's analysis defenses make it harder to recover the original fingerprint.",
+    "message": "Az ujjlenyomatvétel nem akadályozható meg teljesen, de a Helium védelmi megoldásai megnehezítik az eredeti ujjlenyomat visszanyerését."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION",
+    "source": "When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting \"[*.]\" before a domain name applies it to the entire domain.",
+    "message": "Ha az általános ujjlenyomat-védelem funkció be van kapcsolva, az alább felsorolt webhelyekre egyéni beállítás érvényes. Ha a tartománynév elé „[*.]” karaktereket írsz, a beállítás a teljes tartományra érvényes lesz."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_EXCEPTIONS_TITLE",
+    "source": "Sites without fingerprinting protection",
+    "message": "Ujjlenyomat-védelem nélküli webhelyek"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_ALLOW_OVERRIDES_TITLE",
+    "source": "Overrides to allow fingerprinting protection",
+    "message": "Kivételek az ujjlenyomat-védelem engedélyezésére"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_HEADER",
+    "source": "Fingerprinting protection",
+    "message": "Ujjlenyomat-védelem"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP",
+    "source": "Manage fingerprinting protection for this site",
+    "message": "Ujjlenyomat-védelem kezelése ehhez a webhelyhez"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you.",
+    "message": "Ha az ujjlenyomat-védelem be van kapcsolva, a Helium zajt ad bizonyos böngészőfunkciókhoz, hogy megnehezítse a webhelyek számára a követésedet és a profilozásodat."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_BREAKAGE",
+    "source": "Turning off the protection will reduce your privacy, but may fix site features that require fingerprinting.",
+    "message": "A védelem kikapcsolása csökkenti az adatvédelmedet, de megoldhatja azon webhelyfunkciók hibáit, amelyekhez ujjlenyomatvétel szükséges."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_GLOBALLY_DISABLED",
+    "source": "Fingerprinting protection is turned off in Helium settings.",
+    "message": "Az ujjlenyomat-védelem ki van kapcsolva a Helium beállításaiban."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_SETTINGS_BUTTON",
+    "source": "Manage fingerprinting protection",
+    "message": "Ujjlenyomat-védelem kezelése"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_TERMS",
+    "source": "By continuing, you agree to the <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privacy policy<ph name=\"END_LINK_PRIVACY\">$2</ph> and <ph name=\"BEGIN_LINK_TERMS\">$3</ph>terms of use<ph name=\"END_LINK_TERMS\">$4</ph>.",
+    "message": "A folytatással elfogadod az <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>adatvédelmi irányelveket<ph name=\"END_LINK_PRIVACY\">$2</ph> és a <ph name=\"BEGIN_LINK_TERMS\">$3</ph>használati feltételeket<ph name=\"END_LINK_TERMS\">$4</ph>."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_DUCKDUCKGO",
+    "source": "Privacy-focused. Relies on Bing for results. Promises not to track or profile you.",
+    "message": "Adatvédelemre fókuszál. A találatokhoz a Binget használja. Azt ígéri, hogy nem követ és nem profiloz téged."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_KAGI",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Has custom ranking. Requires a paid account. No ads, tracking, or profiling.",
+    "message": "Adatvédelemre fókuszál. Nem használja a Google-t vagy a Binget. Egyéni rangsorolással működik. Fizetős fiókot igényel. Nincsenek hirdetések, nyomkövetés vagy profilozás."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_QWANT",
+    "source": "Based in Europe. Relies on Bing for results. Sends tracking data to Microsoft.",
+    "message": "Európában működik. A találatokhoz a Binget használja. Nyomkövetési adatokat küld a Microsoftnak."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_ECOSIA",
+    "source": "May plant trees for clicking ads. Relies on Google and Bing for results. Sends tracking data to Google and Microsoft.",
+    "message": "Fákat telepíthet a hirdetésekre való kattintásokért. A találatokhoz a Google-t és a Binget használja. Nyomkövetési adatokat küld a Google-nak és a Microsoftnak."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_STARTPAGE",
+    "source": "Privacy-focused. Relies on Google and Bing for results. Promises not to track or profile you.",
+    "message": "Adatvédelemre fókuszál. A találatokhoz a Google-t és a Binget használja. Azt ígéri, hogy nem követ és nem profiloz téged."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BRAVE",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Promises not to track or profile you. May show promotions related to Brave services.",
+    "message": "Adatvédelemre fókuszál. Nem használja a Google-t vagy a Binget. Azt ígéri, hogy nem követ és nem profiloz téged. Megjeleníthet a Brave szolgáltatásaihoz kapcsolódó ajánlatokat."
+  }
+]

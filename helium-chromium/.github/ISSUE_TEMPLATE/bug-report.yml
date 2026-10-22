@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a bug in Arcium
+labels: ["bug"]
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues before you submit this report.
+        You can use AI-assisted tools, but you must review and understand the result.
+        Do not submit automated or duplicate reports.
+
+        Submit macOS build, package, or platform-integration bugs to Arcium-macOS.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      description: The operating system where you run Arcium
+      options:
+          - macOS
+          - Linux
+          - Windows
+    validations:
+        required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Can be copied from helium://settings/help
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Have you tested that this is not an upstream issue or an issue with your configuration?
+      options:
+        - label: I have tried reproducing this issue in Chrome and it could not be reproduced there
+        - label: I have tried reproducing this issue in ungoogled-chromium and it could not be reproduced there
+        - label: I tried to reproduce this issue in Arcium with a new profile and could not reproduce it there
+  - type: input
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description (in one line) of what the bug is.
+    validations:
+      required: true
+  - type: input
+    id: crashid
+    attributes:
+      label: Crash ID
+      description: If applicable, provide the crash ID from helium://crashes.
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: A clear and concise description of what actually happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: A clear and concise description of what you expected to happen
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add any other context about the problem here. If applicable, add screenshots to help explain your problem.

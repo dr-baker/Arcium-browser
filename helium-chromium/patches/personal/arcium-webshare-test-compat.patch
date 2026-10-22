@@ -1,0 +1,40 @@
+--- a/chrome/browser/webshare/share_service_browsertest.cc
++++ b/chrome/browser/webshare/share_service_browsertest.cc
+@@ -5,7 +5,12 @@
+ #include "base/test/metrics/histogram_tester.h"
+ #include "build/build_config.h"
+ #include "build/chromeos_buildflags.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
++#include "components/safe_browsing/content/common/file_type_policies_test_util.h"
++#include "components/safe_browsing/core/browser/db/fake_database_manager.h"
++#endif
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+@@ -14,8 +19,6 @@
+ #include "chrome/browser/webshare/share_service_impl.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+-#include "components/safe_browsing/content/common/file_type_policies_test_util.h"
+-#include "components/safe_browsing/core/browser/db/fake_database_manager.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/render_frame_host.h"
+@@ -151,6 +154,7 @@
+ }
+ #endif  // BUILDFLAG(IS_WIN)
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class SafeBrowsingShareServiceBrowserTest : public ShareServiceBrowserTest {
+  public:
+   SafeBrowsingShareServiceBrowserTest()
+@@ -216,6 +220,7 @@
+   EXPECT_EQ("share failed: NotAllowedError: Permission denied",
+             content::EvalJs(contents, "share_pdf_file()"));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class ShareServicePrerenderBrowserTest : public ShareServiceBrowserTest {
+  public:

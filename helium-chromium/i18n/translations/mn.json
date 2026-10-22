@@ -1,0 +1,1232 @@
+[
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Helium идэвхгүй табуудаас санах ойг чөлөөлдөг. Энэ нь идэвхтэй табууд болон бусад програмуудад илүү их нөөц өгч, Helium-ийг хурдан ажиллуулдаг. Та буцаж очиход идэвхгүй табууд автоматаар дахин идэвхждэг."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Helium батерейны эрчим хүчийг хэмнэхийн тулд ар талын үйл ажиллагаа болон жигд гүйлгэлт, видеоны фрэймийн хурд зэрэг харааны эффектүүдийг хязгаарладаг."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "Helium preloads pages which makes browsing and searching faster.",
+    "message": "Helium хуудсуудыг урьдчилан ачаалснаар вэб үзэх болон хайлтыг хурдасгадаг."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
+    "source": "Sites you add will always stay active and memory won't be freed up from them.",
+    "message": "Таны нэмсэн сайтууд үргэлж идэвхтэй байх бөгөөд тэдгээрээс санах ой чөлөөлөгдөхгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_DISCARD_RING_TREATMENT_ENABLED_DESCRIPTION_WITH_LEARN_LINK",
+    "source": "A dotted circle appears around site icons.",
+    "message": "Сайтын дүрс тэмдгийн эргэн тойронд тасархай тойрог гарч ирнэ."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_INTERVENTION_NOTIFICATION_ENABLED_DESCRIPTION",
+    "source": "Get notifications that suggest ways to improve detected performance issues.",
+    "message": "Илэрсэн гүйцэтгэлийн асуудлыг сайжруулах арга замыг санал болгох мэдэгдэл авах."
+  },
+  {
+    "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
+    "message": "<ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>-с импортолсон"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
+    "source": "Import profile still in use",
+    "message": "Импортын профайл ашиглагдаж байна"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TEXT",
+    "source": "To continue importing data, first close the browser you're importing from.",
+    "message": "Өгөгдөл импортлохыг үргэлжлүүлэхийн тулд эхлээд импортлож буй хөтчөө хаана уу."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES",
+    "source": "Helium services",
+    "message": "Helium үйлчилгээнүүд"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
+    "source": "Manage what Helium services are allowed in your browser",
+    "message": "Таны хөтөчид зөвшөөрөгдсөн Helium үйлчилгээнүүдийг удирдах"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
+    "source": "Updates to Helium services:",
+    "message": "Helium үйлчилгээний шинэчлэлтүүд:"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
+    "source": "These changes are not active until you dismiss this notice.",
+    "message": "Эдгээр өөрчлөлтүүд нь та энэ мэдэгдлийг хаах хүртэл идэвхжихгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_IGNORE",
+    "source": "Don't notify me again",
+    "message": "Дахиж надад мэдэгдэхгүй"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Helium үйлчилгээнүүдтэй холбогдохыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Идэвхжүүлсэн үед Helium нэмэлт функц хангахын тулд нэргүй вэб үйлчилгээнүүдтэй холбогдож чадна. Идэвхгүй болгосон үед нэмэлт боломжууд ажиллахгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
+    "source": "Use your own instance of Helium services",
+    "message": "Helium үйлчилгээний өөрийн серверийг ашиглах"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Та Helium үйлчилгээний өөрийн серверийг байршуулж, анхдагчийн оронд хөтчдөө ашиглах боломжтой. Зөвхөн HTTPS."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
+    "source": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.",
+    "message": "Та юу хийж буйгаа сайн мэдэхгүй бол энэ талбарыг бүү ашиглаарай. Бусад хүмүүсийн URL-ийг энд хэзээ ч бүү буулгаарай, тэд таны өгөгдлийг хулгайлахыг оролдож байна. Тусгай сервер ашигласнаас үүдсэн аливаа хохирлын хариуцлагыг бид хүлээхгүй бөгөөд танд туслах боломжгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
+    "source": "Custom origin URL for Helium services",
+    "message": "Helium үйлчилгээний тусгай серверийн URL"
+  },
+  {
+    "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
+    "source": "Helium services have been updated. Please review the changes.",
+    "message": "Helium үйлчилгээнүүд шинэчлэгдсэн. Өөрчлөлтүүдийг шалгана уу."
+  },
+  {
+    "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
+    "source": "Review Helium services updates",
+    "message": "Helium үйлчилгээний шинэчлэлтүүдийг шалгах"
+  },
+  {
+    "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
+    "source": "Services updated",
+    "message": "Үйлчилгээ шинэчлэгдсэн"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT",
+    "source": "Helium services are not available until setup is complete to ensure your privacy and consent.",
+    "message": "Таны нууцлал болон зөвшөөрлийг хангахын тулд тохиргоо дуусах хүртэл Helium үйлчилгээнүүд ашиглах боломжгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON",
+    "source": "Complete setup",
+    "message": "Тохиргоог дуусгах"
+  },
+  {
+    "name": "IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE_HELIUM",
+    "source": "This list of search engines is shown in random order.",
+    "message": "Энэ хайлтын системийн жагсаалт санамсаргүй дарааллаар харуулагдсан."
+  },
+  {
+    "name": "IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR",
+    "source": "Appearance and behavior",
+    "message": "Гадаад төрх ба зан төлөв"
+  },
+  {
+    "name": "IDS_SETTINGS_BEHAVIOR",
+    "source": "Behavior",
+    "message": "Зан төлөв"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with ⌘+Shift+C",
+    "message": "⌘+Shift+C товчлуураар хуудасны холбоосыг хурдан хуулахыг идэвхжүүлэх"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with Ctrl+Shift+C",
+    "message": "Ctrl+Shift+C товчлуураар хуудасны холбоосыг хурдан хуулахыг идэвхжүүлэх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Өргөтгөлийн татан авалт болон шинэчлэлтийг прокси хийх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Идэвхжүүлсэн үед Helium таны нууцлалыг хамгаалахын тулд өргөтгөлийн татан авалт болон шинэчлэлтийг прокси хийнэ. Идэвхгүй болгосон үед өргөтгөлүүдийг татаж авах болон шинэчлэх боломжгүй болно."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "!bangs жагсаалт татаж авахыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium !w эсвэл !gh гэх мэт интернэтийг хурдан үзэхэд туслах bangs жагсаалтыг татаж авна. Идэвхгүй болгосон үед bangs ажиллахгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM",
+    "source": "Please check that Helium services are enabled (including spell check downloads) and make sure that the firewall is not blocking downloads from Helium servers.",
+    "message": "Helium үйлчилгээнүүд идэвхтэй байгаа эсэхийг (зөв бичих толь бичгийн татан авалтыг оролцуулаад) шалгаж, галт хана Helium серверүүдээс татан авалтыг хаагаагүй эсэхийг баталгаажуулна уу."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Зөв бичих шалгалтын толь бичгийн файлуудыг татаж авахыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium хүсэлтийн дагуу зөв бичих шалгалтад ашигладаг толь бичгийн файлуудыг татаж авна. Идэвхгүй болгосон үед зөв бичих шалгалт ажиллахгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",
+    "source": "Version <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>",
+    "message": "Хувилбар <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "uBlock Origin-д зориулсан шүүлтүүрийн жагсаалт татаж авахыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO_DESCRIPTION",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium uBlock Origin-д зориулсан шинэ шүүлтүүрийн жагсаалтуудыг татаж авна. Бүх хүсэлтүүд таны нууцлалыг хамгаалахын тулд прокси хийгдэнэ. Идэвхгүй болгосон үед анхдагч шүүлтүүрийн жагсаалтууд локал санах ойгоос ачаалагдах бөгөөд тэдгээр нь зөвхөн Helium-тэй хамт шинэчлэгдэнэ. Нэмэлт шүүлтүүрийн жагсаалтууд прокси хийлгүйгээр хүсэгдэнэ."
+  },
+  {
+    "name": "IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON",
+    "source": "Open new tabs next to the active tab",
+    "message": "Шинэ табуудыг идэвхтэй табын хажууд нээх"
+  },
+  {
+    "name": "IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER",
+    "source": "Cycle through tabs in most recently used order with Ctrl+Tab",
+    "message": "Ctrl+Tab ашиглан табуудыг сүүлд ашигласан дарааллаар сэлгэх"
+  },
+  {
+    "name": "IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES",
+    "source": "Component updates are disabled. See Helium services in settings.",
+    "message": "Бүрэлдэхүүн хэсгүүдийн шинэчлэлт идэвхгүй байна. Тохиргоон дахь Helium үйлчилгээнүүдийг үзнэ үү."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE",
+    "source": "Hibernate",
+    "message": "Унтуулах"
+  },
+  {
+    "name": "IDS_SETTINGS_PERMISSIONS_DESCRIPTION_NORMAL",
+    "source": "Manage site permissions and content settings (cookies, pop-ups, and more)",
+    "message": "Сайтын зөвшөөрөл болон контентын тохиргоог удирдах (күүки, попап цонх болон бусад)"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_DESCRIPTION_NORMAL",
+    "source": "Connection security, DNS settings, certificate management, and other security settings",
+    "message": "Холболтын аюулгүй байдал, DNS тохиргоо, сертификатын удирдлага болон бусад аюулгүй байдлын тохиргоо"
+  },
+  {
+    "name": "IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT_HELIUM",
+    "source": "Enabling \"Do Not Track\" means that Helium will include a request not to be tracked with your browsing traffic. Whether this request is honored depends on whether a website responds to it and on how it is interpreted. For example, some websites may respond by showing you ads that aren't personalized using your previous browsing data. Many websites may still track you regardless of the request.",
+    "message": "«Do Not Track» функцийг идэвхжүүлснээр Helium таны вэб үзэлтийн урсгалд хяналт тавихгүй байхыг хүссэн хүсэлт оруулна. Энэ хүсэлтийг биелүүлэх эсэх нь вэб сайтаас хариу өгөх эсэх болон түүнийг хэрхэн тайлбарлахаас хамаарна. Жишээлбэл, зарим вэб сайтууд таны өмнөх вэб үзэлтийн өгөгдлөөр хувийн тохируулга хийгээгүй зар сурталчилгаа харуулж болно. Олон вэб сайтууд хүсэлтээс үл хамааран таныг хянасаар байж болно."
+  },
+  {
+    "name": "IDS_SETTINGS_ALLOWED_THIRD_PARTY_COOKIES_DESCRIPTION_HELIUM",
+    "source": "Affects the sites listed here. Inserting “[*.]” before a domain name creates an exception for the entire domain. For example, adding “[*.]example.com” means that third-party cookies can also be active for second.example.com, because it’s part of example.com.",
+    "message": "Энд жагсаасан сайтуудад нөлөөлнө. Домэйн нэрний өмнө «[*.]» оруулснаар бүх домэйнд үл хамаарах дүрэм үүсгэнэ. Жишээлбэл, «[*.]example.com» нэмснээр гуравдагч этгээдийн күүки нь second.example.com дээр ч идэвхтэй байж болно, учир нь энэ нь example.com-ын хэсэг юм."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC_HELIUM",
+    "source": "When you type in the address bar, Helium sends what you type to your default search engine to get suggestions. This is off in Incognito.",
+    "message": "Та хаягийн мөрөнд бичихэд Helium танд санал болгохын тулд бичсэн зүйлийг таны анхдагч хайлтын системд илгээнэ. Энэ нь Нууцлал горимд идэвхгүй байна."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_HELIUM",
+    "source": "Suggestions from the search engine",
+    "message": "Хайлтын системийн саналууд"
+  },
+  {
+    "name": "IDS_SETTINGS_AUTO_PIN_NEW_TAB_GROUPS_HELIUM",
+    "source": "Automatically pin new tab groups to the bookmarks bar",
+    "message": "Шинэ таб бүлгүүдийг хавчуурганы мөрөнд автоматаар бэхлэх"
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE",
+    "source": "Add search engine",
+    "message": "Хайлтын систем нэмэх"
+  },
+  {
+    "name": "IDS_ADD_AS_DEFAULT",
+    "source": "Add as default",
+    "message": "Анхдагчаар нэмэх"
+  },
+  {
+    "name": "IDS_POLICY_SOURCE_HOP",
+    "source": "Helium defaults",
+    "message": "Helium-ийн анхдагч тохиргоо"
+  },
+  {
+    "name": "IDS_ACCNAME_APP_MENU",
+    "source": "Main Menu",
+    "message": "Үндсэн цэс"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_HELIUM_SERVICES_DISABLED",
+    "source": "Extension downloads are disabled. Enable this feature in Helium services settings and try again.",
+    "message": "Өргөтгөлийн татан авалт идэвхгүй байна. Helium үйлчилгээний тохиргоонд энэ боломжийг идэвхжүүлээд дахин оролдоно уу."
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_EXTENSION_DL_DISABLED",
+    "source": "Extension downloads are disabled",
+    "message": "Өргөтгөлийн татан авалт идэвхгүй байна"
+  },
+  {
+    "name": "IDS_NTP_CUSTOMIZE_CHROME_CHANGE_WALLPAPER_LABEL",
+    "source": "Change wallpaper",
+    "message": "Ханын зураг солих"
+  },
+  {
+    "name": "IDS_NEW_TAB_OTR_SUBTITLE_HELIUM",
+    "source": "Helium will not save anything about your browsing in Incognito, but downloads and bookmarks will stick around. Your browsing won't leave any traces on this device, and other users won't be able to see your activity.",
+    "message": "Helium Нууцлал горимд таны вэб үзэлтийн талаар юу ч хадгалахгүй, гэхдээ татан авалтууд болон хавчуургууд хадгалагдана. Таны вэб үзэлт энэ төхөөрөмж дээр ямар ч ул мөр үлдээхгүй бөгөөд бусад хэрэглэгчид таны үйл ажиллагааг харах боломжгүй."
+  },
+  {
+    "name": "IDS_EXTENSIONS_INSTALL_LOCATION_HELIUM",
+    "source": "Helium component",
+    "message": "Helium бүрэлдэхүүн хэсэг"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT",
+    "source": "Browser layout",
+    "message": "Хөтчийн загвар"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Сонгодог"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Динамик"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Нягт"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Босоо"
+  },
+  {
+    "name": "IDS_SETTINGS_TAB_STRIP_RIGHT_ALIGN",
+    "source": "Show vertical tabs on right side",
+    "message": "Босоо табуудыг баруун талд харуулах"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser Layout",
+    "message": "Хөтчийн загвар"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Сонгодог"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Динамик"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Нягт"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Босоо"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on Right Side",
+    "message": "Табуудыг баруун талд"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser layout",
+    "message": "Хөтчийн загвар"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on right side",
+    "message": "Табуудыг баруун талд"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use ⌘+S to toggle vertical tabs in Vertical layout",
+    "message": "Vertical загварт босоо табуудыг сэлгэхийн тулд ⌘+S ашиглах"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use Ctrl+S to toggle vertical tabs in Vertical layout",
+    "message": "Vertical загварт босоо табуудыг сэлгэхийн тулд Ctrl+S ашиглах"
+  },
+  {
+    "name": "IDS_SETTINGS_CENTERED_LOCATION_BAR",
+    "source": "Center the address bar",
+    "message": "Хаягийн мөрийг төвд байрлуулах"
+  },
+  {
+    "name": "IDS_SETTINGS_MINIMAL_LOCATION_BAR",
+    "source": "Minimal address bar",
+    "message": "Хялбаршуулсан хаягийн мөр"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "Helium cannot be set as default, because no <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.",
+    "message": "Helium-ийг анхдагч хөтчөөр тохируулах боломжгүй, учир нь дараах байршлуудаас <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> файл олдсонгүй: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications."
+  },
+  {
+    "name": "IDS_SETTINGS_CHOOSE_CUSTOM_AVATAR_FILE",
+    "source": "Choose file",
+    "message": "Файл сонгох"
+  },
+  {
+    "name": "IDS_SETTINGS_CLEAR_CUSTOM_AVATAR_DIALOG_TITLE",
+    "source": "Clear custom avatar?",
+    "message": "Өөрийн аватарыг арилгах уу?"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_FILE_TOO_LARGE",
+    "source": "Selected file is too large. Please select a file smaller than 30MB.",
+    "message": "Сонгосон файл хэт том байна. 30MB-ээс бага файл сонгоно уу."
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_ERROR",
+    "source": "Image could not be loaded",
+    "message": "Зургийг ачаалж чадсангүй"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_LABEL",
+    "source": "Custom avatar",
+    "message": "Өөрийн аватар"
+  },
+  {
+    "name": "IDS_SETTINGS_ROUNDED_FRAME",
+    "source": "Show a rounded frame around web contents",
+    "message": "Вэб агуулгын эргэн тойронд дугуйрсан хүрээ харуулах"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_SIDEBAR",
+    "source": "Always show the sidebar",
+    "message": "Хажуугийн самбарыг үргэлж харуулах"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_TOP_TOOLBAR",
+    "source": "Always show the top bar",
+    "message": "Дээд мөрийг үргэлж харуулах"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close tabs above",
+    "message": "Дээрх табуудыг хаах"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close Tabs Above",
+    "message": "Дээрх табуудыг хаах"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_TITLE",
+    "source": "Full Disk Access required",
+    "message": "Дискний бүрэн хандалт шаардлагатай"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
+    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari-аас таны хавчуургуудыг импортлохын тулд Helium-д Дискний бүрэн хандалт хэрэгтэй."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
+    "source": "Learn how to grant Full Disk Access from your System Preferences.",
+    "message": "Системийн тохиргооноос Дискний бүрэн хандалт хэрхэн олгохыг мэдэж аваарай."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_OPEN_SETTINGS",
+    "source": "Open System Preferences",
+    "message": "Системийн тохиргоог нээх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
+    "source": "Invalid origin",
+    "message": "Хүчингүй эх сурвалж"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_NEXT_TAB",
+    "source": "Next tab",
+    "message": "Дараагийн таб"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_PREVIOUS_TAB",
+    "source": "Previous tab",
+    "message": "Өмнөх таб"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_LOCATION",
+    "source": "Focus address bar",
+    "message": "Хаягийн мөрд фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_NEXT",
+    "source": "Find next",
+    "message": "Дараагийнхыг олох"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_PREVIOUS",
+    "source": "Find previous",
+    "message": "Өмнөхийг олох"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_BACK",
+    "source": "Back",
+    "message": "Буцах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FORWARD",
+    "source": "Forward",
+    "message": "Урагшлах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_HOME",
+    "source": "Home",
+    "message": "Нүүр хуудас"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB",
+    "source": "New split tab",
+    "message": "Шинэ хуваасан таб"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_LAST_TAB",
+    "source": "Last tab",
+    "message": "Сүүлийн таб"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_TAB",
+    "source": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>",
+    "message": "Таб <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_NEXT",
+    "source": "Move tab right",
+    "message": "Табыг баруун тийш зөөх"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_PREVIOUS",
+    "source": "Move tab left",
+    "message": "Табыг зүүн тийш зөөх"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_TAB_GROUP",
+    "source": "Next tab group",
+    "message": "Дараагийн табын бүлэг"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_TAB_GROUP",
+    "source": "Previous tab group",
+    "message": "Өмнөх табын бүлэг"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_TAB_GROUP",
+    "source": "Close tab group",
+    "message": "Табын бүлгийг хаах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_BOOKMARKS",
+    "source": "Focus bookmarks bar",
+    "message": "Хавчуургын мөрд фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS",
+    "source": "Toggle vertical tabs",
+    "message": "Босоо табуудыг сэлгэх"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP",
+    "source": "Close find bar or stop loading",
+    "message": "Хайлтын мөрийг хаах эсвэл ачаалалтыг зогсоох"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_SEARCH",
+    "source": "Focus search",
+    "message": "Хайлтанд фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_PANE",
+    "source": "Focus next pane",
+    "message": "Дараагийн самбарт фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_PANE",
+    "source": "Focus previous pane",
+    "message": "Өмнөх самбарт фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_WEB_CONTENTS_PANE",
+    "source": "Focus page content",
+    "message": "Хуудасны контентод фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_MENU_BAR",
+    "source": "Focus menu bar",
+    "message": "Цэсийн мөрд фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_TOOLBAR",
+    "source": "Focus toolbar",
+    "message": "Хэрэгслийн мөрд фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_INACTIVE_POPUP",
+    "source": "Focus inactive popup",
+    "message": "Идэвхгүй попап цонхонд фокуслах"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_AVATAR_MENU",
+    "source": "Profile menu",
+    "message": "Профайлын цэс"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_APP_MENU",
+    "source": "App menu",
+    "message": "Аппын цэс"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_ZEN_MODE_TOP_CHROME_PIN",
+    "source": "Pin top toolbar",
+    "message": "Дээд хэрэгслийн мөрийг тогтоох"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_DEV_TOOLS",
+    "source": "Toggle developer tools",
+    "message": "Хөгжүүлэгчийн хэрэгслийг сэлгэх"
+  },
+  {
+    "name": "IDS_APP_PLUS_KEY",
+    "source": "Plus",
+    "message": "Нэмэх"
+  },
+  {
+    "name": "IDS_APP_NUMPAD_KEY",
+    "source": "Numpad <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>",
+    "message": "Тоон гарын <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_TITLE",
+    "source": "Keyboard shortcuts",
+    "message": "Гарын товчлолууд"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SEARCH_LABEL",
+    "source": "Search shortcuts",
+    "message": "Товчлол хайх"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_REMOVE_A11Y_LABEL",
+    "source": "Remove <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> from <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>",
+    "message": "<ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> товчлолыг <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>-с хасах"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_ALL",
+    "source": "Reset all to defaults",
+    "message": "Бүгдийг анхдагч руу буцаах"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_ADD_DIALOG_TITLE",
+    "source": "Add shortcut",
+    "message": "Товчлол нэмэх"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_DIALOG_DESCRIPTION",
+    "source": "All keyboard shortcuts will be reset to their default values. Any custom shortcuts you've set will be lost.",
+    "message": "Бүх гарын товчлол анхдагч утга руугаа буцна. Таны тохируулсан аливаа тусгай товчлол устах болно."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_PRESS_SHORTCUT",
+    "source": "Press a combination of keys to create a new shortcut",
+    "message": "Шинэ товчлол үүсгэхийн тулд товчлууруудын хослол дарна уу"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_NEED_KEY",
+    "source": "Include a key that is not a modifier.",
+    "message": "Өөрчлөгч биш товчийг оруулна уу."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_WILL_OVERRIDE",
+    "source": "Saving will remove this shortcut from <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>.",
+    "message": "Хадгалбал энэ товчлолыг <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>-с хасна."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SYSTEM_CONFLICT",
+    "source": "This shortcut is managed by <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> and cannot be changed.",
+    "message": "Энэ товчлолыг <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> удирддаг бөгөөд өөрчлөх боломжгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_INVALID",
+    "source": "This shortcut cannot be saved.",
+    "message": "Энэ товчлолыг хадгалах боломжгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_NOTICE",
+    "source": "Some keyboard shortcuts are protected and can't be changed here. To change them, go to:",
+    "message": "Зарим гарын товчлол хамгаалагдсан тул энд өөрчлөх боломжгүй. Тэдгээрийг өөрчлөхийн тулд дараах руу очно уу:"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_LINK",
+    "source": "System Settings &gt; Keyboard &gt; Keyboard Shortcuts &gt; App Shortcuts",
+    "message": "Системийн тохиргоо &gt; Гар &gt; Гарын товчлол &gt; Аппын товчлол"
+  },
+  {
+    "name": "IDS_ZEN_MODE_NEW_TAB_CREATED_TOAST_BODY",
+    "source": "New tab opened",
+    "message": "Шинэ таб нээгдлээ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic browser updates",
+    "message": "Хөтчийн автомат шинэчлэлтүүдийг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium шинэчлэлтүүдийг автоматаар шалгаж, суулгана. Үүнд хөтөч болон бүрэлдэхүүн хэсгийн шинэчлэлтүүд багтана. Хамгийн сүүлийн боломжууд болон аюулгүй байдлын шинэчлэлтүүдийг авахын тулд энэ тохиргоог идэвхтэй байлгахыг зөвлөж байна."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic component updates",
+    "message": "Бүрэлдэхүүн хэсгийн автомат шинэчлэлтүүдийг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium бүрэлдэхүүн хэсгийн шинэчлэлтүүдийг автоматаар шалгаж, суулгана. Энэ тохиргоог идэвхтэй байлгахыг зөвлөж байна. Linux дээр хөтчийн шинэчлэлтийг таны түгээлтийн багцын менежер хариуцдаг. Helium багцын шинэчлэлтийг долоо хоногт дор хаяж нэг удаа шалгана уу."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate other tabs",
+    "message": "Бусад табуудыг унтуулах"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate Other Tabs",
+    "message": "Бусад табуудыг унтуулах"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URL",
+    "source": "Copy URL",
+    "message": "URL хуулах"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URLS",
+    "source": "Copy URLs",
+    "message": "URL-уудыг хуулах"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_TITLE",
+    "source": "Background action confirmation toasts",
+    "message": "Дэвсгэр үйлдлийг баталгаажуулах түр мэдэгдлүүд"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_DESCRIPTION",
+    "source": "Shows a toast notification when you copy content, such as links and images, or open a new background tab in Frameless mode",
+    "message": "Холбоос, зураг зэрэг контентыг хуулах эсвэл Хүрээгүй горимд шинэ дэвсгэр таб нээх үед түр мэдэгдэл харуулна"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE",
+    "source": "Frameless mode",
+    "message": "Хүрээгүй горим"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE_DESCRIPTION",
+    "source": "Automatically hide browser UI until you hover the window edge",
+    "message": "Цонхны ирмэг дээр курсор аваачих хүртэл хөтчийн интерфэйсийг автоматаар нууна"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_NEXT",
+    "source": "Next",
+    "message": "Дараагийнх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES",
+    "source": "Yes",
+    "message": "Тийм"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_HISTORY",
+    "source": "History",
+    "message": "Түүх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALLED",
+    "source": "Installed",
+    "message": "Суулгасан"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALL",
+    "source": "Install",
+    "message": "Суулгах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_BACK",
+    "source": "Back",
+    "message": "Буцах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO",
+    "source": "No",
+    "message": "Үгүй"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_PRIVACY",
+    "source": "Privacy",
+    "message": "Нууцлал"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_EXTENSIONS",
+    "source": "Extensions",
+    "message": "Өргөтгөлүүд"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_CONFIGURE",
+    "source": "Configure",
+    "message": "Тохируулах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_IMPORT_GUIDE",
+    "source": "Import",
+    "message": "Импортлох"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_BOOKMARKS",
+    "source": "Bookmarks",
+    "message": "Хавчуургууд"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SEARCHWEBWITH",
+    "source": "&amp;Search with <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>",
+    "message": "<ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>-ээр &amp;хайх"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force paste",
+    "message": "Албадан буулгах"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force Paste",
+    "message": "Албадан Буулгах"
+  },
+  {
+    "name": "IDS_SETTINGS_SHIFT_RIGHT_CLICK_CONTEXT_MENU",
+    "source": "Force context menu with Shift+Right Click",
+    "message": "Shift+Баруун товшилтоор контекст цэсийг албадан гаргах"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_TITLE",
+    "source": "Crash reporting",
+    "message": "Гэмтлийн мэдээлэл"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DESCRIPTION",
+    "source": "Choose whether Helium can ask to send crash reports or send them automatically. Disabling reports will delete all pending reports.",
+    "message": "Helium гэмтлийн мэдээлэл илгээхийг асуух эсвэл автоматаар илгээх эсэхийг сонгоно уу. Мэдээллийг идэвхгүй болгосноор хүлээгдэж буй бүх мэдээллийг устгана."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED",
+    "source": "Disabled",
+    "message": "Идэвхгүй"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_ASK",
+    "source": "Ask after a crash",
+    "message": "Гэмтсэний дараа асуух"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC",
+    "source": "Send automatically",
+    "message": "Автоматаар илгээх"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_TITLE",
+    "source": "{COUNT, plural, =1 {Would you like to send a crash report?} other {Would you like to send # crash reports?}}",
+    "message": "{COUNT, plural, =1 {Гэмтлийн мэдээлэл илгээх үү?} other {# гэмтлийн мэдээлэл илгээх үү?}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_DESCRIPTION",
+    "source": "Helium closed unexpectedly. A crash report could help us fix the issue you ran into and prevent it from happening again.",
+    "message": "Helium гэнэт хаагдлаа. Гэмтлийн мэдээлэл нь таны тулгарсан асуудлыг засаж, дахин давтагдахаас сэргийлэхэд бидэнд туслах болно."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_PRIVACY",
+    "source": "A crash report may incidentally include some sensitive data present in Helium's memory at the time of crash.",
+    "message": "Гэмтлийн мэдээлэлд гэмтэл гарах үед Helium-ийн санах ойд байсан зарим эмзэг мэдээлэл санамсаргүйгээр багтаж болзошгүй."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_OPTIONAL",
+    "source": "Nothing has been sent yet. Sending a crash report is optional.",
+    "message": "Одоогоор юу ч илгээгээгүй байна. Гэмтлийн мэдээлэл илгээх нь заавал биш."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send Report} other {Send # Reports}}",
+    "message": "{COUNT, plural, =1 {Мэдээлэл Илгээх} other {# Мэдээлэл Илгээх}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send report} other {Send # reports}}",
+    "message": "{COUNT, plural, =1 {Мэдээлэл илгээх} other {# мэдээлэл илгээх}}"
+  },
+  {
+    "name": "IDS_CRASH_DISABLED_MESSAGE",
+    "source": "Crash reporting is disabled in Helium settings or by policy.",
+    "message": "Гэмтлийн мэдээлэл нь Helium-ийн тохиргоо эсвэл бодлогоор идэвхгүй болсон байна."
+  },
+  {
+    "name": "IDS_CRASH_BUG_LINK_LABEL",
+    "source": "Create an issue with details",
+    "message": "Дэлгэрэнгүй мэдээлэлтэй асуудал үүсгэх"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS",
+    "source": "Use native frame materials (experimental)",
+    "message": "Уугуул хүрээний материал ашиглах (туршилтын)"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION",
+    "source": "Applies native materials to the browser frame surfaces. May cause UI clarity issues.",
+    "message": "Хөтчийн хүрээний гадаргууд уугуул материал хэрэглэнэ. Хэрэглэгчийн интерфейсийн тодрол муудах асуудал үүсгэж болзошгүй."
+  },
+  {
+    "name": "IDS_SETTINGS_SHOW_ZOOM_INDICATOR",
+    "source": "Show the zoom indicator in the address bar",
+    "message": "Хаягийн мөрөнд томруулалтын үзүүлэлтийг харуулах"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
+    "source": "Translate “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”",
+    "message": "«<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>»-г орчуулах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PAGE_TITLE",
+    "source": "Helium Setup",
+    "message": "Helium Тохиргоо"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_USE_DEFAULTS",
+    "source": "Use defaults",
+    "message": "Анхдагчийг ашиглах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_LETS_GO",
+    "source": "Let's go!",
+    "message": "Эхэлцгээе!"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TITLE",
+    "source": "Helium Partner",
+    "message": "Helium Түнш"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TOOLTIP",
+    "source": "Paying for this service will support the development of Helium.",
+    "message": "Энэ үйлчилгээний төлбөр төлснөөр Helium-ийн хөгжүүлэлтийг дэмжинэ."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_GREETING",
+    "source": "Meet Helium",
+    "message": "Helium-тэй танилц"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_FINISH_TITLE",
+    "source": "Ready to browse?",
+    "message": "Вэб үзэхэд бэлэн үү?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_TITLE",
+    "source": "Helium services",
+    "message": "Helium үйлчилгээ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SUBTITLE",
+    "source": "Services are not active until you consent to using them. Changes will be applied after you go to the next page.",
+    "message": "Та ашиглахыг зөвшөөрөх хүртэл үйлчилгээ идэвхжихгүй. Өөрчлөлтийг дараагийн хуудас руу шилжсэний дараа хэрэглэнэ."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_TITLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Helium үйлчилгээнд холбогдохыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_DESC",
+    "source": "Helium services provide additional functionality, such as: extension downloads, native !bangs, filter list updates, and browser updates. When disabled, none of these features will work, but Helium will not make any web requests.",
+    "message": "Helium үйлчилгээ нь өргөтгөл татах, уугуул !bang, шүүлтүүрийн жагсаалтын шинэчлэлт, хөтчийн шинэчлэлт зэрэг нэмэлт функцийг олгодог. Идэвхгүй үед эдгээр функцүүдийн аль нь ч ажиллахгүй, гэхдээ Helium ямар ч вэб хүсэлт илгээхгүй."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_TITLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "!bang жагсаалт татахыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_DESC",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium нь !w эсвэл !gh зэрэг интернэтийг илүү хурдан үзэхэд туслах bang-уудын жагсаалтыг татаж авна. Идэвхгүй үед bang ажиллахгүй."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_TITLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Өргөтгөл татах болон шинэчлэлтийг прокси хийх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_DESC",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Идэвхжсэн үед Helium таны нууцлалыг хамгаалахын тулд өргөтгөл татах болон шинэчлэлтийг прокси хийнэ. Идэвхгүй үед өргөтгөл татах болон шинэчлэх боломжгүй."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_TITLE",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "uBlock Origin-д зориулсан шүүлтүүрийн жагсаалт татахыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_DESC",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium нь uBlock Origin-д зориулсан шинэ шүүлтүүрийн жагсаалтуудыг татаж авна. Жагсаалтад хандах бүх хүсэлтийг таны нууцлалыг хамгаалахын тулд прокси хийдэг. Идэвхгүй үед анхдагч шүүлтүүрийн жагсаалтуудыг зөвхөн Helium-ийн хамт шинэчлэгддэг локал сангаас ачаална. Нэмэлт шүүлтүүрийн жагсаалтуудыг прокси хийхгүйгээр хүсэлт гаргана."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE",
+    "source": "Allow automatic browser updates",
+    "message": "Хөтчийн автомат шинэчлэлтийг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium нь шинэчлэлтийг автоматаар шалгаж, суулгана. Үүнд хөтчийн болон бүрэлдэхүүн хэсгийн шинэчлэлт багтана. Хамгийн сүүлийн үеийн функц болон аюулгүй байдлын шинэчлэлтийг авахын тулд энэ тохиргоог идэвхтэй байлгахыг зөвлөж байна."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE_LINUX",
+    "source": "Allow automatic component updates",
+    "message": "Бүрэлдэхүүн хэсгийн автомат шинэчлэлтийг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC_LINUX",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium нь бүрэлдэхүүн хэсгийн шинэчлэлтийг автоматаар шалгаж, суулгана. Энэ тохиргоог идэвхтэй байлгахыг зөвлөж байна. Linux дээр хөтчийн шинэчлэлтийг таны дистрибативын багц менежер зохицуулдаг. Helium багцын шинэчлэлтийг долоо хоногт дор хаяж нэг удаа шалгана уу."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_TITLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Зөв бичгийн шалгалтад зориулсан толь бичгийн файл татахыг зөвшөөрөх"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_DESC",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium нь хүсэлт гаргах үед зөв бичгийн шалгалтад ашиглагддаг толь бичгийн файлуудыг татаж авна. Идэвхгүй үед зөв бичгийн шалгалт ажиллахгүй."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_TITLE",
+    "source": "Use your own instance of Helium services",
+    "message": "Helium үйлчилгээний өөрийн инстанцыг ашиглах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_DESC",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the pre-hosted server. If you have one, you can set it in Helium settings.",
+    "message": "Та Helium үйлчилгээний өөрийн инстанцыг байршуулж, урьдчилан байршуулсан серверийн оронд хөтөч дээрээ ашиглаж болно. Хэрэв танд байгаа бол Helium-ийн тохиргоонд тохируулж болно."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_PRIVATE",
+    "source": "A privacy-first search engine which doesn't profile or track you.",
+    "message": "Таныг профайлдахгүй, хянахгүй нууцлалыг эн тэргүүнд тавьдаг хайлтын хөдөлгүүр."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_SMALL",
+    "source": "Transparent, but not privacy-focused. Offers better privacy than mainstream search engines.",
+    "message": "Ил тод боловч нууцлалд төвлөрдөггүй. Гол урсгалын хайлтын хөдөлгүүрүүдээс илүү сайн нууцлал санал болгодог."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_MAINSTREAM",
+    "source": "A mainstream search engine which collects extensive personal data.",
+    "message": "Хувийн мэдээллийг өргөнөөр цуглуулдаг гол урсгалын хайлтын хөдөлгүүр."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_CUSTOM",
+    "source": "A custom search engine. Its privacy wasn't verified by Helium.",
+    "message": "Захиалгат хайлтын хөдөлгүүр. Түүний нууцлалыг Helium баталгаажуулаагүй."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BING",
+    "source": "Collects extensive personal data. Privacy controls are buried and limited. Subjectively overwhelming UI.",
+    "message": "Хувийн мэдээллийг өргөнөөр цуглуулдаг. Нууцлалын хяналтууд нуугдсан бөгөөд хязгаарлагдмал. Хэт ачаалалтай интерфейстэй."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_GOOGLE",
+    "source": "It's Google. It dominates the search market, collects extensive personal data, and profiles you.",
+    "message": "Энэ бол Google. Хайлтын зах зээлд ноёрхож, хувийн мэдээллийг өргөнөөр цуглуулж, таныг профайлддаг."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_TITLE",
+    "source": "Ready to switch to Helium?",
+    "message": "Helium руу шилжихэд бэлэн үү?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES_DESC",
+    "source": "Make Helium my default browser.",
+    "message": "Helium-ийг миний анхдагч хөтөч болгох."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO_DESC",
+    "source": "Just trying Helium for now.",
+    "message": "Одоохондоо Helium-ийг зүгээр туршиж үзэж байна."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_TITLE",
+    "source": "Take your stuff with you",
+    "message": "Өөрийн зүйлсээ авч яв"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_SUBTITLE",
+    "source": "Transfer your most important bookmarks, history, and extensions from other browsers.",
+    "message": "Хамгийн чухал хавчуургууд, түүх, өргөтгөлүүдээ бусад хөтчөөс шилжүүл."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_TITLE",
+    "source": "Password manager",
+    "message": "Нууц үгийн менежер"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_SETUP_GUIDE",
+    "source": "Setup",
+    "message": "Тохируулах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_ERROR",
+    "source": "Error:",
+    "message": "Алдаа:"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_MANAGERS_DASHLANE",
+    "source": "Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.",
+    "message": "Алдартай, төлбөртэй, хаалттай эхтэй нууц үгийн менежер. Мэдээллийг Европд хадгалдаг. Түрэмгий борлуулалтын тактикаараа алдартай."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE",
+    "source": "Fingerprinting protection",
+    "message": "Хурууны хээнээс хамгаалах"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_LINK_DESCRIPTION",
+    "source": "Manage how Helium protects you against fingerprinting",
+    "message": "Helium таныг хурууны хээнээс хэрхэн хамгаалахыг удирдах"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_TOGGLE_DESCRIPTION",
+    "source": "Make it harder for sites to fingerprint your browser and device",
+    "message": "Сайтууд таны хөтөч болон төхөөрөмжийн хурууны хээг авахад хэцүү болгоно"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you. Each site sees consistent randomized information during your browsing session to reduce the chances of detection.",
+    "message": "Хурууны хээнээс хамгаалах идэвхтэй үед Helium нь сайтууд таныг хянаж, профайлдахад хэцүү болгохын тулд хөтчийн зарим шинжид шуугиан нэмнэ. Илрүүлэх магадлалыг бууруулахын тулд сайт бүр таны үзэх сессийн турш тогтвортой санамсаргүй мэдээллийг харна."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DISCLAIMER",
+    "source": "Fingerprinting cannot be fully prevented, but Helium's analysis defenses make it harder to recover the original fingerprint.",
+    "message": "Хурууны хээ авахыг бүрэн таслан зогсоох боломжгүй, гэхдээ Helium-ийн шинжилгээнээс хамгаалах арга нь анхны хурууны хээг сэргээхэд хэцүү болгодог."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION",
+    "source": "When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting \"[*.]\" before a domain name applies it to the entire domain.",
+    "message": "Хурууны хээнээс хамгаалах ерөнхий тохиргоо идэвхтэй үед доор жагсаасан сайтууд захиалгат тохиргоог дагана. Домэйн нэрийн өмнө «[*.]» гэж оруулбал бүх домэйнд хамаарна."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_EXCEPTIONS_TITLE",
+    "source": "Sites without fingerprinting protection",
+    "message": "Хурууны хээнээс хамгаалахгүй сайтууд"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_ALLOW_OVERRIDES_TITLE",
+    "source": "Overrides to allow fingerprinting protection",
+    "message": "Хурууны хээнээс хамгаалахыг зөвшөөрөх давуулалтууд"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_HEADER",
+    "source": "Fingerprinting protection",
+    "message": "Хурууны хээнээс хамгаалах"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP",
+    "source": "Manage fingerprinting protection for this site",
+    "message": "Энэ сайтын хурууны хээнээс хамгаалахыг удирдах"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you.",
+    "message": "Хурууны хээнээс хамгаалах идэвхтэй үед Helium нь сайтууд таныг хянаж, профайлдахад хэцүү болгохын тулд хөтчийн зарим шинжид шуугиан нэмнэ."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_BREAKAGE",
+    "source": "Turning off the protection will reduce your privacy, but may fix site features that require fingerprinting.",
+    "message": "Хамгаалалтыг унтраахад таны нууцлал буурах боловч хурууны хээ шаарддаг сайтын зарим боломжийг засаж болзошгүй."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_GLOBALLY_DISABLED",
+    "source": "Fingerprinting protection is turned off in Helium settings.",
+    "message": "Хурууны хээнээс хамгаалах нь Helium-ийн тохиргоонд унтраалттай байна."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_SETTINGS_BUTTON",
+    "source": "Manage fingerprinting protection",
+    "message": "Хурууны хээнээс хамгаалахыг удирдах"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_TERMS",
+    "source": "By continuing, you agree to the <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privacy policy<ph name=\"END_LINK_PRIVACY\">$2</ph> and <ph name=\"BEGIN_LINK_TERMS\">$3</ph>terms of use<ph name=\"END_LINK_TERMS\">$4</ph>.",
+    "message": "Үргэлжлүүлснээр та <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>нууцлалын бодлого<ph name=\"END_LINK_PRIVACY\">$2</ph> болон <ph name=\"BEGIN_LINK_TERMS\">$3</ph>ашиглах нөхцөл<ph name=\"END_LINK_TERMS\">$4</ph>-ийг хүлээн зөвшөөрч байна."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_DUCKDUCKGO",
+    "source": "Privacy-focused. Relies on Bing for results. Promises not to track or profile you.",
+    "message": "Нууцлалд төвлөрсөн. Үр дүнг Bing-ээс авдаг. Таныг хянахгүй, профайлдахгүй гэж амладаг."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_KAGI",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Has custom ranking. Requires a paid account. No ads, tracking, or profiling.",
+    "message": "Нууцлалд төвлөрсөн. Google, Bing-ийг ашигладаггүй. Захиалгат эрэмбэлэлттэй. Төлбөртэй бүртгэл шаарддаг. Сурталчилгаа, хяналт, профайлдалт байхгүй."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_QWANT",
+    "source": "Based in Europe. Relies on Bing for results. Sends tracking data to Microsoft.",
+    "message": "Европт байрладаг. Үр дүнг Bing-ээс авдаг. Хяналтын өгөгдлийг Microsoft руу илгээдэг."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_ECOSIA",
+    "source": "May plant trees for clicking ads. Relies on Google and Bing for results. Sends tracking data to Google and Microsoft.",
+    "message": "Сурталчилгаа дээр товшиход мод тарьж болно. Үр дүнг Google, Bing-ээс авдаг. Хяналтын өгөгдлийг Google, Microsoft руу илгээдэг."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_STARTPAGE",
+    "source": "Privacy-focused. Relies on Google and Bing for results. Promises not to track or profile you.",
+    "message": "Нууцлалд төвлөрсөн. Үр дүнг Google, Bing-ээс авдаг. Таныг хянахгүй, профайлдахгүй гэж амладаг."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BRAVE",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Promises not to track or profile you. May show promotions related to Brave services.",
+    "message": "Нууцлалд төвлөрсөн. Google, Bing-ийг ашигладаггүй. Таныг хянахгүй, профайлдахгүй гэж амладаг. Brave үйлчилгээтэй холбоотой урамшуулал харуулж болзошгүй."
+  }
+]

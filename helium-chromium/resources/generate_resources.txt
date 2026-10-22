@@ -1,0 +1,8 @@
+# input size output
+branding/app_icon/raw.png 256 generated/product_icon/256x256.png
+branding/app_icon/raw.png 128 generated/product_icon/128x128.png
+branding/app_icon/raw.png 64 generated/product_icon/64x64.png
+branding/app_icon/raw.png 48 generated/product_icon/48x48.png
+branding/app_icon/raw.png 32 generated/product_icon/32x32.png
+branding/app_icon/raw.png 24 generated/product_icon/24x24.png
+branding/app_icon/raw.png 16 generated/product_icon/16x16.png

@@ -1,0 +1,21 @@
+# Requires arcium-pins and arcium-feature-settings-tests.
+--- a/chrome/browser/ui/helium/helium_space_service_unittest.cc
++++ b/chrome/browser/ui/helium/helium_space_service_unittest.cc
+@@ -238,9 +238,14 @@
+ 
+   tabs::TabInterface* AddOrdinaryTab(const char* url) {
+     AddTab(browser(), GURL(url));
+-    return tabs::TabInterface::MaybeGetFromContents(
+-        browser()->tab_strip_model()->GetWebContentsAt(
+-            browser()->tab_strip_model()->count() - 1));
++    content::WebContents* contents =
++        browser()->tab_strip_model()->GetActiveWebContents();
++    EXPECT_TRUE(contents);
++    if (!contents) {
++      return nullptr;
++    }
++    EXPECT_EQ(GURL(url), contents->GetLastCommittedURL());
++    return tabs::TabInterface::MaybeGetFromContents(contents);
+   }
+ 
+   std::pair<std::string, tabs::TabInterface*> AddLivePin() {

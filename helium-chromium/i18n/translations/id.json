@@ -1,0 +1,1232 @@
+[
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Helium membebaskan memori dari tab yang tidak aktif. Ini memberikan tab aktif dan aplikasi lain lebih banyak sumber daya komputer dan membuat Helium tetap cepat. Tab tidak aktif Anda akan otomatis aktif kembali saat Anda kembali ke tab tersebut."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Helium menghemat daya baterai dengan membatasi aktivitas latar belakang dan efek visual, seperti scroll halus dan kecepatan bingkai video."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "Helium preloads pages which makes browsing and searching faster.",
+    "message": "Helium memuat halaman terlebih dahulu sehingga penjelajahan dan pencarian menjadi lebih cepat."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
+    "source": "Sites you add will always stay active and memory won't be freed up from them.",
+    "message": "Situs yang Anda tambahkan akan selalu tetap aktif dan memorinya tidak akan dibebaskan."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_DISCARD_RING_TREATMENT_ENABLED_DESCRIPTION_WITH_LEARN_LINK",
+    "source": "A dotted circle appears around site icons.",
+    "message": "Lingkaran putus-putus muncul di sekitar ikon situs."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_INTERVENTION_NOTIFICATION_ENABLED_DESCRIPTION",
+    "source": "Get notifications that suggest ways to improve detected performance issues.",
+    "message": "Dapatkan notifikasi yang menyarankan cara untuk memperbaiki masalah performa yang terdeteksi."
+  },
+  {
+    "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
+    "message": "Diimpor dari <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
+    "source": "Import profile still in use",
+    "message": "Profil impor masih digunakan"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TEXT",
+    "source": "To continue importing data, first close the browser you're importing from.",
+    "message": "Untuk melanjutkan mengimpor data, tutup terlebih dahulu browser tempat Anda mengimpor."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES",
+    "source": "Helium services",
+    "message": "Layanan Helium"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
+    "source": "Manage what Helium services are allowed in your browser",
+    "message": "Kelola layanan Helium apa saja yang diizinkan di browser Anda"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
+    "source": "Updates to Helium services:",
+    "message": "Pembaruan layanan Helium:"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
+    "source": "These changes are not active until you dismiss this notice.",
+    "message": "Perubahan ini belum aktif hingga Anda menutup pemberitahuan ini."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_IGNORE",
+    "source": "Don't notify me again",
+    "message": "Jangan beri tahu saya lagi"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Izinkan koneksi ke layanan Helium"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Saat diaktifkan, Helium akan dapat terhubung ke layanan web anonim untuk menyediakan fungsionalitas tambahan. Saat dinonaktifkan, fitur tambahan tidak akan berfungsi."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
+    "source": "Use your own instance of Helium services",
+    "message": "Gunakan instans layanan Helium Anda sendiri"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Anda dapat meng-hosting instans layanan Helium sendiri dan menggunakannya di browser Anda alih-alih yang bawaan. Hanya HTTPS."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
+    "source": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.",
+    "message": "Jangan gunakan kolom ini kecuali Anda benar-benar tahu apa yang Anda lakukan. Jangan pernah menempel URL dari orang lain di sini, mereka mencoba mencuri data Anda. Kami tidak bertanggung jawab atas kerusakan apa pun yang disebabkan oleh penggunaan server kustom dan tidak akan dapat membantu Anda."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
+    "source": "Custom origin URL for Helium services",
+    "message": "URL origin kustom untuk layanan Helium"
+  },
+  {
+    "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
+    "source": "Helium services have been updated. Please review the changes.",
+    "message": "Layanan Helium telah diperbarui. Harap tinjau perubahannya."
+  },
+  {
+    "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
+    "source": "Review Helium services updates",
+    "message": "Tinjau pembaruan layanan Helium"
+  },
+  {
+    "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
+    "source": "Services updated",
+    "message": "Layanan diperbarui"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT",
+    "source": "Helium services are not available until setup is complete to ensure your privacy and consent.",
+    "message": "Layanan Helium tidak tersedia sampai pengaturan selesai untuk memastikan privasi dan persetujuan Anda."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON",
+    "source": "Complete setup",
+    "message": "Selesaikan pengaturan"
+  },
+  {
+    "name": "IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE_HELIUM",
+    "source": "This list of search engines is shown in random order.",
+    "message": "Daftar mesin pencari ini ditampilkan dalam urutan acak."
+  },
+  {
+    "name": "IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR",
+    "source": "Appearance and behavior",
+    "message": "Tampilan dan perilaku"
+  },
+  {
+    "name": "IDS_SETTINGS_BEHAVIOR",
+    "source": "Behavior",
+    "message": "Perilaku"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with ⌘+Shift+C",
+    "message": "Aktifkan penyalinan cepat tautan halaman dengan ⌘+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with Ctrl+Shift+C",
+    "message": "Aktifkan penyalinan cepat tautan halaman dengan Ctrl+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Proksi unduhan dan pembaruan ekstensi"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Saat diaktifkan, Helium akan mem-proksi unduhan dan pembaruan ekstensi untuk melindungi privasi Anda. Saat dinonaktifkan, mengunduh dan memperbarui ekstensi tidak akan berfungsi."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "Izinkan pengunduhan daftar !bangs"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium akan mengambil daftar bangs yang membantu Anda menjelajahi Internet lebih cepat, seperti !w atau !gh. Saat dinonaktifkan, bangs tidak akan berfungsi."
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM",
+    "source": "Please check that Helium services are enabled (including spell check downloads) and make sure that the firewall is not blocking downloads from Helium servers.",
+    "message": "Harap periksa bahwa layanan Helium diaktifkan (termasuk unduhan pemeriksa ejaan) dan pastikan firewall tidak memblokir unduhan dari server Helium."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Izinkan pengunduhan file kamus untuk pemeriksaan ejaan"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium akan mengambil file kamus yang digunakan untuk pemeriksaan ejaan saat diminta. Saat dinonaktifkan, pemeriksaan ejaan tidak akan berfungsi."
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",
+    "source": "Version <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>",
+    "message": "Versi <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Izinkan pengunduhan daftar filter untuk uBlock Origin"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO_DESCRIPTION",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium akan mengambil daftar filter terbaru untuk uBlock Origin. Semua permintaan ke daftar diproksi untuk melindungi privasi Anda. Saat dinonaktifkan, daftar filter bawaan akan dimuat dari penyimpanan lokal, yang hanya diperbarui bersama Helium. Daftar filter opsional akan diminta tanpa proksi."
+  },
+  {
+    "name": "IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON",
+    "source": "Open new tabs next to the active tab",
+    "message": "Buka tab baru di samping tab aktif"
+  },
+  {
+    "name": "IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER",
+    "source": "Cycle through tabs in most recently used order with Ctrl+Tab",
+    "message": "Beralih antar tab dalam urutan penggunaan terbaru dengan Ctrl+Tab"
+  },
+  {
+    "name": "IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES",
+    "source": "Component updates are disabled. See Helium services in settings.",
+    "message": "Pembaruan komponen dinonaktifkan. Lihat layanan Helium di setelan."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE",
+    "source": "Hibernate",
+    "message": "Hibernasi"
+  },
+  {
+    "name": "IDS_SETTINGS_PERMISSIONS_DESCRIPTION_NORMAL",
+    "source": "Manage site permissions and content settings (cookies, pop-ups, and more)",
+    "message": "Kelola izin situs dan setelan konten (cookie, pop-up, dan lainnya)"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_DESCRIPTION_NORMAL",
+    "source": "Connection security, DNS settings, certificate management, and other security settings",
+    "message": "Keamanan koneksi, setelan DNS, manajemen sertifikat, dan setelan keamanan lainnya"
+  },
+  {
+    "name": "IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT_HELIUM",
+    "source": "Enabling \"Do Not Track\" means that Helium will include a request not to be tracked with your browsing traffic. Whether this request is honored depends on whether a website responds to it and on how it is interpreted. For example, some websites may respond by showing you ads that aren't personalized using your previous browsing data. Many websites may still track you regardless of the request.",
+    "message": "Mengaktifkan \"Do Not Track\" berarti Helium akan menyertakan permintaan untuk tidak dilacak dalam lalu lintas penjelajahan Anda. Apakah permintaan ini dihormati tergantung pada apakah situs web meresponsnya dan bagaimana interpretasinya. Misalnya, beberapa situs web mungkin merespons dengan menampilkan iklan yang tidak dipersonalisasi berdasarkan data penjelajahan Anda sebelumnya. Banyak situs web mungkin tetap melacak Anda terlepas dari permintaan tersebut."
+  },
+  {
+    "name": "IDS_SETTINGS_ALLOWED_THIRD_PARTY_COOKIES_DESCRIPTION_HELIUM",
+    "source": "Affects the sites listed here. Inserting “[*.]” before a domain name creates an exception for the entire domain. For example, adding “[*.]example.com” means that third-party cookies can also be active for second.example.com, because it’s part of example.com.",
+    "message": "Memengaruhi situs yang tercantum di sini. Menyisipkan \"[*.]\" sebelum nama domain membuat pengecualian untuk seluruh domain. Misalnya, menambahkan \"[*.]example.com\" berarti cookie pihak ketiga juga dapat aktif untuk second.example.com, karena merupakan bagian dari example.com."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC_HELIUM",
+    "source": "When you type in the address bar, Helium sends what you type to your default search engine to get suggestions. This is off in Incognito.",
+    "message": "Saat Anda mengetik di bilah alamat, Helium mengirimkan apa yang Anda ketik ke mesin pencari default untuk mendapatkan saran. Ini dinonaktifkan dalam mode Samaran."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_HELIUM",
+    "source": "Suggestions from the search engine",
+    "message": "Saran dari mesin pencari"
+  },
+  {
+    "name": "IDS_SETTINGS_AUTO_PIN_NEW_TAB_GROUPS_HELIUM",
+    "source": "Automatically pin new tab groups to the bookmarks bar",
+    "message": "Sematkan grup tab baru secara otomatis ke bilah bookmark"
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE",
+    "source": "Add search engine",
+    "message": "Tambahkan mesin pencari"
+  },
+  {
+    "name": "IDS_ADD_AS_DEFAULT",
+    "source": "Add as default",
+    "message": "Tambahkan sebagai default"
+  },
+  {
+    "name": "IDS_POLICY_SOURCE_HOP",
+    "source": "Helium defaults",
+    "message": "Bawaan Helium"
+  },
+  {
+    "name": "IDS_ACCNAME_APP_MENU",
+    "source": "Main Menu",
+    "message": "Menu Utama"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_HELIUM_SERVICES_DISABLED",
+    "source": "Extension downloads are disabled. Enable this feature in Helium services settings and try again.",
+    "message": "Unduhan ekstensi dinonaktifkan. Aktifkan fitur ini di setelan layanan Helium dan coba lagi."
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_EXTENSION_DL_DISABLED",
+    "source": "Extension downloads are disabled",
+    "message": "Unduhan ekstensi dinonaktifkan"
+  },
+  {
+    "name": "IDS_NTP_CUSTOMIZE_CHROME_CHANGE_WALLPAPER_LABEL",
+    "source": "Change wallpaper",
+    "message": "Ubah wallpaper"
+  },
+  {
+    "name": "IDS_NEW_TAB_OTR_SUBTITLE_HELIUM",
+    "source": "Helium will not save anything about your browsing in Incognito, but downloads and bookmarks will stick around. Your browsing won't leave any traces on this device, and other users won't be able to see your activity.",
+    "message": "Helium tidak akan menyimpan apa pun tentang penjelajahan Anda dalam mode Samaran, tetapi unduhan dan bookmark akan tetap tersimpan. Penjelajahan Anda tidak akan meninggalkan jejak di perangkat ini, dan pengguna lain tidak akan dapat melihat aktivitas Anda."
+  },
+  {
+    "name": "IDS_EXTENSIONS_INSTALL_LOCATION_HELIUM",
+    "source": "Helium component",
+    "message": "Komponen Helium"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT",
+    "source": "Browser layout",
+    "message": "Tata letak browser"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klasik"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Dinamis"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Ringkas"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Vertikal"
+  },
+  {
+    "name": "IDS_SETTINGS_TAB_STRIP_RIGHT_ALIGN",
+    "source": "Show vertical tabs on right side",
+    "message": "Tampilkan tab vertikal di sisi kanan"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser Layout",
+    "message": "Tata Letak Browser"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klasik"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Dinamis"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Ringkas"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Vertikal"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on Right Side",
+    "message": "Tab di Sisi Kanan"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser layout",
+    "message": "Tata letak browser"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on right side",
+    "message": "Tab di sisi kanan"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use ⌘+S to toggle vertical tabs in Vertical layout",
+    "message": "Gunakan ⌘+S untuk mengalihkan tab vertikal di tata letak Vertikal"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use Ctrl+S to toggle vertical tabs in Vertical layout",
+    "message": "Gunakan Ctrl+S untuk mengalihkan tab vertikal di tata letak Vertikal"
+  },
+  {
+    "name": "IDS_SETTINGS_CENTERED_LOCATION_BAR",
+    "source": "Center the address bar",
+    "message": "Pusatkan bilah alamat"
+  },
+  {
+    "name": "IDS_SETTINGS_MINIMAL_LOCATION_BAR",
+    "source": "Minimal address bar",
+    "message": "Bilah alamat minimal"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "Helium cannot be set as default, because no <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.",
+    "message": "Helium tidak dapat disetel sebagai default, karena tidak ditemukan file <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> di: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications."
+  },
+  {
+    "name": "IDS_SETTINGS_CHOOSE_CUSTOM_AVATAR_FILE",
+    "source": "Choose file",
+    "message": "Pilih file"
+  },
+  {
+    "name": "IDS_SETTINGS_CLEAR_CUSTOM_AVATAR_DIALOG_TITLE",
+    "source": "Clear custom avatar?",
+    "message": "Hapus avatar kustom?"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_FILE_TOO_LARGE",
+    "source": "Selected file is too large. Please select a file smaller than 30MB.",
+    "message": "File yang dipilih terlalu besar. Pilih file yang lebih kecil dari 30MB."
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_ERROR",
+    "source": "Image could not be loaded",
+    "message": "Gambar tidak dapat dimuat"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_LABEL",
+    "source": "Custom avatar",
+    "message": "Avatar kustom"
+  },
+  {
+    "name": "IDS_SETTINGS_ROUNDED_FRAME",
+    "source": "Show a rounded frame around web contents",
+    "message": "Tampilkan bingkai membulat di sekitar konten web"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_SIDEBAR",
+    "source": "Always show the sidebar",
+    "message": "Selalu tampilkan bilah samping"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_TOP_TOOLBAR",
+    "source": "Always show the top bar",
+    "message": "Selalu tampilkan bilah atas"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close tabs above",
+    "message": "Tutup tab di atas"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close Tabs Above",
+    "message": "Tutup Tab di Atas"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_TITLE",
+    "source": "Full Disk Access required",
+    "message": "Akses Disk Penuh diperlukan"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
+    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Helium memerlukan Akses Disk Penuh untuk mengimpor Bookmark Anda dari Safari."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
+    "source": "Learn how to grant Full Disk Access from your System Preferences.",
+    "message": "Pelajari cara memberikan Akses Disk Penuh dari Preferensi Sistem Anda."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_OPEN_SETTINGS",
+    "source": "Open System Preferences",
+    "message": "Buka Preferensi Sistem"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
+    "source": "Invalid origin",
+    "message": "Origin tidak valid"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_NEXT_TAB",
+    "source": "Next tab",
+    "message": "Tab berikutnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_PREVIOUS_TAB",
+    "source": "Previous tab",
+    "message": "Tab sebelumnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_LOCATION",
+    "source": "Focus address bar",
+    "message": "Fokuskan kolom URL"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_NEXT",
+    "source": "Find next",
+    "message": "Temukan berikutnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_PREVIOUS",
+    "source": "Find previous",
+    "message": "Temukan sebelumnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_BACK",
+    "source": "Back",
+    "message": "Kembali"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FORWARD",
+    "source": "Forward",
+    "message": "Maju"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_HOME",
+    "source": "Home",
+    "message": "Beranda"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB",
+    "source": "New split tab",
+    "message": "Tab terpisah baru"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_LAST_TAB",
+    "source": "Last tab",
+    "message": "Tab terakhir"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_TAB",
+    "source": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>",
+    "message": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_NEXT",
+    "source": "Move tab right",
+    "message": "Pindahkan tab ke kanan"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_PREVIOUS",
+    "source": "Move tab left",
+    "message": "Pindahkan tab ke kiri"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_TAB_GROUP",
+    "source": "Next tab group",
+    "message": "Grup tab berikutnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_TAB_GROUP",
+    "source": "Previous tab group",
+    "message": "Grup tab sebelumnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_TAB_GROUP",
+    "source": "Close tab group",
+    "message": "Tutup grup tab"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_BOOKMARKS",
+    "source": "Focus bookmarks bar",
+    "message": "Fokuskan bilah bookmark"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS",
+    "source": "Toggle vertical tabs",
+    "message": "Alihkan tab vertikal"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP",
+    "source": "Close find bar or stop loading",
+    "message": "Tutup bilah pencarian atau hentikan pemuatan"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_SEARCH",
+    "source": "Focus search",
+    "message": "Fokuskan penelusuran"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_PANE",
+    "source": "Focus next pane",
+    "message": "Fokuskan panel berikutnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_PANE",
+    "source": "Focus previous pane",
+    "message": "Fokuskan panel sebelumnya"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_WEB_CONTENTS_PANE",
+    "source": "Focus page content",
+    "message": "Fokuskan konten halaman"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_MENU_BAR",
+    "source": "Focus menu bar",
+    "message": "Fokuskan bilah menu"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_TOOLBAR",
+    "source": "Focus toolbar",
+    "message": "Fokuskan toolbar"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_INACTIVE_POPUP",
+    "source": "Focus inactive popup",
+    "message": "Fokuskan pop-up tidak aktif"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_AVATAR_MENU",
+    "source": "Profile menu",
+    "message": "Menu profil"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_APP_MENU",
+    "source": "App menu",
+    "message": "Menu aplikasi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_ZEN_MODE_TOP_CHROME_PIN",
+    "source": "Pin top toolbar",
+    "message": "Sematkan toolbar atas"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_DEV_TOOLS",
+    "source": "Toggle developer tools",
+    "message": "Alihkan Alat Developer"
+  },
+  {
+    "name": "IDS_APP_PLUS_KEY",
+    "source": "Plus",
+    "message": "Plus"
+  },
+  {
+    "name": "IDS_APP_NUMPAD_KEY",
+    "source": "Numpad <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>",
+    "message": "Keypad numerik <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_TITLE",
+    "source": "Keyboard shortcuts",
+    "message": "Pintasan keyboard"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SEARCH_LABEL",
+    "source": "Search shortcuts",
+    "message": "Telusuri pintasan"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_REMOVE_A11Y_LABEL",
+    "source": "Remove <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> from <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>",
+    "message": "Hapus <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> dari <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_ALL",
+    "source": "Reset all to defaults",
+    "message": "Reset semua ke default"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_ADD_DIALOG_TITLE",
+    "source": "Add shortcut",
+    "message": "Tambahkan pintasan"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_DIALOG_DESCRIPTION",
+    "source": "All keyboard shortcuts will be reset to their default values. Any custom shortcuts you've set will be lost.",
+    "message": "Semua pintasan keyboard akan direset ke nilai defaultnya. Pintasan kustom yang telah Anda setel akan hilang."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_PRESS_SHORTCUT",
+    "source": "Press a combination of keys to create a new shortcut",
+    "message": "Tekan kombinasi tombol untuk membuat pintasan baru"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_NEED_KEY",
+    "source": "Include a key that is not a modifier.",
+    "message": "Sertakan tombol yang bukan tombol pengubah."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_WILL_OVERRIDE",
+    "source": "Saving will remove this shortcut from <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>.",
+    "message": "Jika disimpan, pintasan ini akan dihapus dari <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SYSTEM_CONFLICT",
+    "source": "This shortcut is managed by <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> and cannot be changed.",
+    "message": "Pintasan ini dikelola oleh <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> dan tidak dapat diubah."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_INVALID",
+    "source": "This shortcut cannot be saved.",
+    "message": "Pintasan ini tidak dapat disimpan."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_NOTICE",
+    "source": "Some keyboard shortcuts are protected and can't be changed here. To change them, go to:",
+    "message": "Beberapa pintasan keyboard dilindungi dan tidak dapat diubah di sini. Untuk mengubahnya, buka:"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_LINK",
+    "source": "System Settings &gt; Keyboard &gt; Keyboard Shortcuts &gt; App Shortcuts",
+    "message": "Pengaturan Sistem &gt; Papan Ketik &gt; Pintasan Papan Ketik &gt; Pintasan App"
+  },
+  {
+    "name": "IDS_ZEN_MODE_NEW_TAB_CREATED_TOAST_BODY",
+    "source": "New tab opened",
+    "message": "Tab baru dibuka"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic browser updates",
+    "message": "Izinkan pembaruan browser otomatis"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium akan otomatis memeriksa pembaruan dan menginstalnya. Ini mencakup pembaruan browser dan komponen. Sebaiknya tetap aktifkan setelan ini untuk memastikan Anda mendapatkan fitur terbaru dan pembaruan keamanan."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic component updates",
+    "message": "Izinkan pembaruan komponen otomatis"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium akan otomatis memeriksa pembaruan komponen dan menginstalnya. Sebaiknya tetap aktifkan setelan ini. Di Linux, pembaruan browser ditangani oleh pengelola paket distro Anda. Harap periksa pembaruan paket Helium setidaknya setiap minggu."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate other tabs",
+    "message": "Hibernasikan tab lain"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate Other Tabs",
+    "message": "Hibernasikan Tab Lain"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URL",
+    "source": "Copy URL",
+    "message": "Salin URL"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URLS",
+    "source": "Copy URLs",
+    "message": "Salin URL"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_TITLE",
+    "source": "Background action confirmation toasts",
+    "message": "Toast konfirmasi tindakan latar belakang"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_DESCRIPTION",
+    "source": "Shows a toast notification when you copy content, such as links and images, or open a new background tab in Frameless mode",
+    "message": "Menampilkan notifikasi toast saat Anda menyalin konten, seperti link dan gambar, atau membuka tab latar belakang baru dalam mode Tanpa Bingkai"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE",
+    "source": "Frameless mode",
+    "message": "Mode tanpa bingkai"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE_DESCRIPTION",
+    "source": "Automatically hide browser UI until you hover the window edge",
+    "message": "Sembunyikan UI browser secara otomatis hingga Anda mengarahkan kursor ke tepi jendela"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_NEXT",
+    "source": "Next",
+    "message": "Berikutnya"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES",
+    "source": "Yes",
+    "message": "Ya"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_HISTORY",
+    "source": "History",
+    "message": "Histori"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALLED",
+    "source": "Installed",
+    "message": "Terinstal"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALL",
+    "source": "Install",
+    "message": "Instal"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_BACK",
+    "source": "Back",
+    "message": "Kembali"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO",
+    "source": "No",
+    "message": "Tidak"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_PRIVACY",
+    "source": "Privacy",
+    "message": "Privasi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_EXTENSIONS",
+    "source": "Extensions",
+    "message": "Ekstensi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_CONFIGURE",
+    "source": "Configure",
+    "message": "Konfigurasi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_IMPORT_GUIDE",
+    "source": "Import",
+    "message": "Impor"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_BOOKMARKS",
+    "source": "Bookmarks",
+    "message": "Bookmark"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SEARCHWEBWITH",
+    "source": "&amp;Search with <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>",
+    "message": "&amp;Telusuri dengan <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force paste",
+    "message": "Paksa tempel"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force Paste",
+    "message": "Paksa Tempel"
+  },
+  {
+    "name": "IDS_SETTINGS_SHIFT_RIGHT_CLICK_CONTEXT_MENU",
+    "source": "Force context menu with Shift+Right Click",
+    "message": "Paksa menu konteks dengan Shift+Klik Kanan"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_TITLE",
+    "source": "Crash reporting",
+    "message": "Pelaporan kerusakan"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DESCRIPTION",
+    "source": "Choose whether Helium can ask to send crash reports or send them automatically. Disabling reports will delete all pending reports.",
+    "message": "Pilih apakah Helium dapat meminta untuk mengirim laporan kerusakan atau mengirimnya secara otomatis. Menonaktifkan laporan akan menghapus semua laporan yang tertunda."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED",
+    "source": "Disabled",
+    "message": "Nonaktif"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_ASK",
+    "source": "Ask after a crash",
+    "message": "Tanya setelah kerusakan"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC",
+    "source": "Send automatically",
+    "message": "Kirim otomatis"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_TITLE",
+    "source": "{COUNT, plural, =1 {Would you like to send a crash report?} other {Would you like to send # crash reports?}}",
+    "message": "{COUNT, plural, =1 {Apakah Anda ingin mengirim laporan kerusakan?} other {Apakah Anda ingin mengirim # laporan kerusakan?}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_DESCRIPTION",
+    "source": "Helium closed unexpectedly. A crash report could help us fix the issue you ran into and prevent it from happening again.",
+    "message": "Helium tertutup secara tidak terduga. Laporan kerusakan dapat membantu kami memperbaiki masalah yang Anda alami dan mencegahnya terjadi lagi."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_PRIVACY",
+    "source": "A crash report may incidentally include some sensitive data present in Helium's memory at the time of crash.",
+    "message": "Laporan kerusakan mungkin secara tidak sengaja menyertakan beberapa data sensitif yang ada di memori Helium saat kerusakan terjadi."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_OPTIONAL",
+    "source": "Nothing has been sent yet. Sending a crash report is optional.",
+    "message": "Belum ada yang dikirim. Mengirim laporan kerusakan bersifat opsional."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send Report} other {Send # Reports}}",
+    "message": "{COUNT, plural, =1 {Kirim Laporan} other {Kirim # Laporan}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send report} other {Send # reports}}",
+    "message": "{COUNT, plural, =1 {Kirim laporan} other {Kirim # laporan}}"
+  },
+  {
+    "name": "IDS_CRASH_DISABLED_MESSAGE",
+    "source": "Crash reporting is disabled in Helium settings or by policy.",
+    "message": "Pelaporan kerusakan dinonaktifkan di setelan Helium atau oleh kebijakan."
+  },
+  {
+    "name": "IDS_CRASH_BUG_LINK_LABEL",
+    "source": "Create an issue with details",
+    "message": "Buat issue disertai detail"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS",
+    "source": "Use native frame materials (experimental)",
+    "message": "Gunakan material bingkai native (eksperimental)"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION",
+    "source": "Applies native materials to the browser frame surfaces. May cause UI clarity issues.",
+    "message": "Menerapkan material native ke permukaan bingkai browser. Dapat menyebabkan masalah kejelasan UI."
+  },
+  {
+    "name": "IDS_SETTINGS_SHOW_ZOOM_INDICATOR",
+    "source": "Show the zoom indicator in the address bar",
+    "message": "Tampilkan indikator zoom di bilah alamat"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
+    "source": "Translate “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”",
+    "message": "Terjemahkan “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PAGE_TITLE",
+    "source": "Helium Setup",
+    "message": "Penyiapan Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_USE_DEFAULTS",
+    "source": "Use defaults",
+    "message": "Gunakan default"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_LETS_GO",
+    "source": "Let's go!",
+    "message": "Ayo mulai!"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TITLE",
+    "source": "Helium Partner",
+    "message": "Mitra Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TOOLTIP",
+    "source": "Paying for this service will support the development of Helium.",
+    "message": "Membayar layanan ini akan mendukung pengembangan Helium."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_GREETING",
+    "source": "Meet Helium",
+    "message": "Perkenalkan, Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_FINISH_TITLE",
+    "source": "Ready to browse?",
+    "message": "Siap menjelajah?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_TITLE",
+    "source": "Helium services",
+    "message": "Layanan Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SUBTITLE",
+    "source": "Services are not active until you consent to using them. Changes will be applied after you go to the next page.",
+    "message": "Layanan tidak aktif hingga Anda menyetujui penggunaannya. Perubahan akan diterapkan setelah Anda membuka halaman berikutnya."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_TITLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Izinkan koneksi ke layanan Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_DESC",
+    "source": "Helium services provide additional functionality, such as: extension downloads, native !bangs, filter list updates, and browser updates. When disabled, none of these features will work, but Helium will not make any web requests.",
+    "message": "Layanan Helium menyediakan fungsi tambahan, seperti: unduhan ekstensi, !bangs native, pembaruan daftar filter, dan pembaruan browser. Saat dinonaktifkan, tidak satu pun fitur ini akan berfungsi, tetapi Helium tidak akan membuat permintaan web apa pun."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_TITLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "Izinkan mengunduh daftar !bangs"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_DESC",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium akan mengambil daftar bang yang membantu Anda menjelajahi Internet lebih cepat, seperti !w atau !gh. Saat dinonaktifkan, bang tidak akan berfungsi."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_TITLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Proksikan unduhan dan pembaruan ekstensi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_DESC",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Saat diaktifkan, Helium akan memproksikan unduhan dan pembaruan ekstensi untuk melindungi privasi Anda. Saat dinonaktifkan, pengunduhan dan pembaruan ekstensi tidak akan berfungsi."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_TITLE",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Izinkan mengunduh daftar filter untuk uBlock Origin"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_DESC",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium akan mengambil daftar filter terbaru untuk uBlock Origin. Semua permintaan ke daftar diproksikan untuk melindungi privasi Anda. Saat dinonaktifkan, daftar filter default akan dimuat dari penyimpanan lokal, yang hanya diperbarui bersama Helium. Daftar filter opsional akan diminta tanpa proksi."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE",
+    "source": "Allow automatic browser updates",
+    "message": "Izinkan pembaruan browser otomatis"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium akan otomatis memeriksa pembaruan dan menginstalnya. Ini mencakup pembaruan browser dan komponen. Kami menyarankan untuk tetap mengaktifkan setelan ini agar Anda mendapatkan fitur dan pembaruan keamanan terbaru."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE_LINUX",
+    "source": "Allow automatic component updates",
+    "message": "Izinkan pembaruan komponen otomatis"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC_LINUX",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium akan otomatis memeriksa pembaruan komponen dan menginstalnya. Kami menyarankan untuk tetap mengaktifkan setelan ini. Di Linux, pembaruan browser ditangani oleh pengelola paket distro Anda. Harap periksa pembaruan paket Helium setidaknya setiap minggu."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_TITLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Izinkan mengunduh file kamus untuk pemeriksaan ejaan"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_DESC",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium akan mengambil file kamus yang digunakan untuk pemeriksaan ejaan saat diminta. Saat dinonaktifkan, pemeriksaan ejaan tidak akan berfungsi."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_TITLE",
+    "source": "Use your own instance of Helium services",
+    "message": "Gunakan instance layanan Helium Anda sendiri"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_DESC",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the pre-hosted server. If you have one, you can set it in Helium settings.",
+    "message": "Anda dapat meng-host instance layanan Helium sendiri dan menggunakannya di browser Anda alih-alih server yang sudah di-host. Jika Anda memilikinya, Anda dapat menyetelnya di setelan Helium."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_PRIVATE",
+    "source": "A privacy-first search engine which doesn't profile or track you.",
+    "message": "Mesin telusur yang mengutamakan privasi dan tidak memprofil atau melacak Anda."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_SMALL",
+    "source": "Transparent, but not privacy-focused. Offers better privacy than mainstream search engines.",
+    "message": "Transparan, tetapi tidak berfokus pada privasi. Menawarkan privasi lebih baik daripada mesin telusur arus utama."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_MAINSTREAM",
+    "source": "A mainstream search engine which collects extensive personal data.",
+    "message": "Mesin telusur arus utama yang mengumpulkan data pribadi secara ekstensif."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_CUSTOM",
+    "source": "A custom search engine. Its privacy wasn't verified by Helium.",
+    "message": "Mesin telusur kustom. Privasinya belum diverifikasi oleh Helium."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BING",
+    "source": "Collects extensive personal data. Privacy controls are buried and limited. Subjectively overwhelming UI.",
+    "message": "Mengumpulkan data pribadi secara ekstensif. Kontrol privasi tersembunyi dan terbatas. UI yang secara subjektif berlebihan."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_GOOGLE",
+    "source": "It's Google. It dominates the search market, collects extensive personal data, and profiles you.",
+    "message": "Ini Google. Mendominasi pasar pencarian, mengumpulkan data pribadi secara ekstensif, dan memprofil Anda."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_TITLE",
+    "source": "Ready to switch to Helium?",
+    "message": "Siap beralih ke Helium?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES_DESC",
+    "source": "Make Helium my default browser.",
+    "message": "Jadikan Helium browser default saya."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO_DESC",
+    "source": "Just trying Helium for now.",
+    "message": "Hanya mencoba Helium untuk saat ini."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_TITLE",
+    "source": "Take your stuff with you",
+    "message": "Bawa serta barang Anda"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_SUBTITLE",
+    "source": "Transfer your most important bookmarks, history, and extensions from other browsers.",
+    "message": "Transfer bookmark, histori, dan ekstensi terpenting Anda dari browser lain."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_TITLE",
+    "source": "Password manager",
+    "message": "Pengelola kata sandi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_SETUP_GUIDE",
+    "source": "Setup",
+    "message": "Penyiapan"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_ERROR",
+    "source": "Error:",
+    "message": "Kesalahan:"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_MANAGERS_DASHLANE",
+    "source": "Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.",
+    "message": "Pengelola kata sandi yang populer, berbayar, dan closed-source. Menyimpan data di Eropa. Dikenal dengan taktik upselling yang agresif."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE",
+    "source": "Fingerprinting protection",
+    "message": "Perlindungan fingerprinting"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_LINK_DESCRIPTION",
+    "source": "Manage how Helium protects you against fingerprinting",
+    "message": "Kelola cara Helium melindungi Anda dari fingerprinting"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_TOGGLE_DESCRIPTION",
+    "source": "Make it harder for sites to fingerprint your browser and device",
+    "message": "Persulit situs untuk melakukan fingerprinting pada browser dan perangkat Anda"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you. Each site sees consistent randomized information during your browsing session to reduce the chances of detection.",
+    "message": "Saat perlindungan fingerprinting diaktifkan, Helium menambahkan noise ke fitur browser tertentu agar situs lebih sulit melacak dan memprofil Anda. Setiap situs melihat informasi acak yang konsisten selama sesi penjelajahan Anda untuk mengurangi kemungkinan terdeteksi."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DISCLAIMER",
+    "source": "Fingerprinting cannot be fully prevented, but Helium's analysis defenses make it harder to recover the original fingerprint.",
+    "message": "Fingerprinting tidak dapat dicegah sepenuhnya, tetapi pertahanan analisis Helium mempersulit pemulihan fingerprint asli."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION",
+    "source": "When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting \"[*.]\" before a domain name applies it to the entire domain.",
+    "message": "Saat fitur perlindungan fingerprinting umum diaktifkan, situs yang tercantum di bawah mengikuti setelan kustom. Menyisipkan \"[*.]\" sebelum nama domain akan menerapkannya ke seluruh domain."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_EXCEPTIONS_TITLE",
+    "source": "Sites without fingerprinting protection",
+    "message": "Situs tanpa perlindungan fingerprinting"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_ALLOW_OVERRIDES_TITLE",
+    "source": "Overrides to allow fingerprinting protection",
+    "message": "Penggantian untuk mengizinkan perlindungan fingerprinting"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_HEADER",
+    "source": "Fingerprinting protection",
+    "message": "Perlindungan fingerprinting"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP",
+    "source": "Manage fingerprinting protection for this site",
+    "message": "Kelola perlindungan fingerprinting untuk situs ini"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you.",
+    "message": "Saat perlindungan fingerprinting diaktifkan, Helium menambahkan noise ke fitur browser tertentu agar situs lebih sulit melacak dan memprofil Anda."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_BREAKAGE",
+    "source": "Turning off the protection will reduce your privacy, but may fix site features that require fingerprinting.",
+    "message": "Menonaktifkan perlindungan akan mengurangi privasi Anda, tetapi dapat memperbaiki fitur situs yang memerlukan fingerprinting."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_GLOBALLY_DISABLED",
+    "source": "Fingerprinting protection is turned off in Helium settings.",
+    "message": "Perlindungan fingerprinting dinonaktifkan di setelan Helium."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_SETTINGS_BUTTON",
+    "source": "Manage fingerprinting protection",
+    "message": "Kelola perlindungan fingerprinting"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_TERMS",
+    "source": "By continuing, you agree to the <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privacy policy<ph name=\"END_LINK_PRIVACY\">$2</ph> and <ph name=\"BEGIN_LINK_TERMS\">$3</ph>terms of use<ph name=\"END_LINK_TERMS\">$4</ph>.",
+    "message": "Dengan melanjutkan, Anda menyetujui <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>kebijakan privasi<ph name=\"END_LINK_PRIVACY\">$2</ph> dan <ph name=\"BEGIN_LINK_TERMS\">$3</ph>ketentuan penggunaan<ph name=\"END_LINK_TERMS\">$4</ph>."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_DUCKDUCKGO",
+    "source": "Privacy-focused. Relies on Bing for results. Promises not to track or profile you.",
+    "message": "Berfokus pada privasi. Mengandalkan Bing untuk hasil. Berjanji tidak melacak atau memprofil Anda."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_KAGI",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Has custom ranking. Requires a paid account. No ads, tracking, or profiling.",
+    "message": "Berfokus pada privasi. Tidak menggunakan Google atau Bing. Memiliki peringkat kustom. Memerlukan akun berbayar. Tanpa iklan, pelacakan, atau pemprofilan."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_QWANT",
+    "source": "Based in Europe. Relies on Bing for results. Sends tracking data to Microsoft.",
+    "message": "Berbasis di Eropa. Mengandalkan Bing untuk hasil. Mengirimkan data pelacakan ke Microsoft."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_ECOSIA",
+    "source": "May plant trees for clicking ads. Relies on Google and Bing for results. Sends tracking data to Google and Microsoft.",
+    "message": "Dapat menanam pohon saat Anda mengeklik iklan. Mengandalkan Google dan Bing untuk hasil. Mengirimkan data pelacakan ke Google dan Microsoft."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_STARTPAGE",
+    "source": "Privacy-focused. Relies on Google and Bing for results. Promises not to track or profile you.",
+    "message": "Berfokus pada privasi. Mengandalkan Google dan Bing untuk hasil. Berjanji tidak melacak atau memprofil Anda."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BRAVE",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Promises not to track or profile you. May show promotions related to Brave services.",
+    "message": "Berfokus pada privasi. Tidak menggunakan Google atau Bing. Berjanji tidak melacak atau memprofil Anda. Dapat menampilkan promosi terkait layanan Brave."
+  }
+]

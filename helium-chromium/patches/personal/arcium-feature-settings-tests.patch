@@ -1,0 +1,295 @@
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -11314,3 +11314,123 @@ if (toolkit_views) {
+     ]
+   }
+ }
++
++# Small focused binaries for Arcium feature regressions. Keep their sources and
++# dependencies separate from the monolithic unit_tests and browser_tests lists.
++if (!is_android && toolkit_views) {
++  test("arcium_feature_settings_unit_tests") {
++    sources = [
++      "../browser/chrome_content_browser_client_unittest.cc",
++      "../browser/extensions/api/settings_private/prefs_util_unittest.cc",
++      "../browser/renderer_context_menu/render_view_context_menu_unittest.cc",
++      "../browser/ui/helium/helium_space_service_unittest.cc",
++    ]
++
++    data = [
++      "data/",
++      "//base/test/data/",
++      "//components/test/data/",
++    ]
++
++    deps = [
++      ":test_interfaces",
++      ":test_support",
++      ":test_support_unit",
++      "//base",
++      "//base/test:test_support",
++      "//chrome/browser",
++      "//chrome/browser:chrome_content_browser_client",
++      "//chrome/browser/extensions:extensions",
++      "//chrome/browser/extensions:test_support",
++      "//chrome/browser/renderer_context_menu:impl",
++      "//chrome/browser/renderer_context_menu:mock_test_support",
++      "//chrome/browser/renderer_context_menu:renderer_context_menu",
++      "//chrome/browser/renderer_context_menu:test_support",
++      "//chrome/browser/ui:accelerator_table",
++      "//chrome/browser/ui:ui",
++      "//chrome/browser/ui:ui_features",
++      "//chrome/browser/ui/lens",
++      "//chrome/browser/ui/side_panel:test_support",
++      "//chrome/browser/user_education:user_education",
++      "//components/autofill/content/browser:test_support",
++      "//components/prefs",
++      "//components/proxy_config",
++      "//components/variations",
++      "//components/variations:test_support",
++      "//content/public/browser",
++      "//content/test:test_support",
++      "//testing/gmock",
++      "//testing/gtest",
++      "//url",
++    ]
++
++    if (enable_extensions) {
++      deps += [ "//extensions/browser/mime_handler:test_helpers" ]
++    }
++
++    if (is_mac) {
++      data_deps = [ "//chrome:chrome_framework" ]
++    } else if (is_linux || is_chromeos || is_win) {
++      data_deps = [ "//chrome:packed_resources" ]
++    }
++  }
++
++  test("arcium_feature_settings_browser_tests") {
++    use_xvfb = use_xvfb_in_this_config
++    configs += [ "//build/config:precompiled_headers" ]
++    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
++
++    sources = [
++      "../browser/ui/views/helium/peek_controller_browsertest.cc",
++      "data/webui/side_panel/customize_chrome/customize_chrome_browsertest.cc",
++    ]
++
++    data = [
++      "data/",
++      "//content/test/data/",
++    ]
++
++    deps = [
++      ":browser_tests_runner",
++      ":test_support",
++      ":test_support_ui",
++      "//base",
++      "//base/test:test_support",
++      "//build/config/coverage:buildflags",
++      "//chrome:resources",
++      "//chrome:strings",
++      "//chrome/app:command_ids",
++      "//chrome/app/vector_icons",
++      "//chrome/browser",
++      "//chrome/browser:browser_features",
++      "//chrome/browser:chrome_browser_main",
++      "//chrome/browser:chrome_content_browser_client",
++      "//chrome/browser:global_features",
++      "//chrome/browser:main_extra_parts",
++      "//chrome/browser/ui:ui",
++      "//chrome/browser/ui:ui_features",
++      "//chrome/browser/ui/browser_window",
++      "//chrome/browser/ui/tabs:tab_strip",
++      "//chrome/browser/ui/views:views",
++      "//chrome/test/data/webui:resources",
++      "//components/optimization_guide/core:features",
++      "//components/prefs",
++      "//components/search",
++      "//content/public/browser",
++      "//content/test:test_support",
++      "//testing/gtest",
++      "//ui/base",
++      "//ui/views",
++    ]
++
++    data_deps = [ "//chrome:browser_tests_pak" ]
++    if (is_mac) {
++      data_deps += [
++        "//chrome",
++        "//chrome:chrome_framework",
++      ]
++    } else if (is_linux || is_chromeos || is_win) {
++      data_deps += [ "//chrome:packed_resources" ]
++    }
++  }
++}
+--- a/content/test/BUILD.gn
++++ b/content/test/BUILD.gn
+@@ -3997,3 +3997,36 @@ if (is_fuchsia) {
+     ]
+   }
+ }
++
++test("arcium_media_session_impl_unittests") {
++  use_xvfb = use_xvfb_in_this_config
++
++  # Match content_unittests; internal headers cross component boundaries.
++  if (is_component_build) {
++    check_includes = false
++  }
++
++  sources = [ "../browser/media/session/media_session_impl_unittest.cc" ]
++  data = [ "data/" ]
++  public_deps = [ "//content:content_resources" ]
++
++  deps = [
++    ":content_test_mojo_bindings",
++    ":default_content_test_launcher",
++    ":run_all_unittests",
++    ":test_interfaces",
++    ":test_support",
++    "//base",
++    "//base/test:test_support",
++    "//content/browser:for_content_tests",
++    "//content/public/browser",
++    "//content/public/common",
++    "//media",
++    "//media:test_support",
++    "//services/media_session/public/cpp:cpp",
++    "//services/media_session/public/cpp/test:test_support",
++    "//services/media_session/public/mojom",
++    "//testing/gtest",
++    "//third_party/blink/public/common",
++  ]
++}
+--- a/chrome/browser/ui/helium/helium_space_service_unittest.cc
++++ b/chrome/browser/ui/helium/helium_space_service_unittest.cc
+@@ -222,7 +222,14 @@ class HeliumSpaceServiceTest : public Br
+  protected:
+   void SetUp() override {
+     BrowserWithTestWindowTest::SetUp();
+-    service_ = HeliumSpaceServiceFactory::GetForProfile(profile());
++    service_ =
++        HeliumSpaceServiceFactory::GetInstance()
++            ->SetTestingSubclassFactoryAndUse(
++                profile(),
++                base::BindOnce([](content::BrowserContext* context) {
++                  return std::make_unique<HeliumSpaceService>(
++                      static_cast<Profile*>(context));
++                }));
+     ASSERT_TRUE(service_);
+     space_ = service_->GetDefaultSpace();
+     ASSERT_TRUE(space_);
+--- a/content/browser/media/session/media_session_impl_unittest.cc
++++ b/content/browser/media/session/media_session_impl_unittest.cc
+@@ -269,6 +269,38 @@ class MediaSessionImplTest : public Rend
+     return GetMediaSession()->HasSufficientlyVisibleVideo();
+   }
+ 
++  void ExpectCanEnterBrowserInitiatedAutoPipWithSiteHandler(
++      bool expected_with_site_handler) {
++    MockMediaSessionMojoObserver observer(*GetMediaSession());
++    FlushForTesting(GetMediaSession());
++
++    EXPECT_FALSE(observer.actions().contains(
++        MediaSessionAction::kEnterAutoPictureInPicture));
++    EXPECT_EQ(0, player_observer_->received_enter_picture_in_picture_calls());
++    EXPECT_FALSE(media_session::test::GetMediaSessionInfoSync(GetMediaSession())
++                     ->can_enter_browser_initiated_autopip);
++
++    int player = player_observer_->StartNewPlayer();
++    player_observer_->SetIsPictureInPictureAvailable(player, true);
++    GetMediaSession()->AddPlayer(player_observer_.get(), player);
++    FlushForTesting(GetMediaSession());
++
++    EXPECT_TRUE(observer.actions().contains(
++        MediaSessionAction::kEnterAutoPictureInPicture));
++    EXPECT_TRUE(media_session::test::GetMediaSessionInfoSync(GetMediaSession())
++                    ->can_enter_browser_initiated_autopip);
++
++    mock_media_session_service().EnableAction(
++        MediaSessionAction::kEnterPictureInPicture);
++    FlushForTesting(GetMediaSession());
++
++    EXPECT_TRUE(observer.actions().contains(
++        MediaSessionAction::kEnterAutoPictureInPicture));
++    EXPECT_EQ(expected_with_site_handler,
++              media_session::test::GetMediaSessionInfoSync(GetMediaSession())
++                  ->can_enter_browser_initiated_autopip);
++  }
++
+  private:
+   std::set<MediaSessionAction> default_actions_;
+ 
+@@ -279,6 +311,21 @@ class MediaSessionImplTest : public Rend
+   mojo::Remote<media_session::mojom::AudioFocusManager> audio_focus_remote_;
+ };
+ 
++// Exercises website-owned PiP while keeping browser-initiated eligibility
++// observable through the dry-run feature.
++class MediaSessionImplTestWithDryRunOnly : public MediaSessionImplTest {
++ protected:
++  std::vector<base::test::FeatureRef> GetEnabledFeatures() override {
++    return {media_session::features::kMediaSessionService,
++            media_session::features::kAudioFocusEnforcement,
++            media::kBrowserInitiatedAutomaticPictureInPictureDryRun};
++  }
++
++  std::vector<base::test::FeatureRef> GetDisabledFeatures() override {
++    return {blink::features::kBrowserInitiatedAutomaticPictureInPicture};
++  }
++};
++
+ TEST_F(MediaSessionImplTest, SessionInfoState) {
+   EXPECT_EQ(MediaSessionInfo::SessionState::kInactive,
+             GetState(GetMediaSession()));
+@@ -1359,39 +1406,16 @@ TEST_F(MediaSessionImplTest,
+ 
+ TEST_F(
+     MediaSessionImplTest,
+-    CanEnterBrowserInitiatedAutoPipIsFalse_WhenEnterPictureInPictureIsPresent) {
+-  MockMediaSessionMojoObserver observer(*GetMediaSession());
+-  FlushForTesting(GetMediaSession());
+-
+-  EXPECT_FALSE(observer.actions().contains(
+-      MediaSessionAction::kEnterAutoPictureInPicture));
+-  EXPECT_EQ(0, player_observer_->received_enter_picture_in_picture_calls());
+-  EXPECT_FALSE(media_session::test::GetMediaSessionInfoSync(GetMediaSession())
+-                   ->can_enter_browser_initiated_autopip);
+-
+-  int player = player_observer_->StartNewPlayer();
+-  player_observer_->SetIsPictureInPictureAvailable(player, true);
+-  GetMediaSession()->AddPlayer(player_observer_.get(), player);
+-  FlushForTesting(GetMediaSession());
+-
+-  // With no action handler, `can_enter_browser_initiated_autopip` should be
+-  // true.
+-  EXPECT_TRUE(observer.actions().contains(
+-      MediaSessionAction::kEnterAutoPictureInPicture));
+-  EXPECT_TRUE(media_session::test::GetMediaSessionInfoSync(GetMediaSession())
+-                  ->can_enter_browser_initiated_autopip);
+-
+-  // Enable the enterpictureinpicture action handler.
+-  mock_media_session_service().EnableAction(
+-      MediaSessionAction::kEnterPictureInPicture);
+-  FlushForTesting(GetMediaSession());
++    CanEnterBrowserInitiatedAutoPipIsTrue_WhenFeatureOwnsSelectionDespiteSiteHandler) {
++  ExpectCanEnterBrowserInitiatedAutoPipWithSiteHandler(
++      /*expected_with_site_handler=*/true);
++}
+ 
+-  // With the enterpictureinpicture action handler enabled,
+-  // `can_enter_browser_initiated_autopip` should be false.
+-  EXPECT_TRUE(observer.actions().contains(
+-      MediaSessionAction::kEnterAutoPictureInPicture));
+-  EXPECT_FALSE(media_session::test::GetMediaSessionInfoSync(GetMediaSession())
+-                   ->can_enter_browser_initiated_autopip);
++TEST_F(
++    MediaSessionImplTestWithDryRunOnly,
++    CanEnterBrowserInitiatedAutoPipIsFalse_WhenEnterPictureInPictureIsPresent) {
++  ExpectCanEnterBrowserInitiatedAutoPipWithSiteHandler(
++      /*expected_with_site_handler=*/false);
+ }
+ 
+ TEST_F(MediaSessionImplTest,

@@ -1,0 +1,266 @@
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -2769,6 +2769,12 @@
+       "worker_apitest.cc",
+     ]
+ 
++    if (safe_browsing_mode == 0) {
++      sources -= [
++        "api/safe_browsing_private/safe_browsing_private_api_browsertest.cc",
++      ]
++    }
++
+     sources += [
+       # TODO(crbug.com/424013924): Move
+       # settings_overridden_dialog_browsertest.cc to
+--- a/chrome/browser/extensions/api/preference/preference_apitest.cc
++++ b/chrome/browser/extensions/api/preference/preference_apitest.cc
+@@ -12,6 +12,7 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/extensions/api/preference/cookie_controls_mode_transformer.h"
+@@ -530,6 +531,7 @@
+ 
+ // Tests the behavior of the Safe Browsing API as described in
+ // crbug.com/40681445.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, SafeBrowsing_SetTrue) {
+   ExtensionTestMessageListener listener_true("set to true",
+                                              ReplyBehavior::kWillReply);
+@@ -592,6 +594,7 @@
+                                     base::Value(false),
+                                     /* expected_controlled */ false);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Tests the behavior of the ThirdPartyCookies preference API.
+ // kCookieControlsMode should be set to kOff/kBlockThirdParty if
+--- a/chrome/browser/extensions/extension_allowlist_unittest.cc
++++ b/chrome/browser/extensions/extension_allowlist_unittest.cc
+@@ -83,7 +83,7 @@
+       attributes.Set("_malware", true);
+     }
+ 
+-    service()->PerformActionBasedOnOmahaAttributes(extension_id, attributes);
++    allowlist()->PerformActionBasedOnOmahaAttributes(extension_id, attributes);
+   }
+ 
+   bool IsEnabled(const ExtensionId& extension_id) {
+@@ -490,8 +490,8 @@
+ 
+   // Simulate an update check with no custom attribute defined.
+   base::DictValue attributes;
+-  service()->PerformActionBasedOnOmahaAttributes(kExtensionId1, attributes);
+-  service()->PerformActionBasedOnOmahaAttributes(kExtensionId2, attributes);
++  allowlist()->PerformActionBasedOnOmahaAttributes(kExtensionId1, attributes);
++  allowlist()->PerformActionBasedOnOmahaAttributes(kExtensionId2, attributes);
+ 
+   // The undefined allowlist attributes should be ignored and the state should
+   // remain unchanged.
+--- a/chrome/browser/extensions/extension_service_unittest.cc
++++ b/chrome/browser/extensions/extension_service_unittest.cc
+@@ -65,6 +65,7 @@
+ #include "chrome/browser/extensions/external_provider_manager.h"
+ #include "chrome/browser/extensions/external_testing_loader.h"
+ #include "chrome/browser/extensions/installed_loader.h"
++#include "chrome/browser/extensions/omaha_attributes_handler.h"
+ #include "chrome/browser/extensions/pack_extension_job.h"
+ #include "chrome/browser/extensions/plugin_manager.h"
+ #include "chrome/browser/extensions/preinstalled_extensions.h"
+@@ -3789,7 +3790,10 @@
+ 
+   auto attributes = base::DictValue().Set("_malware", true);
+ 
+-  service()->PerformActionBasedOnOmahaAttributes(kGood0, attributes);
++  OmahaAttributesHandler omaha_attributes_handler(
++      ExtensionPrefs::Get(profile()), registry(), registrar());
++  omaha_attributes_handler.PerformActionBasedOnOmahaAttributes(kGood0,
++                                                               attributes);
+   EXPECT_TRUE(blocklist_prefs::HasOmahaBlocklistState(
+       kGood0, BitMapBlocklistState::BLOCKLISTED_MALWARE, prefs()));
+   EXPECT_FALSE(registry()->enabled_extensions().Contains(kGood0));
+@@ -5066,51 +5070,7 @@
+   EXPECT_EQ(0u, registry()->blocklisted_extensions().size());
+ }
+ 
+-// Tests the malware Omaha attributes to remotely disable an extension for
+-// malware.
+-TEST_F(ExtensionServiceTest, DisableRemotelyForMalware) {
+-  InitializeEmptyExtensionService();
+-
+-  InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
+-  EXPECT_TRUE(registry()->enabled_extensions().GetByID(kGoodCrx));
+-
+-  auto attributes = base::DictValue().Set("_malware", true);
+-  EXPECT_EQ(1u, registry()->enabled_extensions().size());
+-
+-  service()->PerformActionBasedOnOmahaAttributes(kGoodCrx, attributes);
+-  EXPECT_TRUE(blocklist_prefs::HasOmahaBlocklistState(
+-      kGoodCrx, BitMapBlocklistState::BLOCKLISTED_MALWARE, prefs()));
+-  EXPECT_TRUE(blocklist_prefs::IsExtensionBlocklisted(kGoodCrx, prefs()));
+-
+-  attributes.Set("_malware", false);
+-  service()->PerformActionBasedOnOmahaAttributes(kGoodCrx, attributes);
+-  EXPECT_EQ(1u, registry()->enabled_extensions().size());
+-  EXPECT_TRUE(prefs()->GetDisableReasons(kGoodCrx).empty());
+-  EXPECT_FALSE(blocklist_prefs::IsExtensionBlocklisted(kGoodCrx, prefs()));
+-}
+-
+-// Tests not re-enabling previously remotely disabled extension if it's not the
+-// only reason but the disable reasons should be gone.
+-TEST_F(ExtensionServiceTest, NoEnableRemotelyDisabledExtension) {
+-  InitializeEmptyExtensionService();
+-
+-  InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
+-  EXPECT_TRUE(registry()->enabled_extensions().GetByID(kGoodCrx));
+-
+-  auto attributes = base::DictValue().Set("_malware", true);
+-  registrar()->DisableExtension(kGoodCrx,
+-                                {disable_reason::DISABLE_USER_ACTION});
+-  EXPECT_TRUE(registry()->disabled_extensions().GetByID(kGoodCrx));
+-  service()->PerformActionBasedOnOmahaAttributes(kGoodCrx, attributes);
+-  EXPECT_TRUE(blocklist_prefs::IsExtensionBlocklisted(kGoodCrx, prefs()));
+-
+-  attributes.Set("_malware", false);
+-  service()->PerformActionBasedOnOmahaAttributes(kGoodCrx, attributes);
+-  EXPECT_TRUE(registry()->disabled_extensions().GetByID(kGoodCrx));
+-  EXPECT_FALSE(blocklist_prefs::HasOmahaBlocklistState(
+-      kGoodCrx, BitMapBlocklistState::BLOCKLISTED_MALWARE, prefs()));
+-  EXPECT_FALSE(blocklist_prefs::IsExtensionBlocklisted(kGoodCrx, prefs()));
+-}
++// Omaha updates are tested directly in OmahaAttributesHandlerUnitTest.
+ 
+ TEST_F(ExtensionServiceTest, CanAddDisableReasonToBlocklistedExtension) {
+   InitializeGoodInstalledExtensionService();
+@@ -5977,40 +5937,17 @@
+   EXPECT_TRUE(registry()->GenerateInstalledExtensionsSet().empty());
+ }
+ 
+-// Tests that --load-extension is ignored for users opted in to Enhanced Safe
+-// Browsing (ESB).
+-TEST_F(ExtensionServiceTest, WillNotLoadFromCommandLineForESBUsers) {
++// Enhanced Safe Browsing no longer controls command-line extension loading.
++// The general loading behavior remains covered by the following test.
++// --load-extension was disabled in https://crbug.com/401529219
++#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
++#define MAYBE_LoadsFromCommandLine DISABLED_LoadsFromCommandLine
++#else
++#define MAYBE_LoadsFromCommandLine LoadsFromCommandLine
++#endif
++TEST_F(ExtensionServiceTest, MAYBE_LoadsFromCommandLine) {
+   base::HistogramTester histograms;
+   InitializeEmptyExtensionServiceWithTestingPrefs();
+-  // Enable ESB.
+-  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+-  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnhanced, true);
+-  // Try to load an extension from command line.
+-  base::FilePath path =
+-      base::MakeAbsoluteFilePath(data_dir().AppendASCII("good_unpacked"));
+-  base::CommandLine::ForCurrentProcess()->AppendSwitchPath(
+-      switches::kLoadExtension, path);
+-  service()->Init();
+-  task_environment()->RunUntilIdle();
+-  ASSERT_EQ(0u, loaded_extensions().size());
+-  ValidatePrefKeyCount(0);
+-
+-  histograms.ExpectTotalCount("Extensions.LoadingFromCommandLine", 0);
+-}
+-
+-// Tests --load-extension works for non-ESB users.
+-// --load-extension was disabled in https://crbug.com/401529219
+-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
+-#define MAYBE_LoadsFromCommandLineForNonESBUsers DISABLED_LoadsFromCommandLineForNonESBUsers
+-#else
+-#define MAYBE_LoadsFromCommandLineForNonESBUsers LoadsFromCommandLineForNonESBUsers
+-#endif
+-TEST_F(ExtensionServiceTest, MAYBE_LoadsFromCommandLineForNonESBUsers) {
+-  base::HistogramTester histograms;
+-  InitializeEmptyExtensionServiceWithTestingPrefs();
+-  // Disable ESB.
+-  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, false);
+-  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnhanced, false);
+   // Try to load an extension from command line.
+   base::FilePath path =
+       base::MakeAbsoluteFilePath(data_dir().AppendASCII("good_unpacked"));
+--- a/chrome/browser/extensions/webstore_installer_unittest.cc
++++ b/chrome/browser/extensions/webstore_installer_unittest.cc
+@@ -4,14 +4,21 @@
+ 
+ #include "extensions/browser/webstore_installer.h"
+ 
++#include <memory>
+ #include <string>
+ 
++#include "base/functional/bind.h"
++#include "base/memory/ref_counted.h"
++#include "base/memory/scoped_refptr.h"
+ #include "base/strings/escape.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/system/sys_info.h"
++#include "chrome/browser/extensions/extension_service_test_base.h"
+ #include "chrome/browser/update_client/chrome_update_query_params_delegate.h"
+ #include "components/crx_file/id_util.h"
+ #include "components/update_client/update_query_params.h"
++#include "content/public/test/web_contents_tester.h"
++#include "extensions/browser/install_approval.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+@@ -22,15 +29,42 @@
+ 
+ namespace extensions {
+ 
++class WebstoreInstallerTest : public ExtensionServiceTestBase {
++ public:
++  WebstoreInstallerTest() = default;
++  ~WebstoreInstallerTest() override = default;
++
++  void SetUp() override {
++    ExtensionServiceTestBase::SetUp();
++    InitializeEmptyExtensionService();
++    web_contents_ =
++        content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
++  }
++
++ protected:
++  scoped_refptr<WebstoreInstaller> CreateInstaller() {
++    return base::MakeRefCounted<WebstoreInstaller>(
++        profile(), base::BindOnce([](const std::string&) {}),
++        base::BindOnce([](const std::string&, const std::string&,
++                          WebstoreInstaller::FailureReason) {}),
++        web_contents_.get(),
++        crx_file::id_util::GenerateId("some random string"),
++        /*approval=*/nullptr, WebstoreInstaller::INSTALL_SOURCE_INLINE);
++  }
++
++ private:
++  std::unique_ptr<content::WebContents> web_contents_;
++};
++
+ // Returns true if |target| is found in |source|.
+ bool Contains(const std::string& source, const std::string& target) {
+   return source.find(target) != std::string::npos;
+ }
+ 
+-TEST(WebstoreInstallerTest, PlatformParams) {
++TEST_F(WebstoreInstallerTest, PlatformParams) {
+   std::string id = crx_file::id_util::GenerateId("some random string");
+   std::string source = "inline";
+-  GURL url = WebstoreInstaller::GetWebstoreInstallURL(
++  GURL url = CreateInstaller()->GetWebstoreInstallURL(
+       id, WebstoreInstaller::INSTALL_SOURCE_INLINE);
+   std::string query = url.GetQuery();
+   EXPECT_TRUE(
+@@ -48,7 +82,7 @@
+   EXPECT_FALSE(Contains(query, "os_arch"));
+ }
+ 
+-TEST(WebstoreInstallerTest, AuthUserParameterEncoding) {
++TEST_F(WebstoreInstallerTest, AuthUserParameterEncoding) {
+   {
+     // Regression test for crbug.com/500569738.
+     // A malicious authuser string that attempts to inject another parameter.

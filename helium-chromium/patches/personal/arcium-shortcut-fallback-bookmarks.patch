@@ -1,0 +1,31 @@
+# Requires arcium-shortcut-presets, arcium-shortcut-menu-cache, and arcium-arc-default-full-collapse.
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.mm
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.mm
+@@ -269,6 +269,13 @@
+   // defaults owned by the same commands remain reserved, including any
+   // AppKit-customized menu accelerator discovered above.
+   switch (command_id) {
++    case IDC_BOOKMARK_THIS_TAB:
++      return accelerator ==
++             ui::Accelerator(ui::VKEY_D, ui::EF_COMMAND_DOWN);
++    case IDC_BOOKMARK_ALL_TABS:
++      return accelerator == ui::Accelerator(
++                                ui::VKEY_D,
++                                ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
+     case IDC_COPY_OR_INSPECT_SHORTCUT:
+       return accelerator ==
+              ui::Accelerator(ui::VKEY_C,
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm
+@@ -419,6 +419,11 @@
+     ui::Accelerator accelerator;
+   };
+   const ExpectedAccelerator expected[] = {
++      {IDC_BOOKMARK_THIS_TAB,
++       ui::Accelerator(ui::VKEY_D, ui::EF_COMMAND_DOWN)},
++      {IDC_BOOKMARK_ALL_TABS,
++       ui::Accelerator(ui::VKEY_D,
++                       ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)},
+       {IDC_COPY_OR_INSPECT_SHORTCUT,
+        ui::Accelerator(ui::VKEY_C,
+                        ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)},

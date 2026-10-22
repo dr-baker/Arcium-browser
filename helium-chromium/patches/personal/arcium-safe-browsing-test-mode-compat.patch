@@ -1,0 +1,2230 @@
+diff --git a/chrome/browser/content_settings/generated_javascript_optimizer_pref_unittest.cc b/chrome/browser/content_settings/generated_javascript_optimizer_pref_unittest.cc
+--- a/chrome/browser/content_settings/generated_javascript_optimizer_pref_unittest.cc
++++ b/chrome/browser/content_settings/generated_javascript_optimizer_pref_unittest.cc
+@@ -301,44 +301,27 @@
+ }
+ 
+ TEST_F(GeneratedJavascriptOptimizerPrefTest,
+-       OnSettingsBundleChanged_PrefChangedExternally) {
+-  // Verify initial preference state.
+-  EXPECT_EQ(static_cast<int>(JavascriptOptimizerSetting::kAllowed),
+-            GetGeneratedPrefValue(profile()));
+-  EXPECT_EQ(safe_browsing::GetSecurityBundleSetting(*prefs()),
+-            safe_browsing::SecuritySettingsBundleSetting::STANDARD);
+-
+-  // Set up an observer for generated Javascript Optimizer preferences.
++       SettingsBundleNotificationPreservesOwnedUserChoice) {
+   GeneratedJavascriptOptimizerPref pref(profile());
+-  TestObserver observer;
+-  pref.AddObserver(&observer);
+-
+-  // Set bundled settings state to ENHANCED programmatically.
+-  prefs()->SetDefaultPrefValue(
+-      prefs::kSecuritySettingsBundle,
+-      base::Value(static_cast<int>(
+-          safe_browsing::SecuritySettingsBundleSetting::ENHANCED)));
+-
+-  // Validate that the JavaScript Optimizer preferences are correctly set.
+-  observer.WaitForGeneratedPrefChange();
+-  EXPECT_EQ(
+-      static_cast<int>(JavascriptOptimizerSetting::kBlockedForUnfamiliarSites),
+-      GetGeneratedPrefValue(profile()));
+-  EXPECT_EQ(safe_browsing::GetSecurityBundleSetting(*prefs()),
+-            safe_browsing::SecuritySettingsBundleSetting::ENHANCED);
+-
+-  // Set bundled settings state to STANDARD programmatically.
+-  prefs()->SetDefaultPrefValue(
+-      prefs::kSecuritySettingsBundle,
+-      base::Value(static_cast<int>(
+-          safe_browsing::SecuritySettingsBundleSetting::STANDARD)));
+-
+-  // Validate that the JavaScript Optimizer preferences are correctly set.
+-  observer.WaitForGeneratedPrefChange();
+-  EXPECT_EQ(static_cast<int>(JavascriptOptimizerSetting::kAllowed),
+-            GetGeneratedPrefValue(profile()));
+-  EXPECT_EQ(safe_browsing::GetSecurityBundleSetting(*prefs()),
+-            safe_browsing::SecuritySettingsBundleSetting::STANDARD);
++  const base::Value blocked(
++      static_cast<int>(JavascriptOptimizerSetting::kBlocked));
++  ASSERT_EQ(SetPref(pref, blocked), SetPrefResult::SUCCESS);
++  ASSERT_EQ(static_cast<int>(JavascriptOptimizerSetting::kBlocked),
++            GetGeneratedPrefValue(profile()));
++
++  pref.OnSettingsBundleChanged();
++  EXPECT_EQ(static_cast<int>(JavascriptOptimizerSetting::kBlocked),
++            GetGeneratedPrefValue(profile()));
++
++  const base::Value allowed(
++      static_cast<int>(JavascriptOptimizerSetting::kAllowed));
++  ASSERT_EQ(SetPref(pref, allowed), SetPrefResult::SUCCESS);
++  ASSERT_EQ(static_cast<int>(JavascriptOptimizerSetting::kAllowed),
++            GetGeneratedPrefValue(profile()));
++
++  pref.OnSettingsBundleChanged();
++  EXPECT_EQ(static_cast<int>(JavascriptOptimizerSetting::kAllowed),
++            GetGeneratedPrefValue(profile()));
+ }
+ 
+ }  // namespace content_settings
+diff --git a/chrome/browser/feedback/report_unsafe_site_dialog_views_unittest.cc b/chrome/browser/feedback/report_unsafe_site_dialog_views_unittest.cc
+--- a/chrome/browser/feedback/report_unsafe_site_dialog_views_unittest.cc
++++ b/chrome/browser/feedback/report_unsafe_site_dialog_views_unittest.cc
+@@ -8,7 +8,6 @@
+ #include "chrome/common/pref_names.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+@@ -24,8 +23,6 @@
+   void SetUp() override {
+     PrefService* prefs = profile_.GetPrefs();
+     prefs->SetBoolean(prefs::kUserFeedbackAllowed, true);
+-    safe_browsing::SetSafeBrowsingState(
+-        prefs, safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
+   }
+ 
+  protected:
+@@ -60,29 +57,20 @@
+   EXPECT_FALSE(ReportUnsafeSiteDialog::IsEnabled(profile_));
+ }
+ 
+-TEST_F(ReportUnsafeSiteDialogViewsTest_FeatureEnabled, IsEnabled_Enabled) {
+-  EXPECT_TRUE(ReportUnsafeSiteDialog::IsEnabled(profile_));
++TEST_F(ReportUnsafeSiteDialogViewsTest_FeatureEnabled, IsEnabled_Unavailable) {
++  EXPECT_FALSE(ReportUnsafeSiteDialog::IsEnabled(profile_));
+ }
+ 
+ TEST_F(ReportUnsafeSiteDialogViewsTest_FeatureEnabled,
+-       IsEnabled_FeedbackDisallowed) {
+-  EXPECT_TRUE(ReportUnsafeSiteDialog::IsEnabled(profile_));
++       IsEnabled_FeedbackPreferenceDoesNotEnableUnavailableDialog) {
++  EXPECT_FALSE(ReportUnsafeSiteDialog::IsEnabled(profile_));
+ 
+   profile_.GetPrefs()->SetBoolean(prefs::kUserFeedbackAllowed, false);
+   EXPECT_FALSE(ReportUnsafeSiteDialog::IsEnabled(profile_));
+ }
+ 
+-TEST_F(ReportUnsafeSiteDialogViewsTest_FeatureEnabled,
+-       IsEnabled_SafeBrowsingDisabled) {
+-  EXPECT_TRUE(ReportUnsafeSiteDialog::IsEnabled(profile_));
+-
+-  safe_browsing::SetSafeBrowsingState(
+-      profile_.GetPrefs(), safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING);
++TEST_F(ReportUnsafeSiteDialogViewsTest_FeatureEnabled, IsEnabled_Incognito) {
+   EXPECT_FALSE(ReportUnsafeSiteDialog::IsEnabled(profile_));
+-}
+-
+-TEST_F(ReportUnsafeSiteDialogViewsTest_FeatureEnabled, IsEnabled_Incognito) {
+-  EXPECT_TRUE(ReportUnsafeSiteDialog::IsEnabled(profile_));
+ 
+   Profile* incognito_profile = profile_.GetOffTheRecordProfile(
+       Profile::OTRProfileID::CreateUnique("Test::Foo"),
+diff --git a/chrome/browser/push_messaging/BUILD.gn b/chrome/browser/push_messaging/BUILD.gn
+--- a/chrome/browser/push_messaging/BUILD.gn
++++ b/chrome/browser/push_messaging/BUILD.gn
+@@ -137,6 +137,7 @@
+       "//chrome/test:test_support",
+       "//components/browsing_data/content",
+       "//components/push_messaging:test_support",
++      "//components/safe_browsing:buildflags",
+       "//content/test:test_support",
+       "//testing/gtest",
+     ]
+diff --git a/chrome/browser/push_messaging/push_messaging_browsertest.cc b/chrome/browser/push_messaging/push_messaging_browsertest.cc
+--- a/chrome/browser/push_messaging/push_messaging_browsertest.cc
++++ b/chrome/browser/push_messaging/push_messaging_browsertest.cc
+@@ -64,6 +64,7 @@
+ #include "components/push_messaging/push_messaging_constants.h"
+ #include "components/push_messaging/push_messaging_features.h"
+ #include "components/push_messaging/push_messaging_utils.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/site_engagement/content/site_engagement_score.h"
+ #include "components/site_engagement/content/site_engagement_service.h"
+ #include "content/public/browser/browsing_data_remover.h"
+@@ -1567,6 +1568,7 @@
+   ASSERT_EQ(0u, GetNotificationCount());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class PushMessagingBrowserTestWithAbusiveOriginPermissionRevocation
+     : public PushMessagingBrowserTestBase {
+  public:
+@@ -1703,6 +1705,7 @@
+       "PushMessaging.DeliveryStatus",
+       static_cast<int>(blink::mojom::PushEventStatus::SUCCESS), 1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTestBase,
+                        PushEventIgnoresScheduledNotificationsForEnforcement) {
+diff --git a/chrome/browser/site_protection/site_familiarity_utils_unittest.cc b/chrome/browser/site_protection/site_familiarity_utils_unittest.cc
+--- a/chrome/browser/site_protection/site_familiarity_utils_unittest.cc
++++ b/chrome/browser/site_protection/site_familiarity_utils_unittest.cc
+@@ -14,7 +14,6 @@
+ #include "components/content_settings/core/common/content_settings.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/safe_browsing/core/common/features.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "content/public/common/content_features.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+@@ -82,16 +81,6 @@
+   ExpectJsOptimizerSetting(
+       content_settings::JavascriptOptimizerSetting::kBlocked);
+ }
+-
+-TEST_F(SiteFamiliarityUtilsJsOptimizerMigrationEnabledTest,
+-       ReturnsAllowedIfSafeBrowsingDisabled) {
+-  safe_browsing::SetSafeBrowsingState(
+-      profile()->GetPrefs(),
+-      safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING);
+-  ExpectJsOptimizerSetting(
+-      content_settings::JavascriptOptimizerSetting::kAllowed);
+-}
+-
+ 
+ TEST_F(SiteFamiliarityUtilsJsOptimizerMigrationEnabledTest,
+        ReturnsAllowedIfProcessSelectionFlagDisabled) {
+diff --git a/chrome/browser/subresource_filter/BUILD.gn b/chrome/browser/subresource_filter/BUILD.gn
+--- a/chrome/browser/subresource_filter/BUILD.gn
++++ b/chrome/browser/subresource_filter/BUILD.gn
+@@ -1,6 +1,8 @@
+ # Copyright 2019 The Chromium Authors
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
++
++import("//components/safe_browsing/buildflags.gni")
+ 
+ source_set("subresource_filter") {
+   public = [
+@@ -132,21 +134,30 @@
+     sources = [
+       "ad_navigation_entry_browsertest.cc",
+       "ad_tagging_browsertest.cc",
+-      "ads_intervention_manager_browsertest.cc",
+       "ruleset_browsertest.cc",
+       "subresource_filter_browsertest.cc",
+-      "subresource_filter_devtools_browsertest.cc",
+       "subresource_filter_disabled_reason_uma_browsertest.cc",
+-      "subresource_filter_dns_alias_browsertest.cc",
+-      "subresource_filter_fenced_frame_browsertest.cc",
+-      "subresource_filter_intercepting_browsertest.cc",
+-      "subresource_filter_popup_browsertest.cc",
+       "subresource_filter_prerender_browsertest.cc",
+       "subresource_filter_settings_browsertest.cc",
+-      "subresource_filter_special_subframe_navigations_browsertest.cc",
+       "subresource_filter_web_socket_browsertest.cc",
+-      "subresource_filter_worker_browsertest.cc",
+     ]
++
++    # These suites exercise root-navigation activation paths provided by the
++    # Safe Browsing page activation throttle. In safe_browsing_mode 0 that
++    # throttle and its test database helper are unavailable; keep independent
++    # ad-tagging, direct ruleset, and lifecycle coverage above.
++    if (safe_browsing_mode != 0) {
++      sources += [
++        "ads_intervention_manager_browsertest.cc",
++        "subresource_filter_devtools_browsertest.cc",
++        "subresource_filter_dns_alias_browsertest.cc",
++        "subresource_filter_fenced_frame_browsertest.cc",
++        "subresource_filter_intercepting_browsertest.cc",
++        "subresource_filter_popup_browsertest.cc",
++        "subresource_filter_special_subframe_navigations_browsertest.cc",
++        "subresource_filter_worker_browsertest.cc",
++      ]
++    }
+ 
+     deps = [
+       ":subresource_filter",
+@@ -158,6 +169,7 @@
+       "//components/embedder_support",
+       "//components/page_load_metrics/browser:test_support",
+       "//components/page_load_metrics/browser/observers/ad_metrics",
++      "//components/safe_browsing:buildflags",
+       "//components/subresource_filter/content/browser",
+       "//content/test:test_support",
+       "//testing/gtest",
+diff --git a/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.cc b/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.cc
+--- a/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.cc
++++ b/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.cc
+@@ -17,16 +17,17 @@
+ #include "base/test/bind.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
++#include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
++#include "components/safe_browsing/core/browser/db/v4_test_util.h"
++#endif
+ #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/chrome_paths.h"
+ #include "chrome/test/base/chrome_test_utils.h"
+ #include "components/blocked_content/safe_browsing_triggered_popup_blocker.h"
+ #include "components/content_settings/browser/page_specific_content_settings.h"
+-#include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
+-#include "components/safe_browsing/core/browser/db/v4_test_util.h"
+-#include "components/safe_browsing/core/common/features.h"
+ #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+ #include "components/subresource_filter/content/browser/ruleset_service.h"
+ #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
+@@ -166,15 +167,19 @@
+ }
+ 
+ void SubresourceFilterBrowserTest::SetUp() {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   database_helper_ = CreateTestDatabase();
++#endif
+   SubresourceFilterSharedBrowserTest::SetUp();
+ }
+ 
+ void SubresourceFilterBrowserTest::TearDown() {
+   SubresourceFilterSharedBrowserTest::TearDown();
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // Unregister test factories after PlatformBrowserTest::TearDown
+   // (which destructs SafeBrowsingService).
+   database_helper_.reset();
++#endif
+ }
+ 
+ void SubresourceFilterBrowserTest::SetUpOnMainThread() {
+@@ -191,6 +196,7 @@
+       Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ std::unique_ptr<TestSafeBrowsingDatabaseHelper>
+ SubresourceFilterBrowserTest::CreateTestDatabase() {
+   return std::make_unique<TestSafeBrowsingDatabaseHelper>();
+@@ -208,7 +214,9 @@
+   database_helper_->AddFullHashToDbAndFullHashCache(
+       url, safe_browsing::GetUrlSubresourceFilterId(), metadata);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ void SubresourceFilterBrowserTest::ConfigureURLWithWarning(
+     const GURL& url,
+     std::vector<safe_browsing::SubresourceFilterType> filter_types) {
+@@ -221,6 +229,7 @@
+   database_helper_->AddFullHashToDbAndFullHashCache(
+       url, safe_browsing::GetUrlSubresourceFilterId(), metadata);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ bool SubresourceFilterBrowserTest::IsDynamicScriptElementLoaded(
+     content::RenderFrameHost* rfh) {
+@@ -309,6 +318,7 @@
+   ResetConfiguration(std::move(config));
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ std::unique_ptr<TestSafeBrowsingDatabaseHelper>
+ SubresourceFilterListInsertingBrowserTest::CreateTestDatabase() {
+   std::vector<safe_browsing::ListIdentifier> list_ids = {
+@@ -317,6 +327,7 @@
+       std::make_unique<safe_browsing::TestV4GetHashProtocolManagerFactory>(),
+       std::move(list_ids));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ SubresourceFilterPrerenderingBrowserTest::
+     SubresourceFilterPrerenderingBrowserTest()
+diff --git a/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h b/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h
+--- a/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h
++++ b/chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h
+@@ -17,7 +17,10 @@
+ #include "components/infobars/content/content_infobar_manager.h"
+ #include "components/infobars/core/confirm_infobar_delegate.h"
+ #include "components/infobars/core/infobar.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/core/browser/db/util.h"
++#endif
+ #include "components/subresource_filter/content/browser/subresource_filter_observer.h"
+ #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
+ #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
+@@ -43,7 +46,9 @@
+ class WebContents;
+ }  // namespace content
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class TestSafeBrowsingDatabaseHelper;
++#endif
+ 
+ namespace subresource_filter {
+ 
+@@ -169,6 +174,7 @@
+   void TearDown() override;
+   void SetUpOnMainThread() override;
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   virtual std::unique_ptr<TestSafeBrowsingDatabaseHelper> CreateTestDatabase();
+ 
+   void ConfigureAsPhishingURL(const GURL& url);
+@@ -178,6 +184,7 @@
+   void ConfigureURLWithWarning(
+       const GURL& url,
+       std::vector<safe_browsing::SubresourceFilterType> filter_types);
++#endif
+ 
+   SubresourceFilterContentSettingsManager* settings_manager() const {
+     return profile_context_->settings_manager();
+@@ -210,9 +217,11 @@
+   void ResetConfigurationToEnableOnPhishingSites(
+       bool measure_performance = false);
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   TestSafeBrowsingDatabaseHelper* database_helper() {
+     return database_helper_.get();
+   }
++#endif
+ 
+  private:
+   base::test::ScopedFeatureList scoped_feature_list_;
+@@ -220,7 +229,9 @@
+   TestRulesetCreator ruleset_creator_;
+   ScopedSubresourceFilterConfigurator scoped_configuration_;
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   std::unique_ptr<TestSafeBrowsingDatabaseHelper> database_helper_;
++#endif
+ 
+   // Owned by the profile.
+   raw_ptr<SubresourceFilterProfileContext, AcrossTasksDanglingUntriaged>
+@@ -231,7 +242,9 @@
+ // without needing a chrome branded build.
+ class SubresourceFilterListInsertingBrowserTest
+     : public SubresourceFilterBrowserTest {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   std::unique_ptr<TestSafeBrowsingDatabaseHelper> CreateTestDatabase() override;
++#endif
+ };
+ 
+ class SubresourceFilterPrerenderingBrowserTest
+diff --git a/chrome/browser/subresource_filter/subresource_filter_browsertest.cc b/chrome/browser/subresource_filter/subresource_filter_browsertest.cc
+--- a/chrome/browser/subresource_filter/subresource_filter_browsertest.cc
++++ b/chrome/browser/subresource_filter/subresource_filter_browsertest.cc
+@@ -23,8 +23,6 @@
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/browser_process.h"
+-#include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
+-#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
+ #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -35,7 +33,7 @@
+ #include "chrome/common/url_constants.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/metrics/content/subprocess_metrics_provider.h"
+-#include "components/safe_browsing/core/browser/db/v4_test_util.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/security_interstitials/core/unsafe_resource.h"
+ #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+ #include "components/subresource_filter/content/browser/ruleset_service.h"
+@@ -100,6 +98,7 @@
+ 
+ // Tests -----------------------------------------------------------------------
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
+                        MainFrameActivation_SubresourceFilterList) {
+   content::WebContentsConsoleObserver console_observer(web_contents());
+@@ -132,7 +131,9 @@
+   EXPECT_TRUE(
+       WasParsedScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
+                        MainFrameActivationWithWarning_BetterAdsList) {
+   content::WebContentsConsoleObserver console_observer(web_contents());
+@@ -165,7 +166,9 @@
+   EXPECT_EQ(kActivationWarningConsoleMessage,
+             console_observer.GetMessageAt(1u));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(
+     SubresourceFilterListInsertingBrowserTest,
+     ExpectRedirectPatternHistogramsAreRecordedForSubresourceFilterOnlyRedirectMatch) {
+@@ -185,9 +188,11 @@
+   tester.ExpectUniqueSample(kActivationListHistogram,
+                             static_cast<int>(ActivationList::NONE), 1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Normally, the subresource filter list is only sync'd in chrome branded
+ // builds.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        SubresourceFilterListNeedsBranding) {
+   bool has_list = database_helper()->HasListSynced(
+@@ -198,7 +203,9 @@
+   EXPECT_FALSE(has_list);
+ #endif
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, MainFrameActivation) {
+   content::WebContentsConsoleObserver console_observer(web_contents());
+   console_observer.SetPattern(kActivationConsoleMessage);
+@@ -224,9 +231,11 @@
+   EXPECT_TRUE(
+       WasParsedScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // There should be no document-level de-/reactivation happening on the renderer
+ // side as a result of a same document navigation.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        DocumentActivationOutlivesSameDocumentNavigation) {
+   GURL url(GetTestUrl("subresource_filter/frame_with_delayed_script.html"));
+@@ -246,7 +255,9 @@
+   EXPECT_FALSE(
+       IsDynamicScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, SubFrameActivation) {
+   std::string message_filter =
+       base::StringPrintf(kBlinkDisallowChildFrameConsoleMessageFormat, "*");
+@@ -275,7 +286,9 @@
+       base::StringPrintf(kBlinkDisallowChildFrameConsoleMessageFormat,
+                          "*included_script.js")));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        ActivationDisabled_NoConsoleMessage) {
+   std::string message_filter =
+@@ -299,7 +312,9 @@
+   // filtering is disabled.
+   EXPECT_TRUE(console_observer.messages().empty());
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        ActivationDryRun_NoConsoleMessage) {
+   std::string message_filter =
+@@ -323,7 +338,9 @@
+   // filtering is enabled in dryrun mode.
+   EXPECT_TRUE(console_observer.messages().empty());
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        SubframeDocumentLoadFiltering) {
+   base::HistogramTester histogram_tester;
+@@ -386,7 +403,9 @@
+   EXPECT_EQ(disallowed_subdocument_url, frame->GetLastCommittedURL());
+   ExpectFramesIncludedInLayout(kSubframeNames, kExpectOnlySecondSubframe);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        HistoryNavigationActivation) {
+   content::WebContentsConsoleObserver console_observer(web_contents());
+@@ -432,7 +451,9 @@
+   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
+       kSubframeNames, kExpectScriptInFrameToLoadWithActivation));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        FailedProvisionalLoadInMainframe) {
+   GURL url_with_activation_but_dns_error(
+@@ -460,10 +481,12 @@
+         kSubframeNames, kExpectScriptInFrameToLoad));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // The page-level activation state on the browser-side should not be reset when
+ // a same document navigation starts in the root frame. Verify this by
+ // dynamically inserting a subframe afterwards, and still expecting activation.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        PageLevelActivationOutlivesSameDocumentNavigation) {
+   content::WebContentsConsoleObserver console_observer(web_contents());
+@@ -487,9 +510,11 @@
+ 
+   EXPECT_EQ(1u, console_observer.messages().size());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // If a navigation starts but aborts before commit, page level activation should
+ // remain unchanged.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        PageLevelActivationOutlivesAbortedNavigation) {
+   GURL url(GetTestUrl(kTestFrameSetPath));
+@@ -521,7 +546,9 @@
+   ASSERT_TRUE(dynamic_frame);
+   EXPECT_FALSE(WasParsedScriptElementLoaded(dynamic_frame));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, DynamicFrame) {
+   GURL url(GetTestUrl("subresource_filter/frame_set.html"));
+   ConfigureAsPhishingURL(url);
+@@ -534,12 +561,16 @@
+   ASSERT_TRUE(dynamic_frame);
+   EXPECT_FALSE(WasParsedScriptElementLoaded(dynamic_frame));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        PRE_MainFrameActivationOnStartup) {
+   SetRulesetToDisallowURLsWithPathSuffix("included_script.js");
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        MainFrameActivationOnStartup) {
+   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+@@ -550,7 +581,9 @@
+   EXPECT_FALSE(
+       WasParsedScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        PromptShownAgainOnNextNavigation) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -577,7 +610,9 @@
+       kSubresourceFilterActionsHistogram,
+       subresource_filter::SubresourceFilterAction::kUIShown, 2);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        CrossSiteSubFrameActivationWithoutAllowlist) {
+   GURL a_url(embedded_test_server()->GetURL(
+@@ -589,7 +624,9 @@
+   ExpectParsedScriptElementLoadedStatusInFrames(
+       std::vector<const char*>{"b", "c", "d"}, {false, false, false});
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        CrossSiteSubFrameActivationWithAllowlist) {
+   GURL a_url(embedded_test_server()->GetURL(
+@@ -602,6 +639,7 @@
+   ExpectParsedScriptElementLoadedStatusInFrames(
+       std::vector<const char*>{"b", "d"}, {false, true});
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Disable the test as it's flaky on Win7 dbg.
+ // crbug.com/40125372
+@@ -641,6 +679,7 @@
+ 
+ // Test that resources in frames with an aborted initial load due to a doc.write
+ // are still disallowed.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        FrameWithDocWriteAbortedLoad_ResourceStillDisallowed) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -663,9 +702,11 @@
+   // Check the load was blocked.
+   EXPECT_EQ(u"failed", title_watcher.WaitAndGetTitle());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that resources in frames with an aborted initial load due to a
+ // window.stop are still disallowed.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        FrameWithWindowStopAbortedLoad_ResourceStillDisallowed) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -688,6 +729,7 @@
+   // Check the load was blocked.
+   EXPECT_EQ(u"failed", title_watcher.WaitAndGetTitle());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that a frame with an aborted initial load due to a frame deletion does
+ // not cause a crash.
+@@ -705,6 +747,7 @@
+ 
+ // Test that an allowed resource in the child of a frame with its initial load
+ // aborted due to a doc.write is not blocked.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(
+     SubresourceFilterBrowserTest,
+     ChildOfFrameWithAbortedLoadLoadsAllowedResource_ResourceLoaded) {
+@@ -742,9 +785,11 @@
+   // Check the load wasn't blocked.
+   EXPECT_EQ(u"loaded", title_watcher.WaitAndGetTitle());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that a disallowed resource in the child of a frame with its initial load
+ // aborted due to a doc.write is blocked.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(
+     SubresourceFilterBrowserTest,
+     ChildOfFrameWithAbortedLoadLoadsDisallowedResource_ResourceBlocked) {
+@@ -782,7 +827,9 @@
+   // Check the load was blocked.
+   EXPECT_EQ(u"failed", title_watcher.WaitAndGetTitle());
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        PopupsInheritActivation_ResourcesBlocked) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -836,7 +883,9 @@
+     EXPECT_EQ(u"failed", title_watcher.WaitAndGetTitle());
+   }
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        PopupNavigatesBackToAboutBlank_FilterChecked) {
+   const GURL kInitialPopupUrl =
+@@ -930,11 +979,13 @@
+                            static_cast<int>(mojom::ActivationLevel::kEnabled),
+                            1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that resources in a popup with an aborted initial load due to a
+ // doc.write are still blocked when disallowed, even if the opener is
+ // immediately closed after writing.
+ // TODO(alexmt): Fix test flakiness and then reenable.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(
+     SubresourceFilterBrowserTest,
+     DISABLED_PopupWithDocWriteAbortedLoadAndOpenerClosed_FilterChecked) {
+@@ -982,6 +1033,7 @@
+                            static_cast<int>(mojom::ActivationLevel::kEnabled),
+                            1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Tests checking how histograms are recorded. ---------------------------------
+ 
+@@ -1031,6 +1083,7 @@
+ #define MAYBE_ExpectPerformanceHistogramsAreRecorded \
+   ExpectPerformanceHistogramsAreRecorded
+ #endif
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        MAYBE_ExpectPerformanceHistogramsAreRecorded) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -1045,6 +1098,7 @@
+   ExpectHistogramsAreRecordedForTestFrameSet(
+       tester, true /* expect_performance_measurements */);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class SubresourceFilterBrowserTestWithoutAdTagging
+     : public SubresourceFilterBrowserTest {
+@@ -1089,6 +1143,7 @@
+   // Although SubresourceFilterAgents still record the activation decision.
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        ActivationEnabledOnReload) {
+   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+@@ -1113,6 +1168,7 @@
+   tester.ExpectBucketCount(kActivationDecision,
+                            static_cast<int>(ActivationDecision::ACTIVATED), 2);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // If no ruleset is available, the VerifiedRulesetDealer considers it a
+ // "invalid" or "corrupt" case, and any VerifiedRuleset::Handle's vended from it
+@@ -1126,6 +1182,7 @@
+ // navigation we destroy the handle if it is "no longer in use". Since a corrupt
+ // or invalid ruleset will never be "in use" (i.e. activate any frame), we
+ // destroy the handle after every navigation / frame destruction.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        NewRulesetSameTab_ActivatesSuccessfully) {
+   GURL a_url(embedded_test_server()->GetURL(
+@@ -1141,10 +1198,12 @@
+   ExpectParsedScriptElementLoadedStatusInFrames(
+       std::vector<const char*>{"b", "d"}, {false, false});
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Perform a hash change before the initial URL of a frame is navigated. Ensure
+ // we don't trip any CHECKs (crbug.com/40193093) and that filtering works as
+ // expected.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                        SameDocumentBeforeInitialNavigation) {
+   const GURL kInitialUrl = embedded_test_server()->GetURL("/title1.html");
+@@ -1192,4 +1251,5 @@
+   // Ensure the included_script.js script was filtered.
+   EXPECT_FALSE(WasParsedScriptElementLoaded(child_rfh));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ }  // namespace subresource_filter
+diff --git a/chrome/browser/subresource_filter/subresource_filter_disabled_reason_uma_browsertest.cc b/chrome/browser/subresource_filter/subresource_filter_disabled_reason_uma_browsertest.cc
+--- a/chrome/browser/subresource_filter/subresource_filter_disabled_reason_uma_browsertest.cc
++++ b/chrome/browser/subresource_filter/subresource_filter_disabled_reason_uma_browsertest.cc
+@@ -9,6 +9,7 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/browser/db/database_manager.h"
+ #include "components/subresource_filter/content/browser/content_subresource_filter_web_contents_helper.h"
+ #include "components/subresource_filter/content/browser/ruleset_service.h"
+@@ -61,6 +62,7 @@
+   base::test::ScopedFeatureList prewarm_feature_;
+ };
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        ActivationEnabled) {
+   base::HistogramTester histogram_tester;
+@@ -76,7 +78,9 @@
+   // enabled.
+   histogram_tester.ExpectTotalCount(kDisabledReasonHistogram, 0);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        NoMatchingConfiguration_UrlNotOnPhishingList) {
+   base::HistogramTester histogram_tester;
+@@ -97,7 +101,9 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kNoMatchingConfiguration, 1);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        NoMatchingConfiguration_NewTabPage) {
+   base::HistogramTester histogram_tester;
+@@ -114,7 +120,9 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kNoMatchingConfiguration, 1);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        UrlNotHandledByNetworkStack_AboutBlankPage) {
+   base::HistogramTester histogram_tester;
+@@ -131,7 +139,9 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kUrlNotHandledByNetworkStack, 1);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        DisabledByConfiguration) {
+   base::HistogramTester histogram_tester;
+@@ -150,7 +160,9 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kDisabledByConfiguration, 1);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        UrlAllowlisted) {
+   base::HistogramTester histogram_tester;
+@@ -169,9 +181,11 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kUrlAllowlisted, 1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Verifies that kWarningMode is recorded when the filter is in warning-only
+ // mode.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        WarningMode) {
+   base::HistogramTester histogram_tester;
+@@ -191,7 +205,9 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kWarningMode, 1);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        NavigationError) {
+   base::HistogramTester histogram_tester;
+@@ -208,7 +224,9 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kNavigationError, 1);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterDisabledReasonUmaBrowserTest,
+                        RulesetUnavailableOrCorrupt) {
+   base::HistogramTester histogram_tester;
+@@ -224,6 +242,7 @@
+       kDisabledReasonHistogram,
+       mojom::SubresourceFilterDisabledReason::kRulesetUnavailableOrCorrupt, 1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class SubresourceFilterDisabledReasonAdTaggingDisabledBrowserTest
+     : public SubresourceFilterDisabledReasonUmaBrowserTest {
+diff --git a/chrome/browser/subresource_filter/subresource_filter_prerender_browsertest.cc b/chrome/browser/subresource_filter/subresource_filter_prerender_browsertest.cc
+--- a/chrome/browser/subresource_filter/subresource_filter_prerender_browsertest.cc
++++ b/chrome/browser/subresource_filter/subresource_filter_prerender_browsertest.cc
+@@ -5,6 +5,7 @@
+ #include "base/strings/stringprintf.h"
+ #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/subresource_filter/content/browser/ad_tagging_browser_test_utils.h"
+ #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+ #include "components/subresource_filter/content/browser/subresource_filter_observer.h"
+@@ -39,6 +40,7 @@
+ // A very basic smoke test for prerendering; this test just activates on the
+ // main frame of a prerender. It currently doesn't check any behavior but
+ // passes if we don't crash.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        PrerenderingSmokeTest) {
+   const GURL prerendering_url =
+@@ -62,9 +64,11 @@
+   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), initial_url));
+   prerender_helper_.AddPrerender(prerendering_url);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that we correctly account for activation between the prerendering frame
+ // and primary pages.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        OnlyPrerenderingFrameActivated) {
+   const GURL prerendering_url = embedded_test_server()->GetURL(
+@@ -100,9 +104,11 @@
+     prerender_helper_.AddPrerender(prerendering_url);
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that we don't start filtering an unactivated primary page when a
+ // prerendering page becomes activated.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        UnactivatedPrimaryFrameNotFiltered) {
+   const GURL prerendering_url = embedded_test_server()->GetURL("/empty.html");
+@@ -145,9 +151,11 @@
+   EXPECT_TRUE(
+       IsDynamicScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that we don't start filtering an unactivated prerendering page when the
+ // primary page is activated.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        UnactivatedPrerenderingFrameNotFiltered) {
+   const GURL prerendering_url = embedded_test_server()->GetURL(
+@@ -193,10 +201,12 @@
+     EXPECT_TRUE(WasParsedScriptElementLoaded(prerender_rfh));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that we can filter a subresource while inside a prerender. Ensure we
+ // don't display any UI while prerendered but once the prerender becomes
+ // primary we then show notifications.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        FilterWhilePrerendered) {
+   const GURL prerendering_url = embedded_test_server()->GetURL(
+@@ -257,12 +267,14 @@
+     EXPECT_TRUE(AdsBlockedInContentSettings(prerender_rfh));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Tests that console messages generated by the subresource filter for a
+ // prerendering page are correctly attributed to the prerendering page's render
+ // frame host. Note, this doesn't necessarily guarantee they won't be displayed
+ // in the primary page's console (in fact, this is the current behavior), but
+ // that's a more general problem of prerendering that will be fixed.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        ConsoleMessageFilterWhilePrerendered) {
+   const GURL prerendering_url = embedded_test_server()->GetURL(
+@@ -306,6 +318,7 @@
+   EXPECT_EQ(&console_blocked_observer.messages().back().source_frame->GetPage(),
+             &prerender_rfh->GetPage());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Prerender a page, then navigate it. The prerender will be canceled. We check
+ // this here since this could change in the future and we'd want to ensure
+@@ -338,6 +351,7 @@
+ // Tests that a prerendering page that has filtering activated, will continue
+ // to filter subresources once made primary (i.e. once the user navigates to
+ // the prerendered URL).
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        FilteringPrerenderBecomesPrimary) {
+   const GURL prerendering_url = embedded_test_server()->GetURL(
+@@ -377,10 +391,12 @@
+         IsDynamicScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Tests that a prerendering page that doesn't have filtering activated, will
+ // continue to be unfiltered when made primary (i.e. once the user navigates to
+ // the prerendered URL) from an activated initial URL.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        NonFilteringPrerenderBecomesPrimary) {
+   const GURL prerendering_url = embedded_test_server()->GetURL(
+@@ -427,6 +443,7 @@
+         IsDynamicScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Very basic test that ad tagging works in a prerender.
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+@@ -484,6 +501,7 @@
+ // Tests that NavigationConsoleLogger works with a prerendered page by checking
+ // if a console message is added in LogMessageOnCommit() from NotifyResult()
+ // during navigation.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterPrerenderingBrowserTest,
+                        NavigationConsoleLogger) {
+   Configuration config(subresource_filter::mojom::ActivationLevel::kEnabled,
+@@ -530,5 +548,6 @@
+               console_observer.GetMessageAt(0u));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ }  // namespace subresource_filter
+diff --git a/chrome/browser/subresource_filter/subresource_filter_settings_browsertest.cc b/chrome/browser/subresource_filter/subresource_filter_settings_browsertest.cc
+--- a/chrome/browser/subresource_filter/subresource_filter_settings_browsertest.cc
++++ b/chrome/browser/subresource_filter/subresource_filter_settings_browsertest.cc
+@@ -22,6 +22,7 @@
+ #include "components/policy/core/common/policy_map.h"
+ #include "components/policy/core/common/policy_types.h"
+ #include "components/policy/policy_constants.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+ #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
+ #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
+@@ -56,6 +57,7 @@
+   ::testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
+ };
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
+                        ContentSettingsAllowlist_DoNotActivate) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -83,7 +85,9 @@
+   // No message for allowlisted url.
+   EXPECT_TRUE(console_observer.messages().empty());
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
+                        ContentSettingsAllowlistGlobal_DoNotActivate) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -111,7 +115,9 @@
+   // No message for loads that are not activated.
+   EXPECT_TRUE(console_observer.messages().empty());
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
+                        DrivenByEnterprisePolicy) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -153,6 +159,7 @@
+   EXPECT_FALSE(
+       WasParsedScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
+                        ContentSettingsAllowWithNoPageActivation_DoNotActivate) {
+@@ -178,6 +185,7 @@
+       WasParsedScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
+                        ContentSettingsAllowlistViaReload_DoNotActivate) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -199,7 +207,9 @@
+   EXPECT_TRUE(
+       WasParsedScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
+                        ContentSettingsAllowlistViaReload_AllowlistIsByDomain) {
+   ASSERT_NO_FATAL_FAILURE(
+@@ -236,10 +246,12 @@
+   EXPECT_FALSE(
+       WasParsedScriptElementLoaded(web_contents()->GetPrimaryMainFrame()));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test the "smart" UI, aka the logic to hide the UI on subsequent same-domain
+ // navigations, until a certain time threshold has been reached. This is an
+ // android-only feature.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(SubresourceFilterSettingsBrowserTest,
+                        DoNotShowUIUntilThresholdReached) {
+   settings_manager()->set_should_use_smart_ui_for_testing(true);
+@@ -311,5 +323,6 @@
+       kSubresourceFilterActionsHistogram,
+       subresource_filter::SubresourceFilterAction::kUISuppressed, 1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ }  // namespace subresource_filter
+diff --git a/chrome/browser/subresource_filter/subresource_filter_web_socket_browsertest.cc b/chrome/browser/subresource_filter/subresource_filter_web_socket_browsertest.cc
+--- a/chrome/browser/subresource_filter/subresource_filter_web_socket_browsertest.cc
++++ b/chrome/browser/subresource_filter/subresource_filter_web_socket_browsertest.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+@@ -64,6 +65,7 @@
+       net::EmbeddedTestServer::Type::TYPE_HTTP};
+ };
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_P(SubresourceFilterWebSocketBrowserTest, BlockWebSocket) {
+   GURL url(GetTestUrl(
+       base::StringPrintf("subresource_filter/page_with_websocket.html?%s",
+@@ -76,6 +78,7 @@
+   CreateWebSocketAndExpectResult(websocket_url,
+                                  /*expect_connection_success=*/false);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_P(SubresourceFilterWebSocketBrowserTest,
+                        DoNotBlockWebSocketNoActivatedFrame) {
+@@ -91,6 +94,7 @@
+                                  /*expect_connection_success=*/true);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_P(SubresourceFilterWebSocketBrowserTest,
+                        DoNotBlockWebSocketInActivatedFrameWithNoRule) {
+   GURL url(GetTestUrl(
+@@ -103,6 +107,7 @@
+   CreateWebSocketAndExpectResult(websocket_url,
+                                  /*expect_connection_success=*/true);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ INSTANTIATE_TEST_SUITE_P(
+     All,
+diff --git a/chrome/browser/ui/blocked_content/BUILD.gn b/chrome/browser/ui/blocked_content/BUILD.gn
+--- a/chrome/browser/ui/blocked_content/BUILD.gn
++++ b/chrome/browser/ui/blocked_content/BUILD.gn
+@@ -4,6 +4,7 @@
+ 
+ import("//build/config/chromeos/args.gni")
+ import("//build/config/ozone.gni")
++import("//components/safe_browsing/buildflags.gni")
+ import("//extensions/buildflags/buildflags.gni")
+ 
+ assert(is_win || is_mac || is_linux || is_chromeos || is_android)
+@@ -86,14 +87,17 @@
+     sources = [
+       "popup_opener_tab_helper_browsertest.cc",
+       "popup_tracker_browsertest.cc",
+-      "safe_browsing_triggered_popup_blocker_browsertest.cc",
+     ]
++    if (safe_browsing_mode != 0) {
++      sources += [ "safe_browsing_triggered_popup_blocker_browsertest.cc" ]
++    }
+     deps = [
+       ":blocked_content",
+       "//chrome/browser/content_settings:content_settings_factory",
+       "//chrome/test:test_support",
+       "//components/back_forward_cache",
+       "//components/content_settings/browser",
++      "//components/safe_browsing:buildflags",
+     ]
+     if (use_ozone) {
+       deps += [ "//ui/ozone" ]
+diff --git a/chrome/browser/ui/blocked_content/popup_tracker_browsertest.cc b/chrome/browser/ui/blocked_content/popup_tracker_browsertest.cc
+--- a/chrome/browser/ui/blocked_content/popup_tracker_browsertest.cc
++++ b/chrome/browser/ui/blocked_content/popup_tracker_browsertest.cc
+@@ -12,9 +12,14 @@
+ #include "base/supports_user_data.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
++#include "components/safe_browsing/core/browser/db/v4_embedded_test_server_util.h"
++#include "components/safe_browsing/core/browser/db/v4_test_util.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+ #include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+@@ -27,8 +32,6 @@
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/blocked_content/popup_blocker_tab_helper.h"
+ #include "components/content_settings/browser/page_specific_content_settings.h"
+-#include "components/safe_browsing/core/browser/db/v4_embedded_test_server_util.h"
+-#include "components/safe_browsing/core/browser/db/v4_test_util.h"
+ #include "components/ukm/test_ukm_recorder.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+@@ -54,7 +57,9 @@
+ const char kUkmUserInitiatedClose[] = "UserInitiatedClose";
+ const char kUkmTrusted[] = "Trusted";
+ const char kUkmNumInteractions[] = "NumInteractions";
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ const char kUkmSafeBrowsingStatus[] = "SafeBrowsingStatus";
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ const char kUkmWindowOpenDisposition[] = "WindowOpenDisposition";
+ const char kUkmNumActivationInteractions[] = "NumActivationInteractions";
+ const char kUkmNumGestureScrollBeginInteractions[] =
+@@ -330,6 +335,7 @@
+   EXPECT_EQ(0u, GetNumPopupUkmEntries());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Tests for the subresource_filter popup blocker.
+ class SafeBrowsingPopupTrackerBrowserTest : public PopupTrackerBrowserTest {
+  public:
+@@ -505,6 +511,8 @@
+             blocked_content::PopupTracker::PopupSafeBrowsingStatus::kUnsafe));
+   }
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, PopupInTab_IsWindowFalse) {
+   const GURL first_url = embedded_test_server()->GetURL("/title1.html");
+diff --git a/chrome/browser/ui/safety_hub/BUILD.gn b/chrome/browser/ui/safety_hub/BUILD.gn
+--- a/chrome/browser/ui/safety_hub/BUILD.gn
++++ b/chrome/browser/ui/safety_hub/BUILD.gn
+@@ -2,8 +2,8 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
++import("//components/safe_browsing/buildflags.gni")
+ import("//extensions/buildflags/buildflags.gni")
+-import("//components/safe_browsing/buildflags.gni")
+ 
+ assert(is_win || is_mac || is_linux || is_chromeos || is_android)
+ 
+@@ -228,6 +228,7 @@
+       "//components/content_settings/core/common",
+       "//components/content_settings/core/common:features",
+       "//components/permissions:permissions_common",
++      "//components/safe_browsing:buildflags",
+       "//components/safe_browsing/core/common:features",
+       "//content/test:test_support",
+     ]
+@@ -251,11 +252,8 @@
+     "unused_site_permissions_manager_unittest.cc",
+   ]
+   if (safe_browsing_mode == 0) {
+-    sources -= [
+-      "abusive_notification_permissions_manager_unittest.cc",
+-    ]
+-  }
+-
++    sources -= [ "abusive_notification_permissions_manager_unittest.cc" ]
++  }
+ 
+   deps = [
+     ":safety_hub",
+diff --git a/chrome/browser/ui/safety_hub/revoked_permissions_service_browsertest.cc b/chrome/browser/ui/safety_hub/revoked_permissions_service_browsertest.cc
+--- a/chrome/browser/ui/safety_hub/revoked_permissions_service_browsertest.cc
++++ b/chrome/browser/ui/safety_hub/revoked_permissions_service_browsertest.cc
+@@ -43,6 +43,7 @@
+ #include "components/permissions/constants.h"
+ #include "components/permissions/features.h"
+ #include "components/permissions/notifications_engagement_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/ukm/test_ukm_recorder.h"
+ #include "content/public/test/browser_test.h"
+@@ -297,6 +298,7 @@
+       browser(), GURL(chrome::kChromeUIContentSettingsURL)));
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class AbusiveNotificationPermissionsRevocationBrowserTest
+     : public RevokedPermissionsServiceBrowserTest {
+  public:
+@@ -527,6 +529,8 @@
+                                      ContentSettingsType::NOTIFICATIONS));
+   }
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class DisruptiveNotificationPermissionsRevocationShadowRunBrowserTest
+     : public RevokedPermissionsServiceBrowserTest {
+diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_view_sync_browsertest.cc b/chrome/browser/ui/views/page_info/page_info_bubble_view_sync_browsertest.cc
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_view_sync_browsertest.cc
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_view_sync_browsertest.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/password_manager/core/browser/password_manager_metrics_util.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/content/browser/password_protection/password_protection_test_util.h"
+ #include "components/safe_browsing/core/browser/password_protection/metrics_util.h"
+ #include "components/security_state/content/security_state_tab_helper.h"
+@@ -119,6 +120,7 @@
+ 
+ // Test opening page info bubble that matches
+ // SB_THREAT_TYPE_GAIA_PASSWORD_REUSE threat type.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewSyncBrowserTest,
+                        VerifySignInPasswordReusePageInfoBubble) {
+   // PageInfo calls GetPasswordProtectionReusedPasswordAccountType which checks
+@@ -205,3 +207,4 @@
+   EXPECT_EQ(security_state::MALICIOUS_CONTENT_STATUS_NONE,
+             visible_security_state->malicious_content_status);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+diff --git a/chrome/browser/extensions/api/developer_private/developer_private_api_unittest.cc b/chrome/browser/extensions/api/developer_private/developer_private_api_unittest.cc
+index b56d799fd2..a1a07f9d64 100644
+--- src.orig/chrome/browser/extensions/api/developer_private/developer_private_api_unittest.cc
++++ src/chrome/browser/extensions/api/developer_private/developer_private_api_unittest.cc
+@@ -53,7 +53,6 @@
+ #include "chrome/common/extensions/api/developer_private.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/crx_file/id_util.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/signin/public/base/signin_pref_names.h"
+ #include "components/signin/public/identity_manager/identity_manager.h"
+ #include "components/supervised_user/core/common/features.h"
+@@ -3333,6 +3332,8 @@
+ 
+ TEST_F(DeveloperPrivateApiUnitTest,
+        ExtensionUpdatedEventOnAllowlistWarningChange) {
++  // Helium disables allowlist warnings and enforcement. Legacy state still
++  // persists, but state changes must not announce a warning in the UI.
+   // We need to call DeveloperPrivateAPI::Get() in order to instantiate the
+   // keyed service, since it's not created by default in unit tests.
+   DeveloperPrivateAPI::Get(profile());
+@@ -3346,44 +3347,37 @@
+   event_router->AddEventListener(kEventName, render_process_host(),
+                                  listener_id);
+ 
+-  scoped_refptr<const Extension> dummy_extension = LoadSimpleExtension();
++  scoped_refptr<const Extension> extension = LoadSimpleExtension();
+   base::RunLoop().RunUntilIdle();
+ 
+   TestEventRouterObserver test_observer(event_router);
+   EXPECT_FALSE(WasItemChangedEventDispatched(
+-      test_observer, dummy_extension->id(),
++      test_observer, extension->id(),
+       api::developer_private::EventType::kPrefsChanged));
+ 
+-  safe_browsing::SetSafeBrowsingState(
+-      profile()->GetPrefs(),
+-      safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION);
+-
++  service()->allowlist()->SetExtensionAllowlistState(extension->id(),
++                                                     ALLOWLIST_NOT_ALLOWLISTED);
++  EXPECT_EQ(
++      ALLOWLIST_NOT_ALLOWLISTED,
++      service()->allowlist()->GetExtensionAllowlistState(extension->id()));
++  EXPECT_FALSE(service()->allowlist()->ShouldDisplayWarning(extension->id()));
++  EXPECT_TRUE(registry()->enabled_extensions().Contains(extension->id()));
+   base::RunLoop().RunUntilIdle();
+-  // The warning state should not have changed since the allowlist state is not
+-  // set yet.
+   EXPECT_FALSE(WasItemChangedEventDispatched(
+-      test_observer, dummy_extension->id(),
++      test_observer, extension->id(),
+       api::developer_private::EventType::kPrefsChanged));
+ 
+-  service()->allowlist()->SetExtensionAllowlistState(dummy_extension->id(),
+-                                                     ALLOWLIST_NOT_ALLOWLISTED);
+-
++  test_observer.ClearEvents();
++  service()->allowlist()->SetExtensionAllowlistState(extension->id(),
++                                                     ALLOWLIST_ALLOWLISTED);
++  EXPECT_EQ(
++      ALLOWLIST_ALLOWLISTED,
++      service()->allowlist()->GetExtensionAllowlistState(extension->id()));
++  EXPECT_FALSE(service()->allowlist()->ShouldDisplayWarning(extension->id()));
++  EXPECT_TRUE(registry()->enabled_extensions().Contains(extension->id()));
+   base::RunLoop().RunUntilIdle();
+-  EXPECT_TRUE(WasItemChangedEventDispatched(
+-      test_observer, dummy_extension->id(),
+-      api::developer_private::EventType::kPrefsChanged));
+-
+-  test_observer.ClearEvents();
+-
+-  safe_browsing::SetSafeBrowsingState(
+-      profile()->GetPrefs(),
+-      safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
+-
+-  base::RunLoop().RunUntilIdle();
+-  // The warning is now hidden because the profile is no longer Enhanced
+-  // Protection.
+-  EXPECT_TRUE(WasItemChangedEventDispatched(
+-      test_observer, dummy_extension->id(),
++  EXPECT_FALSE(WasItemChangedEventDispatched(
++      test_observer, extension->id(),
+       api::developer_private::EventType::kPrefsChanged));
+ }
+ 
+diff --git a/chrome/browser/extensions/api/webstore_private/webstore_private_unittest.cc b/chrome/browser/extensions/api/webstore_private/webstore_private_unittest.cc
+index 9b98daa397..db86a2cb0b 100644
+--- a/chrome/browser/extensions/api/webstore_private/webstore_private_unittest.cc
++++ b/chrome/browser/extensions/api/webstore_private/webstore_private_unittest.cc
+@@ -26,7 +26,6 @@
+ #include "chrome/test/base/testing_profile.h"
+ #include "chrome/test/base/testing_profile_manager.h"
+ #include "components/enterprise/browser/reporting/common_pref_names.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "content/public/test/test_renderer_host.h"
+@@ -743,125 +742,32 @@ TEST_F(WebstorePrivateBeginInstallWithManifest3Test,
+   EXPECT_EQ(WebstorePrivateApi::GetPendingApprovalsCountForTesting(), 0);
+ }
+ 
+-struct FrictionDialogTestCase {
+-  const char* test_name;
+-  bool esb_user;
+-  const char* esb_allowlist;
+-  bool expected_friction_shown;
+-  ScopedTestDialogAutoConfirm::AutoConfirm dialog_action =
+-      ScopedTestDialogAutoConfirm::ACCEPT;
+-};
+-
+-std::ostream& operator<<(std::ostream& out,
+-                         const FrictionDialogTestCase& test_case) {
+-  out << test_case.test_name;
+-  return out;
+-}
+-
+-const FrictionDialogTestCase kFrictionDialogTestCases[] = {
+-    {/*test_name=*/"EsbUserAndNotAllowlisted",
+-     /*esb_user=*/true,
+-     /*esb_allowlist=*/"false",
+-     /*expected_friction_shown=*/true},
+-
+-    {/*test_name=*/"EsbUserAndAllowlisted",
+-     /*esb_user=*/true,
+-     /*esb_allowlist=*/"true",
+-     /*expected_friction_shown=*/false},
+-
+-    {/*test_name=*/"EsbUserAndUndefined",
+-     /*esb_user=*/true,
+-     /*esb_allowlist=*/"undefined",
+-     /*expected_friction_shown=*/false},
+-    {/*test_name=*/"NonEsbUserAndNotAllowlisted",
+-     /*esb_user=*/false,
+-     /*esb_allowlist=*/"false",
+-     /*expected_friction_shown=*/false},
+-
+-    {/*test_name=*/"CancelFrictionDialog",
+-     /*esb_user=*/true,
+-     /*esb_allowlist=*/"false",
+-     /*expected_friction_shown=*/true,
+-     /*dialog_action=*/ScopedTestDialogAutoConfirm::CANCEL}};
+-
+-class WebstorePrivateBeginInstallWithManifest3FrictionDialogTest
+-    : public WebstorePrivateBeginInstallWithManifest3Test,
+-      public testing::WithParamInterface<FrictionDialogTestCase> {
+- public:
+-  WebstorePrivateBeginInstallWithManifest3FrictionDialogTest() = default;
+-
+-  void SetUp() override {
+-    WebstorePrivateBeginInstallWithManifest3Test::SetUp();
+-
+-    // Clear the pending approvals. Leftover approvals can stay pending when
+-    // testing the `webstorePrivate.beginInstallWithManifest3` function
+-    // without calling `webstorePrivate.completeInstall`.
+-    WebstorePrivateApi::ClearPendingApprovalsForTesting();
+-  }
+-};
+-
+-TEST_P(WebstorePrivateBeginInstallWithManifest3FrictionDialogTest,
+-       FrictionDialogTests) {
+-  FrictionDialogTestCase test_case = GetParam();
+-
+-  if (test_case.esb_user) {
+-    // Enable Enhanced Protection
+-    safe_browsing::SetSafeBrowsingState(
+-        profile()->GetPrefs(),
+-        safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION);
+-  }
+-
++TEST_F(WebstorePrivateBeginInstallWithManifest3Test,
++       UnallowlistedInstallDoesNotShowUnavailableSafeBrowsingFriction) {
+   std::unique_ptr<content::WebContents> web_contents =
+       content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
+   auto function =
+       base::MakeRefCounted<WebstorePrivateBeginInstallWithManifest3Function>();
+   function->SetRenderFrameHost(web_contents->GetPrimaryMainFrame());
+-  ScopedTestDialogAutoConfirm auto_confirm(test_case.dialog_action);
+-
+-  std::string_view esb_allowlist = test_case.esb_allowlist;
+-  std::string args =
+-      esb_allowlist == "undefined"
+-          ? base::StringPrintf(R"([{"id":"%s", "manifest":"%s"}])",
+-                               kExtensionId, kExtensionManifest)
+-          : base::StringPrintf(
+-                R"([{"id":"%s", "manifest":"%s", "esbAllowlist":%s}])",
+-                kExtensionId, kExtensionManifest, esb_allowlist.data());
+-
+-  if (test_case.dialog_action == ScopedTestDialogAutoConfirm::ACCEPT) {
+-    std::optional<base::Value> response =
+-        RunFunctionAndReturnValue(function.get(), args);
+-
+-    // The API returns empty string when extension is installed successfully.
+-    ASSERT_TRUE(response);
+-    ASSERT_TRUE(response->is_string());
+-    EXPECT_EQ(std::string(), response->GetString());
+-  } else {
+-    api_test_utils::RunFunction(function.get(), args, profile());
+-    VerifyUserCancelledFunctionResult(function.get());
+-  }
++  ScopedTestDialogAutoConfirm auto_confirm(ScopedTestDialogAutoConfirm::ACCEPT);
+ 
+-  EXPECT_EQ(test_case.expected_friction_shown,
+-            function->GetFrictionDialogShownForTesting());
++  std::string args = base::StringPrintf(
++      R"([{"id":"%s", "manifest":"%s", "esbAllowlist":false}])", kExtensionId,
++      kExtensionManifest);
++  std::optional<base::Value> response =
++      RunFunctionAndReturnValue(function.get(), args);
++
++  ASSERT_TRUE(response);
++  ASSERT_TRUE(response->is_string());
++  EXPECT_EQ(std::string(), response->GetString());
++  EXPECT_FALSE(function->GetFrictionDialogShownForTesting());
+ 
+   std::unique_ptr<InstallApproval> approval =
+       WebstorePrivateApi::PopApprovalForTesting(profile(), kExtensionId);
+-  if (test_case.dialog_action == ScopedTestDialogAutoConfirm::ACCEPT) {
+-    ASSERT_TRUE(approval);
+-    EXPECT_EQ(test_case.expected_friction_shown,
+-              approval->bypassed_safebrowsing_friction);
+-  } else {
+-    EXPECT_FALSE(approval);
+-  }
++  ASSERT_TRUE(approval);
++  EXPECT_FALSE(approval->bypassed_safebrowsing_friction);
+ }
+ 
+-INSTANTIATE_TEST_SUITE_P(
+-    All,
+-    WebstorePrivateBeginInstallWithManifest3FrictionDialogTest,
+-    testing::ValuesIn(kFrictionDialogTestCases),
+-    [](const testing::TestParamInfo<FrictionDialogTestCase>& info) {
+-      return info.param.test_name;
+-    });
+-
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+ // A test suite to be used with the MV2 deprecation experiments.
+ // NOTE: Android does not support MV2 deprecation experiments.
+diff --git a/chrome/browser/extensions/extension_allowlist_unittest.cc b/chrome/browser/extensions/extension_allowlist_unittest.cc
+index 621ee0f129..2d86fc42dd 100644
+--- a/chrome/browser/extensions/extension_allowlist_unittest.cc
++++ b/chrome/browser/extensions/extension_allowlist_unittest.cc
+@@ -11,7 +11,6 @@
+ #include "chrome/browser/policy/policy_test_utils.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/safe_browsing/buildflags.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "extensions/browser/allowlist_state.h"
+ #include "extensions/browser/blocklist_extension_prefs.h"
+@@ -44,10 +43,8 @@ using ManagementPrefUpdater = ExtensionManagementPrefUpdater<
+ 
+ }  // namespace
+ 
+-// Test suite to test safe browsing allowlist enforcement.
+-//
+-// Features EnforceSafeBrowsingExtensionAllowlist and
+-// DisableMalwareExtensionsRemotely are enabled.
++// Tests extension allowlist state handling. Automatic enforcement and warning
++// surfaces are unavailable in this product configuration.
+ class ExtensionAllowlistUnitTestBase : public ExtensionServiceTestBase {
+  protected:
+   void TearDown() override {
+@@ -56,35 +53,22 @@ class ExtensionAllowlistUnitTestBase : public ExtensionServiceTestBase {
+   }
+ 
+   // Creates a test extension service with 3 installed extensions.
+-  void CreateExtensionService(bool enhanced_protection_enabled) {
++  void CreateExtensionService() {
+     ExtensionServiceInitParams params;
+     ASSERT_TRUE(
+         params.ConfigureByTestDataDirectory(data_dir().AppendASCII("good")));
+     InitializeExtensionService(std::move(params));
+     extension_prefs_ = ExtensionPrefs::Get(profile());
+-
+-    if (enhanced_protection_enabled) {
+-      safe_browsing::SetSafeBrowsingState(
+-          profile()->GetPrefs(),
+-          safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION);
+-    }
+   }
+ 
+   void CreateEmptyExtensionService() {
+     InitializeExtensionService(ExtensionServiceInitParams());
+     extension_prefs_ = ExtensionPrefs::Get(profile());
+-    safe_browsing::SetSafeBrowsingState(
+-        profile()->GetPrefs(),
+-        safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION);
+   }
+ 
+   void PerformActionBasedOnOmahaAttributes(const ExtensionId& extension_id,
+-                                           bool is_malware,
+                                            bool is_allowlisted) {
+     auto attributes = base::DictValue().Set("_esbAllowlist", is_allowlisted);
+-    if (is_malware) {
+-      attributes.Set("_malware", true);
+-    }
+ 
+     allowlist()->PerformActionBasedOnOmahaAttributes(extension_id, attributes);
+   }
+@@ -120,120 +104,47 @@ class ExtensionAllowlistUnitTest : public ExtensionAllowlistUnitTestBase {
+   base::test::ScopedFeatureList feature_list_;
+ };
+ 
+-TEST_F(ExtensionAllowlistUnitTest, AllowlistEnforcement) {
+-  // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++TEST_F(ExtensionAllowlistUnitTest, AllowlistStateDoesNotDisableExtensions) {
++  CreateExtensionService();
+   service()->Init();
+ 
+-  // On the first startup, the allowlist state for existing extensions will be
+-  // undefined.
+   EXPECT_EQ(ALLOWLIST_UNDEFINED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId1).empty());
+   EXPECT_TRUE(IsEnabled(kExtensionId1));
+ 
+-  // A first update check will set the allowlist state. In this case, an
+-  // extension not in the allowlist will be disabled.
+   PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-  EXPECT_TRUE(IsDisabled(kExtensionId1));
+-
+-  // A future update check can change the allowlist state. Here the extension is
+-  // now allowlisted and should be re-enabled.
+-  PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+-                                      /*is_allowlisted=*/true);
+-  EXPECT_EQ(ALLOWLIST_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+   EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId1).empty());
+   EXPECT_TRUE(IsEnabled(kExtensionId1));
++  EXPECT_FALSE(allowlist()->ShouldDisplayWarning(kExtensionId1));
+ 
+-  // When an extension is disabled remotely for malware and is not allowlisted,
+-  // it should have both disable reasons.
+   PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/true,
+-                                      /*is_allowlisted=*/false);
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_EQ(BitMapBlocklistState::BLOCKLISTED_MALWARE,
+-            blocklist_prefs::GetExtensionBlocklistState(kExtensionId1,
+-                                                        extension_prefs()));
+-  EXPECT_TRUE(blocklist_prefs::HasOmahaBlocklistState(
+-      kExtensionId1, BitMapBlocklistState::BLOCKLISTED_MALWARE,
+-      extension_prefs()));
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-  EXPECT_TRUE(IsBlocklisted(kExtensionId1));
+-
+-  // A blocklisted item should not be allowlisted, but if the improbable
+-  // happens, the item should still be blocklisted.
+-  PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/true,
+                                       /*is_allowlisted=*/true);
+   EXPECT_EQ(ALLOWLIST_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_EQ(BitMapBlocklistState::BLOCKLISTED_MALWARE,
+-            blocklist_prefs::GetExtensionBlocklistState(kExtensionId1,
+-                                                        extension_prefs()));
+-  EXPECT_TRUE(blocklist_prefs::HasOmahaBlocklistState(
+-      kExtensionId1, BitMapBlocklistState::BLOCKLISTED_MALWARE,
+-      extension_prefs()));
+   EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId1).empty());
+-  EXPECT_TRUE(IsBlocklisted(kExtensionId1));
+-
+-  // If the item is removed from the malware blocklist, it should stay disabled
+-  // if it's not allowlisted.
+-  PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+-                                      /*is_allowlisted=*/false);
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_EQ(BitMapBlocklistState::NOT_BLOCKLISTED,
+-            blocklist_prefs::GetSafeBrowsingExtensionBlocklistState(
+-                kExtensionId1, extension_prefs()));
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-  EXPECT_TRUE(IsDisabled(kExtensionId1));
++  EXPECT_TRUE(IsEnabled(kExtensionId1));
+ }
+ 
+-TEST_F(ExtensionAllowlistUnitTest, DisabledReasonResetWhenBlocklisted) {
+-  // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++TEST_F(ExtensionAllowlistUnitTest, AllowlistUpdateDoesNotClearBlocklistState) {
++  CreateExtensionService();
+   service()->Init();
+ 
+-  // The disabled reason should be set if an extension is not in the allowlist.
+-  PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+-                                      /*is_allowlisted=*/false);
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-
+-  // The extension is added to the blocklist.
+   service()->BlocklistExtensionForTest(kExtensionId1);
++  ASSERT_TRUE(IsBlocklisted(kExtensionId1));
+ 
+-  // A blocklisted item should not be allowlisted, but if the improbable
+-  // happens, the item should still be blocklisted.
+   PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/true);
++  EXPECT_EQ(ALLOWLIST_ALLOWLISTED,
++            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+   EXPECT_TRUE(IsBlocklisted(kExtensionId1));
+-  // The disabled reason should be reset because the extension is in the
+-  // allowlist.
+-  EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId1).empty());
+ }
+ 
+-TEST_F(ExtensionAllowlistUnitTest, DisabledItemStaysDisabledWhenAllowlisted) {
+-  // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++TEST_F(ExtensionAllowlistUnitTest,
++       UserDisabledItemStaysDisabledWhenAllowlisted) {
++  CreateExtensionService();
+   service()->Init();
+ 
+   // Start with an extension disabled by user.
+@@ -241,21 +152,18 @@ TEST_F(ExtensionAllowlistUnitTest, DisabledItemStaysDisabledWhenAllowlisted) {
+                                 {disable_reason::DISABLE_USER_ACTION});
+   EXPECT_TRUE(IsDisabled(kExtensionId1));
+ 
+-  // Disable the extension with allowlist enforcement.
++  // An allowlist result is tracked without changing the user's disable choice.
+   PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId1));
+   EXPECT_THAT(
+       extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION,
+-                                    disable_reason::DISABLE_NOT_ALLOWLISTED));
++      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION));
+   EXPECT_TRUE(IsDisabled(kExtensionId1));
+ 
+-  // The extension is allowlisted, but stays disabled by user action.
++  // Becoming allowlisted also leaves the user-disabled extension untouched.
+   PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/true);
+   EXPECT_EQ(ALLOWLIST_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId1));
+@@ -268,95 +176,57 @@ TEST_F(ExtensionAllowlistUnitTest, DisabledItemStaysDisabledWhenAllowlisted) {
+   EXPECT_TRUE(IsDisabled(kExtensionId1));
+ }
+ 
+-TEST_F(ExtensionAllowlistUnitTest, EnforcementOnInit) {
+-  // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++TEST_F(ExtensionAllowlistUnitTest,
++       StoredAllowlistStateIsCleanedUpWhenEnforcementIsUnavailable) {
++  CreateExtensionService();
+ 
+-  // Start an extension not allowlisted and in an unenforced state, this can
+-  // happen if the 'EnforceSafeBrowsingExtensionAllowlist' feature was
+-  // previously disabled for this profile.
+   allowlist()->SetExtensionAllowlistState(kExtensionId1,
+                                           ALLOWLIST_NOT_ALLOWLISTED);
+-
+-  // During initialization, the allowlist will be enforced for extensions not
+-  // allowlisted.
+-  service()->Init();
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-  EXPECT_TRUE(IsDisabled(kExtensionId1));
+-
+-  // The enforcement isn't done for extensions having an undefined allowlist
+-  // state.
+-  EXPECT_EQ(ALLOWLIST_UNDEFINED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId2));
+-  EXPECT_TRUE(IsEnabled(kExtensionId2));
+-}
+-
+-TEST_F(ExtensionAllowlistUnitTest, EnhancedProtectionSettingChange) {
+-  // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/false);
+-  // Start with ESB off and one extension not allowlisted.
+-  allowlist()->SetExtensionAllowlistState(kExtensionId1,
++  allowlist()->SetExtensionAllowlistState(kExtensionId2,
+                                           ALLOWLIST_NOT_ALLOWLISTED);
++  allowlist()->SetExtensionAllowlistAcknowledgeState(
++      kExtensionId1, ALLOWLIST_ACKNOWLEDGE_NEEDED);
++  allowlist()->SetExtensionAllowlistAcknowledgeState(
++      kExtensionId2, ALLOWLIST_ACKNOWLEDGE_NEEDED);
+ 
+-  // Since ESB is off, no enforcement will be done for extensions not
+-  // allowlisted.
+-  service()->Init();
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_TRUE(IsEnabled(kExtensionId1));
+-
+-  EXPECT_EQ(ALLOWLIST_UNDEFINED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId2));
++  // Simulate persisted disable reasons from a profile where enforcement was
++  // previously active. The second extension also has a user disable reason.
++  registrar()->DisableExtension(kExtensionId1,
++                                {disable_reason::DISABLE_NOT_ALLOWLISTED});
++  registrar()->DisableExtension(kExtensionId2,
++                                {disable_reason::DISABLE_NOT_ALLOWLISTED,
++                                 disable_reason::DISABLE_USER_ACTION});
++  registrar()->DisableExtension(kExtensionId3,
++                                {disable_reason::DISABLE_USER_ACTION});
+ 
+-  // Even if the enforcement is off, the allowlist state is still tracked when
+-  // receiving update check results.
+-  PerformActionBasedOnOmahaAttributes(kExtensionId2,
+-                                      /*is_malware=*/false,
+-                                      /*is_allowlisted=*/false);
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId2));
+-  EXPECT_TRUE(IsEnabled(kExtensionId2));
++  service()->Init();
+ 
+-  // When ESB is enabled, the extension service will enforce all extensions with
+-  // `ALLOWLIST_NOT_ALLOWLISTED` state.
+-  safe_browsing::SetSafeBrowsingState(
+-      profile()->GetPrefs(),
+-      safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION);
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-  EXPECT_TRUE(IsDisabled(kExtensionId1));
++  EXPECT_TRUE(IsEnabled(kExtensionId1));
++  EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId1).empty());
++  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NONE,
++            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+ 
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId2));
++  EXPECT_TRUE(IsDisabled(kExtensionId2));
+   EXPECT_THAT(
+       extension_prefs()->GetDisableReasons(kExtensionId2),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-  EXPECT_TRUE(IsDisabled(kExtensionId2));
+-
+-  // If the ESB setting is turned off, the extensions are re-enabled.
+-  safe_browsing::SetSafeBrowsingState(
+-      profile()->GetPrefs(),
+-      safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-  EXPECT_TRUE(IsEnabled(kExtensionId1));
++      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION));
++  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NONE,
++            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId2));
+ 
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId2));
+-  EXPECT_TRUE(IsEnabled(kExtensionId2));
++  EXPECT_TRUE(IsDisabled(kExtensionId3));
++  EXPECT_THAT(
++      extension_prefs()->GetDisableReasons(kExtensionId3),
++      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION));
+ }
+ 
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(ExtensionAllowlistUnitTest, ExtensionsNotAllowlistedThenBlocklisted) {
+   // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++  CreateExtensionService();
+   TestBlocklist test_blocklist;
+   test_blocklist.Attach(service()->blocklist_);
+ 
+@@ -430,7 +300,7 @@ TEST_F(ExtensionAllowlistUnitTest, ExtensionsNotAllowlistedThenBlocklisted) {
+ 
+ TEST_F(ExtensionAllowlistUnitTest, ExtensionsBlocklistedThenNotAllowlisted) {
+   // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++  CreateExtensionService();
+   TestBlocklist test_blocklist;
+   test_blocklist.Attach(service()->blocklist_);
+ 
+@@ -446,7 +316,6 @@ TEST_F(ExtensionAllowlistUnitTest, ExtensionsBlocklistedThenNotAllowlisted) {
+ 
+   // The extension is then also disabled from allowlist enforcement.
+   PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId1));
+@@ -479,20 +348,18 @@ TEST_F(ExtensionAllowlistUnitTest, ExtensionsBlocklistedThenNotAllowlisted) {
+ 
+ TEST_F(ExtensionAllowlistUnitTest, MissingAttributeAreIgnored) {
+   // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++  CreateExtensionService();
+ 
+   // Start with one extension allowlisted and another not allowlisted.
+   allowlist()->SetExtensionAllowlistState(kExtensionId1, ALLOWLIST_ALLOWLISTED);
+   allowlist()->SetExtensionAllowlistState(kExtensionId2,
+                                           ALLOWLIST_NOT_ALLOWLISTED);
+ 
+-  // During initialization, the allowlist will be enforced for extensions not
+-  // allowlisted.
++  // Startup retains the stored state but does not enforce it in this build.
+   service()->Init();
+   EXPECT_TRUE(IsEnabled(kExtensionId1));
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId2),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
++  EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId2).empty());
++  EXPECT_TRUE(IsEnabled(kExtensionId2));
+ 
+   // Simulate an update check with no custom attribute defined.
+   base::DictValue attributes;
+@@ -507,32 +374,13 @@ TEST_F(ExtensionAllowlistUnitTest, MissingAttributeAreIgnored) {
+ 
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+             allowlist()->GetExtensionAllowlistState(kExtensionId2));
+-  EXPECT_THAT(
+-      extension_prefs()->GetDisableReasons(kExtensionId2),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+-}
+-
+-TEST_F(ExtensionAllowlistUnitTest, AcknowledgeNeededOnEnforcement) {
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
+-
+-  service()->Init();
+-  EXPECT_TRUE(IsEnabled(kExtensionId1));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NONE,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+-
+-  // Make the extension not allowlisted.
+-  PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+-                                      /*is_allowlisted=*/false);
+-
+-  // Expect the acknowledge state to change appropriately.
+-  EXPECT_TRUE(IsDisabled(kExtensionId1));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NEEDED,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
++  EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId2).empty());
++  EXPECT_TRUE(IsEnabled(kExtensionId2));
+ }
+ 
+-TEST_F(ExtensionAllowlistUnitTest, AcknowledgeNotNeededIfAlreadyDisabled) {
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++TEST_F(ExtensionAllowlistUnitTest,
++       UserDisabledItemNeedsNoAllowlistAcknowledgement) {
++  CreateExtensionService();
+ 
+   service()->Init();
+   registrar()->DisableExtension(kExtensionId1,
+@@ -543,139 +391,19 @@ TEST_F(ExtensionAllowlistUnitTest, AcknowledgeNotNeededIfAlreadyDisabled) {
+ 
+   // Make the extension not allowlisted.
+   PerformActionBasedOnOmahaAttributes(kExtensionId1,
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+ 
+   // There is no need for acknowledge if the extension was already disabled.
+   EXPECT_TRUE(IsDisabled(kExtensionId1));
+   EXPECT_THAT(
+       extension_prefs()->GetDisableReasons(kExtensionId1),
+-      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED,
+-                                    disable_reason::DISABLE_USER_ACTION));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NONE,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+-}
+-
+-TEST_F(ExtensionAllowlistUnitTest,
+-       AcknowledgeStateIsSetWhenExtensionIsReenabled) {
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
+-
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NONE,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+-
+-  // Start with a not allowlisted extension.
+-  allowlist()->SetExtensionAllowlistState(kExtensionId1,
+-                                          ALLOWLIST_NOT_ALLOWLISTED);
+-
+-  // The enforcement on init should disable the extension.
+-  service()->Init();
+-  EXPECT_TRUE(IsDisabled(kExtensionId1));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NEEDED,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+-
+-  // Re-enable the extension.
+-  registrar()->EnableExtension(kExtensionId1);
+-
+-  // The extensions should now be marked with
+-  // `ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER'.
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+-  EXPECT_TRUE(IsEnabled(kExtensionId1));
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+-}
+-
+-TEST_F(ExtensionAllowlistUnitTest, ReenabledExtensionsAreNotReenforced) {
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
+-
+-  // Start with a not allowlisted extension that was re-enabled by user.
+-  allowlist()->SetExtensionAllowlistState(kExtensionId1,
+-                                          ALLOWLIST_NOT_ALLOWLISTED);
+-  allowlist()->SetExtensionAllowlistAcknowledgeState(
+-      kExtensionId1, ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER);
+-
+-  // And an extension that became allowlisted after it was re-enabled by user.
+-  allowlist()->SetExtensionAllowlistState(kExtensionId2, ALLOWLIST_ALLOWLISTED);
+-  allowlist()->SetExtensionAllowlistAcknowledgeState(
+-      kExtensionId2, ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER);
+-
+-  service()->Init();
+-  // Even though ExtensionId1 is not allowlisted, it should stay enabled because
+-  // it was re-enabled by user.
+-  EXPECT_TRUE(IsEnabled(kExtensionId1));
+-  // Assert that ExtensionId2 is enabled before testing the allowlist state
+-  // change.
+-  EXPECT_TRUE(IsEnabled(kExtensionId2));
+-
+-  // If `kExtensionId2` becomes not allowlisted again, it should stay enabled
+-  // because the user already chose to re-enable it in the past.
+-  PerformActionBasedOnOmahaAttributes(kExtensionId2,
+-                                      /*is_malware=*/false,
+-                                      /*is_allowlisted=*/false);
+-  EXPECT_TRUE(IsEnabled(kExtensionId2));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId2));
+-  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+-            allowlist()->GetExtensionAllowlistState(kExtensionId2));
+-}
+-
+-TEST_F(ExtensionAllowlistUnitTest, TurnOffEnhancedProtection) {
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
+-
+-  // Start with 3 not allowlisted extensions.
+-  allowlist()->SetExtensionAllowlistState(kExtensionId1,
+-                                          ALLOWLIST_NOT_ALLOWLISTED);
+-  allowlist()->SetExtensionAllowlistState(kExtensionId2,
+-                                          ALLOWLIST_NOT_ALLOWLISTED);
+-  allowlist()->SetExtensionAllowlistState(kExtensionId3,
+-                                          ALLOWLIST_NOT_ALLOWLISTED);
+-  allowlist()->SetExtensionAllowlistAcknowledgeState(
+-      kExtensionId3, ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER);
+-
+-  // They should get disabled by allowlist enforcement and have their
+-  // acknowledge state set (except the extension re-enabled by user).
+-  service()->Init();
+-  EXPECT_TRUE(IsDisabled(kExtensionId1));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NEEDED,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+-
+-  EXPECT_TRUE(IsDisabled(kExtensionId2));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NEEDED,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId2));
+-
+-  EXPECT_TRUE(IsEnabled(kExtensionId3));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId3));
+-
+-  // Leave `kExtensionId1` with acknowledge needed and acknowledge
+-  // `kExtensionId2`.
+-  allowlist()->SetExtensionAllowlistAcknowledgeState(
+-      kExtensionId2, ALLOWLIST_ACKNOWLEDGE_DONE);
+-
+-  // When turning off enhanced protection.
+-  safe_browsing::SetSafeBrowsingState(
+-      profile()->GetPrefs(),
+-      safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
+-
+-  // 'kExtensionId1' and 'kExtensionId2' should be re-enabled and have their
+-  // acknowledge state reset.
+-  EXPECT_TRUE(IsEnabled(kExtensionId1));
++      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION));
+   EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NONE,
+             allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId1));
+-
+-  EXPECT_TRUE(IsEnabled(kExtensionId2));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_NONE,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId2));
+-
+-  // 'kExtensionId3' should remain enabled because it was already re-enabled by
+-  // user.
+-  EXPECT_TRUE(IsEnabled(kExtensionId3));
+-  EXPECT_EQ(ALLOWLIST_ACKNOWLEDGE_ENABLED_BY_USER,
+-            allowlist()->GetExtensionAllowlistAcknowledgeState(kExtensionId3));
+ }
+ 
+ TEST_F(ExtensionAllowlistUnitTest, BypassFrictionSetAckowledgeEnabledByUser) {
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++  CreateExtensionService();
+ 
+   scoped_refptr<CrxInstaller> installer(CrxInstaller::CreateSilent(profile()));
+   installer->set_allow_silent_install(true);
+@@ -724,7 +452,6 @@ TEST_F(ExtensionAllowlistUnitTest, NoEnforcementOnPolicyForceInstall) {
+ 
+   // On next update check, the extension is now marked as not allowlisted.
+   PerformActionBasedOnOmahaAttributes(extension->id(),
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+ 
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+@@ -739,7 +466,8 @@ class ExtensionAllowlistWithFeatureDisabledUnitTest
+     : public ExtensionAllowlistUnitTestBase {
+  public:
+   ExtensionAllowlistWithFeatureDisabledUnitTest() {
+-    // Test with warnings enabled but auto disable disabled.
++    // The feature flag is disabled; this product also disables warning and
++    // auto-disable enforcement.
+     feature_list_.InitAndDisableFeature(
+         extensions_features::kSafeBrowsingCrxAllowlistAutoDisable);
+   }
+@@ -751,17 +479,24 @@ class ExtensionAllowlistWithFeatureDisabledUnitTest
+ TEST_F(ExtensionAllowlistWithFeatureDisabledUnitTest,
+        NoEnforcementWhenFeatureDisabled) {
+   // Created with 3 installed extensions.
+-  CreateExtensionService(/*enhanced_protection_enabled=*/true);
++  CreateExtensionService();
+ 
+   allowlist()->SetExtensionAllowlistState(kExtensionId1,
+                                           ALLOWLIST_NOT_ALLOWLISTED);
+   service()->Init();
++  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
++            allowlist()->GetExtensionAllowlistState(kExtensionId1));
+   EXPECT_TRUE(IsEnabled(kExtensionId1));
++  EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId1).empty());
++  EXPECT_FALSE(allowlist()->ShouldDisplayWarning(kExtensionId1));
+ 
+   PerformActionBasedOnOmahaAttributes(kExtensionId2,
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+-  EXPECT_TRUE(IsEnabled(kExtensionId1));
++  EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
++            allowlist()->GetExtensionAllowlistState(kExtensionId2));
++  EXPECT_TRUE(IsEnabled(kExtensionId2));
++  EXPECT_TRUE(extension_prefs()->GetDisableReasons(kExtensionId2).empty());
++  EXPECT_FALSE(allowlist()->ShouldDisplayWarning(kExtensionId2));
+ }
+ 
+ // TODO(jeffcyr): Test with auto-disablement enabled when the enforcement is
+@@ -789,7 +524,6 @@ TEST_F(ExtensionAllowlistWithFeatureDisabledUnitTest,
+ 
+   // On next update check, the extension is now marked as not allowlisted.
+   PerformActionBasedOnOmahaAttributes(extension->id(),
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+ 
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
+@@ -822,7 +556,6 @@ TEST_F(ExtensionAllowlistWithFeatureDisabledUnitTest,
+ 
+   // On next update check, the extension is now marked as not allowlisted.
+   PerformActionBasedOnOmahaAttributes(extension->id(),
+-                                      /*is_malware=*/false,
+                                       /*is_allowlisted=*/false);
+ 
+   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,

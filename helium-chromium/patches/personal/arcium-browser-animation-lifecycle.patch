@@ -1,0 +1,316 @@
+--- a/chrome/browser/ui/animation/browser_animation_controller.cc
++++ b/chrome/browser/ui/animation/browser_animation_controller.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ #include <concepts>
++#include <cstdint>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -13,8 +14,10 @@
+ #include <utility>
+ #include <variant>
+ 
++#include "base/auto_reset.h"
+ #include "base/callback_list.h"
+ #include "base/check_is_test.h"
++#include "base/check_op.h"
+ #include "base/containers/adapters.h"
+ #include "base/containers/map_util.h"
+ #include "base/logging.h"
+@@ -159,7 +162,12 @@ class Animator : public views::Animation
+     animation_.Start();
+   }
+ 
+-  void Stop() { animation_.Stop(); }
++  void Stop() {
++    // Stop() can synchronously report AnimationEnded at progress 1. The
++    // controller owns explicit termination and sends its own notification.
++    base::AutoReset<bool> suppress(&suppress_terminal_callback_, true);
++    animation_.Stop();
++  }
+ 
+   void SetAnimationContainerForTesting(gfx::AnimationContainer* container) {
+     animation_.SetContainer(container);
+@@ -167,7 +175,9 @@ class Animator : public views::Animation
+ 
+   // views::AnimationDelegateViews:
+   void AnimationEnded(const gfx::Animation* animation) override {
+-    delegate_->AnimationEnded(animation);
++    if (!suppress_terminal_callback_) {
++      delegate_->AnimationEnded(animation);
++    }
+   }
+ 
+   void AnimationProgressed(const gfx::Animation* animation) override {
+@@ -177,6 +187,7 @@ class Animator : public views::Animation
+  private:
+   raw_ref<gfx::AnimationDelegate> delegate_;
+   gfx::LinearAnimation animation_{this};
++  bool suppress_terminal_callback_ = false;
+ };
+ 
+ // Similar to `base::FindOrNull()`, but returns a `std::optional` instead of a
+@@ -476,6 +487,14 @@ struct BrowserAnimationController::Motio
+ 
+ // Tracks the current motion and progress for a particular animation group.
+ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
++  enum class RequestKind { kStart, kReset, kCancel, kClear };
++  struct Request {
++    RequestKind kind;
++    uint64_t generation;
++    BrowserAnimationMotion motion;
++    std::optional<MotionInfo> motion_info;
++  };
++
+  public:
+   GroupData(const BrowserAnimationController& controller,
+             BrowserAnimationGroup group)
+@@ -486,36 +505,21 @@ class BrowserAnimationController::GroupD
+   // Starts `motion` for the current group. Any existing motion will be
+   // canceled.
+   void Start(BrowserAnimationMotion motion, MotionInfo motion_info) {
+-    const auto params = GetParamsLookup();
+-    OnCancel(params);
+-    current_motion_ = motion;
+-    current_motion_info_ = std::move(motion_info);
+-    UpdateCurrentValues(base::Milliseconds(0), 0.0, params);
+-    if (gfx::Animation::ShouldRenderRichAnimation()) {
+-      MaybeCreateAnimator();
+-      MaybeStartLogger();
+-      animator_->Start(current_motion_info_.duration);
+-      Notify(BrowserAnimationUpdate::kStarted);
+-    } else {
+-      Notify(BrowserAnimationUpdate::kStarted);
+-      OnAnimationEnded(params);
+-    }
++    SubmitRequest({RequestKind::kStart, ++request_generation_, motion,
++                   std::move(motion_info)});
+   }
+ 
+   // Resets the animation for the current group to the end of `motion`.
+   void Reset(BrowserAnimationMotion motion, MotionInfo motion_info) {
+-    const auto params = GetParamsLookup();
+-    if (current_motion_ != motion) {
+-      OnCancel(params);
+-      current_motion_ = motion;
+-      current_motion_info_ = std::move(motion_info);
+-    }
+-    OnAnimationEnded(params);
++    SubmitRequest({RequestKind::kReset, ++request_generation_, motion,
++                   std::move(motion_info)});
+   }
+ 
+   // Cancels or clears the animations for the current group.
+   bool Cancel(bool clear) {
+-    return clear ? OnClear() : OnCancel(GetParamsLookup());
++    return SubmitRequest({clear ? RequestKind::kClear : RequestKind::kCancel,
++                          ++request_generation_, BrowserAnimationMotion(),
++                          std::nullopt});
+   }
+ 
+   // Retrieves the current value for `sequence` in this group, or null if none.
+@@ -558,6 +562,128 @@ class BrowserAnimationController::GroupD
+   BrowserAnimationMotion current_motion() const { return current_motion_; }
+ 
+  private:
++  // Terminal observers all see the outgoing run. Their newest request takes
++  // ownership only after notification and retirement finish, so later observers
++  // cannot see a replacement motion under the outgoing terminal event. Requests
++  // made while draining are also serialized behind already deferred effects.
++  bool SubmitRequest(Request request) {
++    if (is_terminating_ || draining_requests_) {
++      // Clear also resets transition values; retain that effect even if a later
++      // request replaces the queued motion operation.
++      pending_clear_ |= request.kind == RequestKind::kClear;
++      pending_request_ = std::move(request);
++      return static_cast<bool>(current_motion_);
++    }
++    return PerformRequest(std::move(request));
++  }
++
++  bool PerformRequest(Request request) {
++    if (request.generation != request_generation_) {
++      return false;
++    }
++    switch (request.kind) {
++      case RequestKind::kStart:
++        StartRequested(request.generation, request.motion,
++                       std::move(*request.motion_info));
++        return true;
++      case RequestKind::kReset:
++        ResetRequested(request.generation, request.motion,
++                       std::move(*request.motion_info));
++        return true;
++      case RequestKind::kCancel:
++        return OnCancel(GetParamsLookup());
++      case RequestKind::kClear:
++        return OnClear();
++    }
++  }
++
++  void ApplyPendingClear() {
++    if (std::exchange(pending_clear_, false)) {
++      current_values_.clear();
++      persisted_values_.clear();
++    }
++  }
++
++  void DrainPendingRequests() {
++    // Complete a terminal Clear after fanout, even during an outer drain. Its
++    // effect belongs before any later request can install another run.
++    ApplyPendingClear();
++    if (draining_requests_) {
++      return;
++    }
++    base::AutoReset<bool> draining(&draining_requests_, true);
++    while (pending_request_) {
++      Request request = std::move(*pending_request_);
++      pending_request_.reset();
++      ApplyPendingClear();
++      PerformRequest(std::move(request));
++    }
++  }
++
++  uint64_t InstallMotion(BrowserAnimationMotion motion,
++                         MotionInfo motion_info) {
++    CHECK(!is_terminating_);
++    current_motion_ = motion;
++    current_motion_info_ = std::move(motion_info);
++    return ++run_generation_;
++  }
++
++  void StartRequested(uint64_t request,
++                      BrowserAnimationMotion motion,
++                      MotionInfo motion_info) {
++    const auto params = GetParamsLookup();
++    OnCancel(params);
++    // A terminal listener can replace or clear the requested start.
++    if (request != request_generation_) {
++      return;
++    }
++    const uint64_t run = InstallMotion(motion, std::move(motion_info));
++    UpdateCurrentValues(base::Milliseconds(0), 0.0, params);
++    if (gfx::Animation::ShouldRenderRichAnimation()) {
++      MaybeCreateAnimator();
++      MaybeStartLogger();
++      animator_->Start(current_motion_info_.duration);
++      Notify(BrowserAnimationUpdate::kStarted);
++    } else {
++      Notify(BrowserAnimationUpdate::kStarted);
++      // Cancel/Clear need not install a replacement run, so both identities
++      // are needed before completing a reduced-motion start.
++      if (request == request_generation_ && run == run_generation_) {
++        OnAnimationEnded(params);
++      }
++    }
++  }
++
++  void ResetRequested(uint64_t request,
++                      BrowserAnimationMotion motion,
++                      MotionInfo motion_info) {
++    const auto params = GetParamsLookup();
++    if (current_motion_ != motion) {
++      OnCancel(params);
++    }
++    if (request != request_generation_) {
++      return;
++    }
++    // Even a same-motion reset must stop its active sampler before finishing.
++    StopAnimator();
++    InstallMotion(motion, std::move(motion_info));
++    OnAnimationEnded(params);
++  }
++
++  void StopAnimator() {
++    if (animator_) {
++      animator_->Stop();
++    }
++  }
++
++  void RetireRun(uint64_t run) {
++    // Requests made during terminal notification were queued, never installed.
++    CHECK(is_terminating_);
++    CHECK_EQ(run, run_generation_);
++    current_motion_ = BrowserAnimationMotion();
++    is_terminating_ = false;
++  }
++
+   // gfx::AnimationDelegate:
+   void AnimationEnded(const gfx::Animation*) override {
+     const auto params = GetParamsLookup();
+@@ -613,40 +739,53 @@ class BrowserAnimationController::GroupD
+   // Does the work of ending an animation. Listeners will be updated with the
+   // animation active at 100% before the animation is cleaned up.
+   void OnAnimationEnded(const SequenceParamsLookup& params) {
++    CHECK(!is_terminating_);
++    const uint64_t run = run_generation_;
++    is_terminating_ = true;
++    StopAnimator();
+     UpdateCurrentValues(current_motion_info_.duration, 1.0, params);
+     if (logger_) {
+       logger_->MaybeLog();
+       logger_.reset();
+     }
+     Notify(BrowserAnimationUpdate::kEnded);
+-    current_motion_ = BrowserAnimationMotion();
++    RetireRun(run);
+     PersistCurrentValues(params);
++    DrainPendingRequests();
+   }
+ 
+   // Does the work of canceling the current animation.
+   bool OnCancel(const SequenceParamsLookup& params) {
++    CHECK(!is_terminating_);
+     if (!current_motion_) {
+       return false;
+     }
++    const uint64_t run = run_generation_;
++    is_terminating_ = true;
+     PersistCurrentValues(params);
+     logger_.reset();
+-    animator_->Stop();
++    StopAnimator();
+     Notify(BrowserAnimationUpdate::kCanceled);
+-    current_motion_ = BrowserAnimationMotion();
++    RetireRun(run);
++    DrainPendingRequests();
+     return true;
+   }
+ 
+   // Does the work of clearing out all animation data.
+   bool OnClear() {
++    CHECK(!is_terminating_);
+     current_values_.clear();
+     persisted_values_.clear();
+     if (!current_motion_) {
+       return false;
+     }
++    const uint64_t run = run_generation_;
++    is_terminating_ = true;
+     logger_.reset();
+-    animator_->Stop();
++    StopAnimator();
+     Notify(BrowserAnimationUpdate::kCanceled);
+-    current_motion_ = BrowserAnimationMotion();
++    RetireRun(run);
++    DrainPendingRequests();
+     return true;
+   }
+ 
+@@ -705,6 +844,14 @@ class BrowserAnimationController::GroupD
+   ValueLookup current_values_;
+   BrowserAnimationMotion current_motion_;
+   MotionInfo current_motion_info_;
++  // A request may cancel an outer operation without installing a run. Keep its
++  // identity separate from the run whose sampler and terminal event we own.
++  uint64_t request_generation_ = 0;
++  uint64_t run_generation_ = 0;
++  bool is_terminating_ = false;
++  bool draining_requests_ = false;
++  bool pending_clear_ = false;
++  std::optional<Request> pending_request_;
+   std::optional<Animator> animator_;
+   std::optional<Logger> logger_;
+ 

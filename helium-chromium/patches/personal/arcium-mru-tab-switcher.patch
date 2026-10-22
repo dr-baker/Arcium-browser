@@ -1,0 +1,2656 @@
+Index: src/chrome/browser/ui/BUILD.gn
+===================================================================
+--- src.orig/chrome/browser/ui/BUILD.gn
++++ src/chrome/browser/ui/BUILD.gn
+@@ -3578,6 +3578,7 @@ static_library("ui") {
+       "views/frame/immersive_mode_controller_mac.mm",
+       "views/frame/immersive_mode_overlay_views_mac.h",
+       "views/frame/immersive_mode_overlay_views_mac.mm",
++      "views/frame/mru_tab_switcher_visualizer_mac.mm",
+       "views/helium/frame_corner_radius_mac.mm",
+       "views/helium/glass_surface_mac.h",
+       "views/helium/glass_surface_mac.mm",
+@@ -4084,6 +4085,10 @@ static_library("ui") {
+       "views/frame/browser_root_view.cc",
+       "views/frame/browser_view.cc",
+       "views/frame/browser_view.h",
++      "views/frame/mru_tab_preview_cache.cc",
++      "views/frame/mru_tab_preview_cache.h",
++      "views/frame/mru_tab_preview_rail.cc",
++      "views/frame/mru_tab_preview_rail.h",
+       "views/frame/browser_widget.cc",
+       "views/frame/browser_widget.h",
+       "views/frame/browser_window_factory.cc",
+Index: src/chrome/browser/ui/tabs/tab_strip_model.cc
+===================================================================
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -83,6 +83,7 @@
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h"
+ #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
+ #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
+ #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
+@@ -770,6 +771,10 @@
+ 
+ void TabStripModel::OnChange(const TabStripModelChange& change,
+                              const TabStripSelectionChange& selection) {
++  if (change.type() != TabStripModelChange::kSelectionOnly ||
++      selection.active_tab_changed()) {
++    StopMRUCycling();
++  }
+   CompleteModelUpdateTransaction();
+   OnActiveTabChanged(selection);
+ 
+@@ -4228,51 +4233,117 @@
+       profile_->GetPrefs()->GetBoolean(prefs::kTabCyclingMRU);
+ 
+   if (enable_mru) {
+-    SelectMRUTab(direction, detail);
++    SelectMRUTab(direction, detail, false);
+   } else {
+     SelectRelativeTab(direction, detail);
+   }
+ }
+ 
++void TabStripModel::PreviewMRUTab(TabRelativeDirection direction,
++                                 TabStripUserGestureDetails detail) {
++  SelectMRUTab(direction, detail, true);
++}
++
+ void TabStripModel::SelectMRUTab(TabRelativeDirection direction,
+-                                 TabStripUserGestureDetails detail) {
++                                 TabStripUserGestureDetails detail,
++                                 bool preview_only) {
++  if (!preview_only) {
++    StopMRUCycling();
++  }
++  if (count() < 2) {
++    return;
++  }
++
++  const bool starting_cycle = mru_cycle_list_.empty();
++  if (starting_cycle) {
++    for (int i = 0; i < count(); ++i) {
++      if (!tabs::TemporaryTab::IsTemporary(GetWebContentsAt(i))) {
++        mru_cycle_list_.push_back(GetTabAtIndex(i)->GetHandle());
++      }
++    }
++
++    if (mru_cycle_list_.empty()) {
++      return;
++    }
++    auto* active_tab = GetActiveTab();
++    if (const auto* marker =
++            tabs::TemporaryTab::FromWebContents(active_tab->GetContents());
++        marker && marker->is_temporary()) {
++      const int source_index = GetIndexOfWebContents(marker->source_contents());
++      if (source_index != kNoTab) {
++        active_tab = GetTabAtIndex(source_index);
++      }
++    }
++    const auto active = active_tab->GetHandle();
++    std::stable_sort(mru_cycle_list_.begin(), mru_cycle_list_.end(),
++                     [active](tabs::TabHandle a, tabs::TabHandle b) {
++                       if (a == active || b == active) {
++                         return a == active && b != active;
++                       }
++                       return a.Get()->GetContents()->GetLastActiveTimeTicks() >
++                              b.Get()->GetContents()->GetLastActiveTimeTicks();
++                     });
++    mru_cycle_index_ = 0;
++  }
++
++  if (direction == TabRelativeDirection::kNext) {
++    mru_cycle_index_ = (mru_cycle_index_ + 1) % mru_cycle_list_.size();
++  } else {
++    mru_cycle_index_ =
++        (mru_cycle_index_ + mru_cycle_list_.size() - 1) % mru_cycle_list_.size();
++  }
++  mru_cycle_gesture_ = detail;
++
++  if (!preview_only) {
++    CommitMRUCycling();
++    return;
++  }
++
++  std::vector<content::WebContents*> preview_tabs;
++  preview_tabs.reserve(mru_cycle_list_.size());
++  for (auto handle : mru_cycle_list_) {
++    auto* tab = handle.Get();
++    if (!tab || GetIndexOfTab(tab) == kNoTab ||
++        tabs::TemporaryTab::IsTemporary(tab->GetContents())) {
++      StopMRUCycling();
++      return;
++    }
++    preview_tabs.push_back(tab->GetContents());
++  }
++  content::WebContents* selected = preview_tabs[mru_cycle_index_];
++  BrowserWindowInterface* browser =
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(selected);
++  if (!browser) {
++    return;
++  }
++
++  if (BrowserView* browser_view =
++          BrowserView::GetBrowserViewForBrowser(browser)) {
++    if (starting_cycle) {
++      browser_view->StartTabCycling();
++    }
++    UpdateMRUTabSwitcherVisualizer(browser_view, preview_tabs, selected);
++  }
++}
++
++void TabStripModel::CommitMRUCycling() {
+   if (mru_cycle_list_.empty()) {
+-    BrowserWindowInterface* browser =
+-        GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+-          GetWebContentsAt(0));
+-    if (!browser) {
+-      return;
+-    }
+-
+-    for (int i = 0; i < count(); ++i) {
+-      mru_cycle_list_.push_back(i);
+-    }
+-
+-    std::sort(mru_cycle_list_.begin(), mru_cycle_list_.end(),
+-              [this](int a, int b) {
+-                return GetWebContentsAt(a)->GetLastActiveTimeTicks() >
+-                       GetWebContentsAt(b)->GetLastActiveTimeTicks();
+-              });
+-
+-    if (BrowserView* browser_view =
+-            BrowserView::GetBrowserViewForBrowser(browser)) {
+-      browser_view->StartTabCycling();
+-    }
+-  }
+-
+-  if (direction == TabRelativeDirection::kNext) {
+-    std::rotate(mru_cycle_list_.begin(), mru_cycle_list_.begin() + 1,
+-                mru_cycle_list_.end());
+-  } else {
+-    std::rotate(mru_cycle_list_.rbegin(), mru_cycle_list_.rbegin() + 1,
+-                mru_cycle_list_.rend());
+-  }
+-
+-  ActivateTabAt(mru_cycle_list_[0], detail);
++    return;
++  }
++  auto* tab = mru_cycle_list_[mru_cycle_index_].Get();
++  const int index = tab ? GetIndexOfTab(tab) : kNoTab;
++  const auto gesture = mru_cycle_gesture_;
++  // Clear the session before activation notifies observers or starts loading.
++  StopMRUCycling();
++  if (index != kNoTab && gesture) {
++    ActivateTabAt(index, *gesture);
++  }
+ }
+ 
+ void TabStripModel::StopMRUCycling() {
+   mru_cycle_list_.clear();
++  mru_cycle_index_ = 0;
++  mru_cycle_gesture_.reset();
+ }
+ 
+ void TabStripModel::SelectRelativeTab(TabRelativeDirection direction,
+Index: src/chrome/browser/ui/views/frame/browser_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_view.cc
++++ src/chrome/browser/ui/views/frame/browser_view.cc
+@@ -11,6 +11,7 @@
+ #include <optional>
+ #include <set>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/auto_reset.h"
+ #include "base/byte_size.h"
+@@ -18,6 +19,7 @@
+ #include "base/check_deref.h"
+ #include "base/check_op.h"
+ #include "base/command_line.h"
++#include "base/containers/flat_map.h"
+ #include "base/containers/flat_set.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+@@ -27,6 +29,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/raw_ref.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/metrics/user_metrics.h"
+@@ -34,6 +37,7 @@
+ #include "base/scoped_observation.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/trace_event/trace_event.h"
+@@ -126,6 +130,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_utils.h"
++#include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/toasts/toast_view.h"
+@@ -162,9 +167,15 @@
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout.h"
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.h"
+ #include "chrome/browser/ui/views/frame/main_background_region_view.h"
++#include "chrome/browser/ui/views/frame/mru_tab_preview_cache.h"
++#include "chrome/browser/ui/views/frame/mru_tab_preview_rail.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#include "ui/views/view_observer.h"
++#include "ui/views/view_shadow.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view_delegate.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view_drop_target_controller.h"
++#include "chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h"
+ #include "chrome/browser/ui/views/frame/scrim_view.h"
+ #include "chrome/browser/ui/views/frame/shadow_overlay_view.h"
+ #include "chrome/browser/ui/views/frame/tab_modal_dialog_host.h"
+@@ -350,14 +361,20 @@
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/accessibility/view_accessibility_utils.h"
+ #include "ui/views/animation/compositor_animation_runner.h"
++#include "ui/views/background.h"
++#include "ui/views/border.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+ #include "ui/views/controls/button/menu_button.h"
++#include "ui/views/controls/image_view.h"
++#include "ui/views/controls/label.h"
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/controls/webview/webview.h"
+ #include "ui/views/event_monitor.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+ #include "ui/views/interaction/view_subregion_anchor.h"
++#include "ui/views/layout/box_layout.h"
+ #include "ui/views/layout/fill_layout.h"
++#include "ui/views/style/typography.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
+ #include "ui/views/view_utils.h"
+@@ -892,6 +909,154 @@ class BrowserView::PipExclusionObserverI
+ };
+ #endif
+ 
++namespace {
++
++gfx::Size CalculateMRUPreviewSize(BrowserView* browser_view) {
++  const int available_width = std::max(browser_view->width(), 640);
++  const int available_height = std::max(browser_view->height(), 480);
++  int width = std::clamp(available_width * 48 / 100, 408, 720);
++  int height = width * 9 / 16;
++  const int maximum_height =
++      std::clamp(available_height * 48 / 100, 230, 405);
++  if (height > maximum_height) {
++    height = maximum_height;
++    width = height * 16 / 9;
++  }
++  return gfx::Size(width, height);
++}
++
++// Displays the selected tab while Ctrl+Tab walks a stable MRU snapshot.
++class MRUTabSwitcherOverlay : public views::ViewObserver {
++ public:
++  explicit MRUTabSwitcherOverlay(BrowserView* browser_view)
++      : browser_view_(browser_view) {
++    browser_view_->AddObserver(this);
++  }
++  MRUTabSwitcherOverlay(const MRUTabSwitcherOverlay&) = delete;
++  MRUTabSwitcherOverlay& operator=(const MRUTabSwitcherOverlay&) = delete;
++  ~MRUTabSwitcherOverlay() override {
++    browser_view_->RemoveObserver(this);
++    if (bubble_) {
++      auto* bubble = bubble_.get();
++      bubble_ = nullptr;
++      browser_view_->RemoveChildViewT(bubble);
++    }
++  }
++
++  void Update(const std::vector<content::WebContents*>& starting_tabs,
++              content::WebContents* selected_tab) {
++    if (!starting_tabs.empty()) {
++      tabs_ = starting_tabs;
++    }
++    const auto selected = std::find(tabs_.begin(), tabs_.end(), selected_tab);
++    if (selected == tabs_.end()) {
++      return;
++    }
++    selected_index_ = selected - tabs_.begin();
++    EnsureView();
++    bubble_->Update(tabs_, selected_index_);
++    PositionView();
++    bubble_->SetVisible(true);
++  }
++
++  class BubbleView : public views::View {
++    METADATA_HEADER(BubbleView, views::View)
++
++   public:
++    explicit BubbleView(BrowserView* browser_view)
++        : browser_view_(browser_view) {
++      GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
++      GetViewAccessibility().SetName(
++          l10n_util::GetStringUTF16(IDS_RECENT_TABS_MENU));
++      SetLayoutManager(std::make_unique<views::FillLayout>());
++      shadow_ = std::make_unique<views::ViewShadow>(this, 2);
++      shadow_->SetRoundedCornerRadius(12);
++      helium::GlassSurfaceParams params;
++      params.preset = helium::GlassSurfacePreset::kGlassmorphic;
++      params.tint_color = SK_ColorWHITE;
++      params.tint_strength = 0.0f;
++      params.opacity = 1.0f;
++      params.opaque_color = SkColorSetRGB(28, 28, 30);
++      params.corner_radii = gfx::RoundedCornersF(12);
++      glass_surface_ =
++          AddChildView(std::make_unique<helium::GlassSurfaceView>(params));
++      rail_ = AddChildView(std::make_unique<MRUTabPreviewRail>(browser_view));
++      // Keep card content above the glass layer, in the browser's render pass.
++      rail_->SetPaintToLayer();
++      rail_->layer()->SetFillsBoundsOpaquely(false);
++    }
++
++    void Update(const std::vector<content::WebContents*>& tabs, size_t selected) {
++      rail_->Update(tabs, selected);
++      SkColor background = SkColorSetRGB(28, 28, 30);
++      const bool uses_backdrop = glass_surface_->uses_backdrop();
++      if (uses_backdrop) {
++        background = browser_view_->GetColorProvider()->GetColor(
++            kColorTabHoverCardBackground);
++        auto* page = browser_view_->GetActiveWebContents();
++        auto* host = page ? page->GetRenderWidgetHostView() : nullptr;
++        if (host) {
++          if (auto color = host->GetBackgroundColor()) {
++            background = color_utils::GetResultingPaintColor(*color, background);
++          }
++        }
++      }
++      rail_->SetLabelContrast(background, uses_backdrop);
++    }
++
++    private:
++    const raw_ptr<BrowserView> browser_view_;
++    raw_ptr<helium::GlassSurfaceView> glass_surface_ = nullptr;
++    raw_ptr<MRUTabPreviewRail> rail_ = nullptr;
++    std::unique_ptr<views::ViewShadow> shadow_;
++  };
++
++ private:
++  void OnViewBoundsChanged(views::View*) override {
++    if (bubble_) {
++      bubble_->Update(tabs_, selected_index_);
++      PositionView();
++    }
++  }
++
++  void EnsureView() {
++    if (bubble_) {
++      return;
++    }
++    auto bubble = std::make_unique<BubbleView>(browser_view_);
++    bubble->SetProperty(views::kViewIgnoredByLayoutKey, true);
++    bubble->SetCanProcessEventsWithinSubtree(false);
++    bubble->SetVisible(false);
++    bubble->SetPaintToLayer();
++    bubble->layer()->SetFillsBoundsOpaquely(false);
++    bubble_ = browser_view_->AddChildView(std::move(bubble));
++  }
++
++  void PositionView() {
++    gfx::Rect bounds = browser_view_->GetLocalBounds();
++    bounds.ClampToCenteredSize(bubble_->GetPreferredSize());
++    bubble_->SetBoundsRect(bounds);
++  }
++
++  const raw_ptr<BrowserView> browser_view_;
++  std::vector<content::WebContents*> tabs_;
++  size_t selected_index_ = 0;
++  raw_ptr<BubbleView> bubble_ = nullptr;
++};
++
++BEGIN_METADATA(MRUTabSwitcherOverlay, BubbleView)
++END_METADATA
++
++using MRUTabSwitcherVisualizerMap =
++    base::flat_map<BrowserView*, std::unique_ptr<MRUTabSwitcherOverlay>>;
++
++MRUTabSwitcherVisualizerMap& GetMRUTabSwitcherVisualizers() {
++  static base::NoDestructor<MRUTabSwitcherVisualizerMap> visualizers;
++  return *visualizers;
++}
++
++}  // namespace
++
+ // Handles events during MRU tab cycling to start/stop tab cycling.
+ class TabCyclingEventHandler : public ui::EventObserver,
+                                public views::WidgetObserver {
+@@ -901,7 +1066,7 @@ class TabCyclingEventHandler : public ui
+     Start();
+   }
+ 
+-  ~TabCyclingEventHandler() override { Stop(); }
++  ~TabCyclingEventHandler() override { StopMonitoring(); }
+ 
+   TabCyclingEventHandler(const TabCyclingEventHandler&) = delete;
+   TabCyclingEventHandler& operator=(const TabCyclingEventHandler&) = delete;
+@@ -909,15 +1074,22 @@ class TabCyclingEventHandler : public ui
+  private:
+   // ui::EventObserver overrides:
+   void OnEvent(const ui::Event& event) override {
++    if (event.type() == ui::EventType::kKeyPressed &&
++        event.AsKeyEvent()->key_code() == ui::VKEY_ESCAPE) {
++      StopCycling();
++      return;
++    }
++
+     if (event.type() == ui::EventType::kKeyReleased &&
+         event.AsKeyEvent()->key_code() == ui::VKEY_CONTROL) {
+-      // Ctrl key was released, stop the tab cycling.
+-      Stop();
++      StopMonitoring();
++      // This destroys the handler. Do not access members after committing.
++      browser_view_->CommitTabCycling();
+       return;
+     }
+ 
+     if (event.type() == ui::EventType::kMousePressed) {
+-      Stop();
++      StopCycling();
+     }
+   }
+ 
+@@ -925,12 +1097,12 @@ class TabCyclingEventHandler : public ui
+   void OnWidgetActivationChanged(views::Widget* widget, bool active) override {
+     // We should stop cycling if other application gets active state.
+     if (!active) {
+-      Stop();
++      StopCycling();
+     }
+   }
+ 
+   // Handle browser widget closing while tab cycling is in-progress.
+-  void OnWidgetClosing(views::Widget* widget) override { Stop(); }
++  void OnWidgetClosing(views::Widget* widget) override { StopCycling(); }
+ 
+   void Start() {
+     // Add the event handler.
+@@ -938,37 +1110,80 @@ class TabCyclingEventHandler : public ui
+     if (widget->GetNativeWindow()) {
+       monitor_ = views::EventMonitor::CreateWindowMonitor(
+           this, widget->GetNativeWindow(),
+-          {ui::EventType::kMousePressed, ui::EventType::kKeyReleased});
++          {ui::EventType::kMousePressed, ui::EventType::kKeyPressed,
++           ui::EventType::kKeyReleased});
+     }
+     widget->AddObserver(this);
++#if BUILDFLAG(IS_MAC)
++    application_observer_ = CreateMRUTabSwitcherApplicationObserver(
++        base::BindRepeating(&TabCyclingEventHandler::StopCycling,
++                            base::Unretained(this)));
++#endif
+   }
+ 
+-  void Stop() {
++  void StopCycling() {
+     if (!monitor_) {
+       // Already stopped.
+       return;
+     }
+ 
++    StopMonitoring();
++    browser_view_->StopTabCycling();
++  }
++
++  void StopMonitoring() {
++#if BUILDFLAG(IS_MAC)
++    application_observer_.reset();
++#endif
++    if (!monitor_) {
++      return;
++    }
+     // Remove event handler.
+     auto* widget = browser_view_->GetWidget();
+     monitor_.reset();
+     widget->RemoveObserver(this);
+-    browser_view_->StopTabCycling();
+   }
+ 
+   raw_ptr<BrowserView> browser_view_;
+   std::unique_ptr<views::EventMonitor> monitor_;
++#if BUILDFLAG(IS_MAC)
++  std::unique_ptr<MRUTabSwitcherApplicationObserver> application_observer_;
++#endif
+ };
+ 
+ void BrowserView::StartTabCycling() {
++  mru_preview_cache().CaptureActiveTab();
+   tab_cycling_event_handler_ = std::make_unique<TabCyclingEventHandler>(this);
+ }
+ 
++void UpdateMRUTabSwitcherVisualizer(
++    BrowserView* browser_view,
++    const std::vector<content::WebContents*>& starting_tabs,
++    content::WebContents* selected_tab) {
++  auto& visualizer = GetMRUTabSwitcherVisualizers()[browser_view];
++  if (!visualizer) {
++    visualizer = std::make_unique<MRUTabSwitcherOverlay>(browser_view);
++  }
++  visualizer->Update(starting_tabs, selected_tab);
++}
++
++void StopMRUTabSwitcherVisualizer(BrowserView* browser_view) {
++  GetMRUTabSwitcherVisualizers().erase(browser_view);
++}
++
+ void BrowserView::StopTabCycling() {
++  StopMRUTabSwitcherVisualizer(this);
+   tab_cycling_event_handler_.reset();
+   browser()->tab_strip_model()->StopMRUCycling();
+ }
+ 
++void BrowserView::CommitTabCycling() {
++  // Remove the overlay and event observers before activation changes focus.
++  StopMRUTabSwitcherVisualizer(this);
++  tab_cycling_event_handler_.reset();
++  browser()->tab_strip_model()->CommitMRUCycling();
++}
++
+ ///////////////////////////////////////////////////////////////////////////////
+ // BrowserView, public:
+ 
+@@ -1016,6 +1231,27 @@ BrowserView::BrowserView(Browser* browse
+   zen_side_chrome_animation_.Reset(1);
+ 
+   browser_->tab_strip_model()->AddObserver(this);
++  mru_preview_cache_ = std::make_unique<MRUTabPreviewCache>(
++      browser_->tab_strip_model(),
++      base::BindRepeating(
++          [](BrowserView* view) {
++            float scale = 1.0f;
++            if (auto* widget = view->GetWidget();
++                widget && widget->GetNativeWindow()) {
++              scale = display::Screen::Get()
++                          ->GetDisplayNearestWindow(widget->GetNativeWindow())
++                          .device_scale_factor();
++            }
++            return gfx::ScaleToCeiledSize(CalculateMRUPreviewSize(view),
++                                          std::clamp(scale, 1.0f, 2.0f));
++          },
++          base::Unretained(this)),
++      base::BindRepeating(
++          [](BrowserView* view) {
++            return view->browser()->profile()->GetPrefs()->GetBoolean(
++                prefs::kTabCyclingMRU);
++          },
++          base::Unretained(this)));
+ 
+   main_background_region_ =
+       AddChildView(std::make_unique<MainBackgroundRegionView>(*this));
+@@ -1212,8 +1448,11 @@ BrowserView::BrowserView(Browser* browse
+ }
+ 
+ BrowserView::~BrowserView() {
++  StopTabCycling();
++  mru_preview_cache_.reset();
++
+   peek_controller_.reset();
+ 
+   if (browser_shortcut_service_) {
+     browser_shortcut_service_->RemoveObserver(this);
+     browser_shortcut_service_ = nullptr;
+@@ -4107,10 +4346,20 @@ void BrowserView::OnTabChangedAt(tabs::T
+   UpdateAccessibleURLForRootView(contents->GetURL());
+ }
+ 
++void BrowserView::OnTabWillBeRemoved(tabs::TabInterface* tab, int index) {
++  // Drop thumbnail observers and raw preview pointers before tab destruction.
++  StopTabCycling();
++}
++
+ void BrowserView::OnTabStripModelChanged(
+     TabStripModel* tab_strip_model,
+     const TabStripModelChange& change,
+     const TabStripSelectionChange& selection) {
++  if (tab_cycling_event_handler_ &&
++      (change.type() != TabStripModelChange::kSelectionOnly ||
++       selection.active_tab_changed())) {
++    StopTabCycling();
++  }
+   // When the active tab changes, elements in the omnibox can change, which
+   // can change its preferred size. Re-lay-out the toolbar to reflect the
+   // possible change.
+@@ -5816,6 +6065,26 @@ bool BrowserView::AcceleratorPressed(con
+ 
+   UpdateAcceleratorMetrics(accelerator, command_id);
+ 
++  // Only Ctrl+Tab holds a pending selection until Control is released. Menu,
++  // wheel, and other next/previous-tab shortcuts must activate immediately.
++  const bool next_tab = command_id == IDC_SELECT_NEXT_TAB;
++  const bool previous_tab = command_id == IDC_SELECT_PREVIOUS_TAB;
++  const bool global_mru =
++      next_tab && base::FeatureList::IsEnabled(features::kCtrlTabMru) &&
++      browser_->profile()->GetPrefs()->GetBoolean(prefs::kCtrlTabMru);
++  if ((next_tab || previous_tab) && !global_mru &&
++      accelerator.key_code() == ui::VKEY_TAB && accelerator.IsCtrlDown() &&
++      browser_->profile()->GetPrefs()->GetBoolean(prefs::kTabCyclingMRU) &&
++      chrome::IsCommandEnabled(browser_.get(), command_id)) {
++    browser_->tab_strip_model()->PreviewMRUTab(
++        next_tab ? TabStripModel::TabRelativeDirection::kNext
++                 : TabStripModel::TabRelativeDirection::kPrevious,
++        TabStripUserGestureDetails(
++            TabStripUserGestureDetails::GestureType::kKeyboard,
++            accelerator.time_stamp()));
++    return true;
++  }
++
+   if (command_id == IDC_CLEAR_BROWSING_DATA) {
+     views::ElementTrackerViews::GetInstance()->NotifyCustomEvent(
+         browsing_data_important_sites_util::
+@@ -6196,6 +6465,16 @@ void BrowserView::LoadAccelerators() {
+       browser_->GetProfile()->GetOTRProfileID().IsCaptivePortal();
+ #endif
+   std::vector<AcceleratorMapping> accelerator_list(GetAcceleratorList());
++#if BUILDFLAG(IS_MAC)
++  // The shared accelerator list omits macOS menu shortcuts. Register these
++  // locally so Cocoa's priority-accelerator dispatch reaches the modifier-held
++  // preview path instead of executing the next/previous-tab menu command.
++  accelerator_list.push_back(
++      {ui::VKEY_TAB, ui::EF_CONTROL_DOWN, IDC_SELECT_NEXT_TAB});
++  accelerator_list.push_back({ui::VKEY_TAB,
++                              ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN,
++                              IDC_SELECT_PREVIOUS_TAB});
++#endif
+   if (browser_shortcut_service_ &&
+       base::FeatureList::IsEnabled(features::kCustomizableBrowserShortcuts)) {
+     std::erase_if(accelerator_list, [this](const AcceleratorMapping& entry) {
+@@ -6239,8 +6518,18 @@ void BrowserView::LoadAccelerators() {
+     accelerator_table_[accelerator] = entry.command_id;
+ 
+     if (!already_registered) {
+-      focus_manager->RegisterAccelerator(
+-          accelerator, ui::AcceleratorManager::kNormalPriority, this);
++      auto priority = ui::AcceleratorManager::kNormalPriority;
++#if BUILDFLAG(IS_MAC)
++      // Cocoa otherwise dispatches Ctrl+Tab straight to the menu command,
++      // bypassing AcceleratorPressed and its modifier-held MRU preview.
++      if (entry.keycode == ui::VKEY_TAB &&
++          (entry.modifiers & ui::EF_CONTROL_DOWN) &&
++          (entry.command_id == IDC_SELECT_NEXT_TAB ||
++           entry.command_id == IDC_SELECT_PREVIOUS_TAB)) {
++        priority = ui::AcceleratorManager::kHighPriority;
++      }
++#endif
++      focus_manager->RegisterAccelerator(accelerator, priority, this);
+     }
+   }
+ 
+Index: src/chrome/browser/ui/views/frame/browser_view_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_view_unittest.cc
++++ src/chrome/browser/ui/views/frame/browser_view_unittest.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <memory>
+ #include <string_view>
++#include <vector>
+ 
+ #include "base/byte_size.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -36,6 +37,8 @@
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout.h"
++#include "chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h"
++#include "chrome/browser/ui/views/frame/mru_tab_preview_rail.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+@@ -48,6 +51,7 @@
+ #include "chrome/grit/branded_strings.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+ #include "chrome/test/base/testing_profile_manager.h"
++#include "components/prefs/pref_service.h"
+ #include "components/vector_icons/vector_icons.h"
+ #include "components/version_info/channel.h"
+ #include "content/public/test/navigation_simulator.h"
+@@ -59,11 +63,14 @@
+ #include "ui/base/models/dialog_model.h"
+ #include "ui/base/text/bytes_formatting.h"
+ #include "ui/base/ui_base_features.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/scrollbar_size.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
++#include "ui/views/controls/label.h"
+ #include "ui/views/bubble/bubble_dialog_model_host.h"
+ #include "ui/views/controls/webview/webview.h"
++#include "ui/views/focus/focus_manager.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+@@ -168,6 +175,155 @@ TEST_F(BrowserViewTest, BrowserView) {
+   EXPECT_EQ(customize_chrome_action->GetEnabled(), true);
+ }
+ 
++TEST_F(BrowserViewTest, MRUTabSwitcherSharesBrowserWidget) {
++  content::WebContents* active =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(active);
++  browser_view()->SetSize(gfx::Size(1000, 800));
++  const size_t original_child_count = browser_view()->children().size();
++
++  UpdateMRUTabSwitcherVisualizer(browser_view(), {active}, active);
++  ASSERT_EQ(browser_view()->children().size(), original_child_count + 1);
++  views::View* overlay = browser_view()->children().back();
++  EXPECT_EQ(overlay->GetWidget(), browser_view()->GetWidget());
++  EXPECT_FALSE(overlay->GetCanProcessEventsWithinSubtree());
++  EXPECT_FALSE(overlay->bounds().IsEmpty());
++  EXPECT_EQ(overlay->bounds().CenterPoint(),
++            browser_view()->GetLocalBounds().CenterPoint());
++
++  size_t label_count = 0;
++  std::vector<views::View*> descendants{overlay};
++  while (!descendants.empty()) {
++    views::View* view = descendants.back();
++    descendants.pop_back();
++    if (auto* label = views::AsViewClass<views::Label>(view)) {
++      ++label_count;
++      EXPECT_FALSE(label->GetSubpixelRenderingEnabled());
++      EXPECT_GE(color_utils::GetContrastRatio(label->GetEnabledColor(),
++                                              label->GetBackgroundColor()),
++                4.5f);
++    }
++    descendants.insert(descendants.end(), view->children().begin(),
++                       view->children().end());
++  }
++  EXPECT_EQ(label_count, 2u);
++
++  browser_view()->SetSize(gfx::Size(1200, 900));
++  EXPECT_EQ(overlay->bounds().CenterPoint(),
++            browser_view()->GetLocalBounds().CenterPoint());
++
++  StopMRUTabSwitcherVisualizer(browser_view());
++  EXPECT_EQ(browser_view()->children().size(), original_child_count);
++}
++
++TEST_F(BrowserViewTest, MRURailKeepsFiveCardsAndFitsNarrowWindows) {
++  std::vector<content::WebContents*> tabs;
++  for (int i = 0; i < 7; ++i) {
++    AddTab(browser(), GURL("https://rail.test/"));
++    tabs.push_back(browser()->tab_strip_model()->GetActiveWebContents());
++  }
++  auto* active = browser()->tab_strip_model()->GetActiveWebContents();
++  browser_view()->SetSize(gfx::Size(1200, 800));
++  UpdateMRUTabSwitcherVisualizer(browser_view(), tabs, tabs[1]);
++  views::View* overlay = browser_view()->children().back();
++  MRUTabPreviewRail* rail = nullptr;
++  for (views::View* child : overlay->children()) {
++    if (auto* candidate = views::AsViewClass<MRUTabPreviewRail>(child)) {
++      rail = candidate;
++    }
++  }
++  ASSERT_TRUE(rail);
++  EXPECT_EQ(rail->children().front()->children().size(), 5u);
++  UpdateMRUTabSwitcherVisualizer(browser_view(), {}, tabs[6]);
++  EXPECT_EQ(rail->children().front()->children().size(), 5u);
++  EXPECT_EQ(active, browser()->tab_strip_model()->GetActiveWebContents());
++  browser_view()->SetSize(gfx::Size(400, 600));
++  EXPECT_EQ(rail->children().front()->children().size(), 2u);
++  EXPECT_LE(overlay->width(), browser_view()->width());
++  EXPECT_EQ(overlay->bounds().CenterPoint(),
++            browser_view()->GetLocalBounds().CenterPoint());
++  StopMRUTabSwitcherVisualizer(browser_view());
++}
++
++TEST_F(BrowserViewTest,
++       MRUTabSwitcherVisualizerStopsOnWindowDeactivation) {
++  content::WebContents* active =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  ASSERT_TRUE(active);
++  const size_t original_child_count = browser_view()->children().size();
++
++  browser_view()->StartTabCycling();
++  UpdateMRUTabSwitcherVisualizer(browser_view(), {active}, active);
++  EXPECT_EQ(browser_view()->children().size(), original_child_count + 1);
++  browser_view()->browser_widget()->OnNativeWidgetActivationChanged(false);
++  content::RunAllTasksUntilIdle();
++  EXPECT_EQ(browser_view()->children().size(), original_child_count);
++}
++
++TEST_F(BrowserViewTest, MRUTabPreviewCommitsOnlyWhenAccepted) {
++#if BUILDFLAG(IS_MAC)
++  EXPECT_TRUE(browser_view()->GetFocusManager()->HasPriorityHandler(
++      ui::Accelerator(ui::VKEY_TAB, ui::EF_CONTROL_DOWN)));
++  EXPECT_TRUE(browser_view()->GetFocusManager()->HasPriorityHandler(
++      ui::Accelerator(ui::VKEY_TAB, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN)));
++  EXPECT_FALSE(browser_view()->GetFocusManager()->HasPriorityHandler(
++      ui::Accelerator(ui::VKEY_L, ui::EF_COMMAND_DOWN)));
++#endif
++  AddTab(browser(), GURL("https://first.test/"));
++  auto* candidate = browser()->tab_strip_model()->GetActiveWebContents();
++  AddTab(browser(), GURL("https://second.test/"));
++  auto* model = browser()->tab_strip_model();
++  browser()->profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, true);
++  auto* original = model->GetActiveWebContents();
++  auto* focus_manager = browser_view()->GetFocusManager();
++  const ui::Accelerator next(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
++  const ui::Accelerator previous(ui::VKEY_TAB,
++                                 ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
++  ASSERT_TRUE(focus_manager->IsAcceleratorRegistered(next));
++  ASSERT_TRUE(focus_manager->IsAcceleratorRegistered(previous));
++  EXPECT_TRUE(focus_manager->ProcessAccelerator(next));
++  EXPECT_EQ(original, model->GetActiveWebContents());
++  browser_view()->CommitTabCycling();
++  EXPECT_EQ(candidate, model->GetActiveWebContents());
++
++  EXPECT_TRUE(focus_manager->ProcessAccelerator(previous));
++  EXPECT_EQ(candidate, model->GetActiveWebContents());
++  browser_view()->CommitTabCycling();
++  EXPECT_EQ(original, model->GetActiveWebContents());
++}
++
++TEST_F(BrowserViewTest, MRUTabPreviewCancellationDoesNotActivateCandidate) {
++  AddTab(browser(), GURL("https://first.test/"));
++  AddTab(browser(), GURL("https://second.test/"));
++  auto* model = browser()->tab_strip_model();
++  browser()->profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, true);
++  auto* original = model->GetActiveWebContents();
++  model->PreviewMRUTab(TabStripModel::TabRelativeDirection::kNext);
++  browser_view()->StopTabCycling();
++  browser_view()->CommitTabCycling();
++  EXPECT_EQ(original, model->GetActiveWebContents());
++
++  model->PreviewMRUTab(TabStripModel::TabRelativeDirection::kNext);
++  browser_view()->browser_widget()->OnNativeWidgetActivationChanged(false);
++  browser_view()->CommitTabCycling();
++  EXPECT_EQ(original, model->GetActiveWebContents());
++}
++
++TEST_F(BrowserViewTest, MRUTabPreviewClosesSafelyWhenCandidateIsRemoved) {
++  AddTab(browser(), GURL("https://first.test/"));
++  auto* candidate = browser()->tab_strip_model()->GetActiveWebContents();
++  AddTab(browser(), GURL("https://second.test/"));
++  auto* model = browser()->tab_strip_model();
++  browser()->profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, true);
++  auto* original = model->GetActiveWebContents();
++  model->PreviewMRUTab(TabStripModel::TabRelativeDirection::kNext);
++  model->CloseWebContentsAt(model->GetIndexOfWebContents(candidate),
++                           TabCloseTypes::CLOSE_NONE);
++  browser_view()->CommitTabCycling();
++  EXPECT_EQ(original, model->GetActiveWebContents());
++  content::RunAllTasksUntilIdle();
++}
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ TEST_F(BrowserViewTest, OnTaskLockedBrowserView) {
+   Browser* const browser = browser_view()->browser();
+Index: src/chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h
+@@ -0,0 +1,36 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_SWITCHER_VISUALIZER_H_
++#define CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_SWITCHER_VISUALIZER_H_
++
++#include <memory>
++#include <vector>
++
++#include "base/functional/callback_forward.h"
++#include "build/build_config.h"
++
++class BrowserView;
++
++namespace content {
++class WebContents;
++}
++
++void UpdateMRUTabSwitcherVisualizer(
++    BrowserView* browser_view,
++    const std::vector<content::WebContents*>& starting_tabs,
++    content::WebContents* selected_tab);
++void StopMRUTabSwitcherVisualizer(BrowserView* browser_view);
++
++#if BUILDFLAG(IS_MAC)
++class MRUTabSwitcherApplicationObserver {
++ public:
++  virtual ~MRUTabSwitcherApplicationObserver() = default;
++};
++
++std::unique_ptr<MRUTabSwitcherApplicationObserver>
++CreateMRUTabSwitcherApplicationObserver(base::RepeatingClosure callback);
++#endif
++
++#endif  // CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_SWITCHER_VISUALIZER_H_
+Index: src/chrome/browser/ui/views/frame/mru_tab_switcher_visualizer_mac.mm
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/frame/mru_tab_switcher_visualizer_mac.mm
+@@ -0,0 +1,49 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#import <AppKit/AppKit.h>
++
++#include "chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h"
++
++#include <memory>
++#include <utility>
++
++#include "base/functional/callback.h"
++
++namespace {
++
++class MRUTabSwitcherApplicationObserverMac final
++    : public MRUTabSwitcherApplicationObserver {
++ public:
++  explicit MRUTabSwitcherApplicationObserverMac(
++      base::RepeatingClosure callback) {
++    observer_ = [NSNotificationCenter.defaultCenter
++        addObserverForName:NSApplicationDidResignActiveNotification
++                    object:nil
++                     queue:nil
++                usingBlock:^(NSNotification*) {
++                  callback.Run();
++                }];
++  }
++
++  MRUTabSwitcherApplicationObserverMac(
++      const MRUTabSwitcherApplicationObserverMac&) = delete;
++  MRUTabSwitcherApplicationObserverMac& operator=(
++      const MRUTabSwitcherApplicationObserverMac&) = delete;
++
++  ~MRUTabSwitcherApplicationObserverMac() override {
++    [NSNotificationCenter.defaultCenter removeObserver:observer_];
++  }
++
++ private:
++  id __strong observer_;
++};
++
++}  // namespace
++
++std::unique_ptr<MRUTabSwitcherApplicationObserver>
++CreateMRUTabSwitcherApplicationObserver(base::RepeatingClosure callback) {
++  return std::make_unique<MRUTabSwitcherApplicationObserverMac>(
++      std::move(callback));
++}
+Index: src/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
++++ src/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+@@ -47,8 +47,10 @@
+ #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/common/chrome_features.h"
++#include "chrome/common/pref_names.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+ #include "chrome/test/base/testing_profile.h"
++#include "components/prefs/pref_service.h"
+ #include "components/commerce/core/commerce_utils.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/split_tabs/split_tab_id.h"
+@@ -788,6 +790,125 @@ TEST_F(TabStripModelTest, TestBasicAPI)
+   tabstrip()->RemoveObserver(observer());
+ }
+ 
++class MRUTabCyclingTest : public TabStripModelTest {
++ public:
++  void PreviewNext() {
++    tabstrip()->PreviewMRUTab(TabStripModel::TabRelativeDirection::kNext);
++  }
++  void PreviewPrevious() {
++    tabstrip()->PreviewMRUTab(TabStripModel::TabRelativeDirection::kPrevious);
++  }
++  void SetUp() override {
++    TabStripModelTest::SetUp();
++    PrepareTabs(tabstrip(), 3);
++    profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, true);
++    const auto now = base::TimeTicks::Now();
++    for (int i = 0; i < 3; ++i) {
++      content::WebContentsTester::For(tabstrip()->GetWebContentsAt(i))
++          ->SetLastActiveTimeTicks(now - base::Seconds(2 - i));
++    }
++  }
++};
++
++TEST_F(MRUTabCyclingTest, PreviewDoesNotActivateOrChangeRecency) {
++  const auto previous_recency =
++      tabstrip()->GetWebContentsAt(1)->GetLastActiveTimeTicks();
++  PreviewNext();
++  EXPECT_EQ(2, tabstrip()->active_index());
++  EXPECT_EQ(previous_recency,
++            tabstrip()->GetWebContentsAt(1)->GetLastActiveTimeTicks());
++  PreviewNext();
++  EXPECT_EQ(2, tabstrip()->active_index());
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(0, tabstrip()->active_index());
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(0, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, ReversePreviewCommitsLeastRecentTab) {
++  PreviewPrevious();
++  EXPECT_EQ(2, tabstrip()->active_index());
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(0, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, CancelLeavesOriginalTabAndStartsFreshSnapshot) {
++  PreviewNext();
++  PreviewNext();
++  tabstrip()->StopMRUCycling();
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(2, tabstrip()->active_index());
++  PreviewNext();
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(1, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, PreviewWrapsAndReversesWithoutActivation) {
++  for (int i = 0; i < 4; ++i) {
++    PreviewNext();
++    EXPECT_EQ(2, tabstrip()->active_index());
++  }
++  PreviewPrevious();
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(2, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, ClosingPreviewCancelsPendingActivation) {
++  auto* original = tabstrip()->GetActiveWebContents();
++  PreviewNext();
++  tabstrip()->CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(original, tabstrip()->GetActiveWebContents());
++  PreviewNext();
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(0, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, MovingTabsCancelsPendingActivation) {
++  auto* original = tabstrip()->GetActiveWebContents();
++  PreviewNext();
++  tabstrip()->MoveWebContentsAt(0, 1, false);
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(original, tabstrip()->GetActiveWebContents());
++}
++
++TEST_F(MRUTabCyclingTest, InsertingTabCancelsPendingActivation) {
++  auto* original = tabstrip()->GetActiveWebContents();
++  PreviewNext();
++  tabstrip()->AppendWebContents(CreateWebContentsWithID(3), false);
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(original, tabstrip()->GetActiveWebContents());
++}
++
++TEST_F(MRUTabCyclingTest, ReplacingPreviewCancelsPendingActivation) {
++  auto* original = tabstrip()->GetActiveWebContents();
++  PreviewNext();
++  auto replaced =
++      tabstrip()->DiscardWebContentsAt(1, CreateWebContentsWithID(3));
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(original, tabstrip()->GetActiveWebContents());
++}
++
++TEST_F(MRUTabCyclingTest, ExternalActivationCancelsPendingSelection) {
++  PreviewNext();
++  tabstrip()->ActivateTabAt(0);
++  tabstrip()->CommitMRUCycling();
++  EXPECT_EQ(0, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, OrdinaryMRUCommandsActivateImmediately) {
++  tabstrip()->SelectNextTab();
++  EXPECT_EQ(1, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, DisabledMRUStillActivatesImmediately) {
++  profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, false);
++  tabstrip()->SelectNextTab();
++  EXPECT_EQ(0, tabstrip()->active_index());
++  tabstrip()->SelectPreviousTab();
++  EXPECT_EQ(2, tabstrip()->active_index());
++}
++
+ TEST_F(TabStripModelTest, TestTabHandlesStaticTabstrip) {
+   tabstrip()->AppendWebContents(CreateWebContentsWithID(1), true);
+   const tabs::TabHandle handle1 = tabstrip()->GetTabAtIndex(0)->GetHandle();
+Index: src/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_thumbnail_observer.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_thumbnail_observer.h
++++ src/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_thumbnail_observer.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_VIEWS_TABS_HOVERCARD_TAB_HOVER_CARD_THUMBNAIL_OBSERVER_H_
+ 
+ #include <memory>
++#include <optional>
+ 
+ #include "base/callback_list.h"
+ #include "chrome/browser/ui/thumbnails/thumbnail_image.h"
+@@ -26,6 +27,8 @@ class TabHoverCardThumbnailObserver {
+   // retrieve a valid thumbnail.
+   void Observe(scoped_refptr<ThumbnailImage> thumbnail_image);
+ 
++  void SetSizeHint(std::optional<gfx::Size> size_hint);
++
+   // Returns the current (most recent) thumbnail being watched.
+   const scoped_refptr<ThumbnailImage>& current_image() const {
+     return current_image_;
+@@ -39,6 +42,7 @@ class TabHoverCardThumbnailObserver {
+ 
+   scoped_refptr<ThumbnailImage> current_image_;
+   std::unique_ptr<ThumbnailImage::Subscription> subscription_;
++  std::optional<gfx::Size> size_hint_;
+   base::RepeatingCallbackList<CallbackSignature> callback_list_;
+ };
+ 
+Index: src/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_thumbnail_observer.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_thumbnail_observer.cc
++++ src/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_thumbnail_observer.cc
+@@ -27,7 +27,8 @@ void TabHoverCardThumbnailObserver::Obse
+     return;
+   }
+ 
+-  subscription_->SetSizeHint(TabStyle::Get()->GetPreviewImageSize());
++  subscription_->SetSizeHint(
++      size_hint_.value_or(TabStyle::Get()->GetPreviewImageSize()));
+   subscription_->SetUncompressedImageCallback(base::BindRepeating(
+       &TabHoverCardThumbnailObserver::ThumbnailImageCallback,
+       base::Unretained(this), base::Unretained(current_image_.get())));
+@@ -35,6 +36,11 @@ void TabHoverCardThumbnailObserver::Obse
+   current_image_->RequestThumbnailImage();
+ }
+ 
++void TabHoverCardThumbnailObserver::SetSizeHint(
++    std::optional<gfx::Size> size_hint) {
++  size_hint_ = size_hint;
++}
++
+ base::CallbackListSubscription TabHoverCardThumbnailObserver::AddCallback(
+     Callback callback) {
+   return callback_list_.Add(callback);
+Index: src/chrome/browser/ui/tabs/tab_strip_model.h
+===================================================================
+--- src.orig/chrome/browser/ui/tabs/tab_strip_model.h
++++ src/chrome/browser/ui/tabs/tab_strip_model.h
+@@ -617,8 +617,18 @@ class TabStripModel {
+       TabStripUserGestureDetails detail = TabStripUserGestureDetails(
+           TabStripUserGestureDetails::GestureType::kOther));
+ 
+-  // Stops cycling through tabs in MRU order when Ctrl is released.
+-  // Used in BrowserView::StopTabCycling().
++  enum class TabRelativeDirection { kNext, kPrevious };
++
++  // Advances a pending MRU selection without activating it. Only modifier-held
++  // switcher gestures use this; ordinary tab commands still activate at once.
++  void PreviewMRUTab(TabRelativeDirection direction,
++                     TabStripUserGestureDetails detail = TabStripUserGestureDetails(
++                         TabStripUserGestureDetails::GestureType::kKeyboard));
++
++  // Activates the pending MRU preview once, when Ctrl is released.
++  void CommitMRUCycling();
++
++  // Cancels the pending MRU preview without changing the active tab.
+   void StopMRUCycling();
+ 
+   // Moves the active in the specified direction. Respects group boundaries.
+@@ -1194,14 +1204,6 @@ class TabStripModel {
+   // Close all tabs in the given |group| at once.
+   void CloseAllTabsInGroupImpl(const tab_groups::TabGroupId& group);
+ 
+-  // Direction of relative tab movements or selections. kNext indicates moving
+-  // forward (positive increment) in the tab strip. kPrevious indicates
+-  // backward (negative increment).
+-  enum class TabRelativeDirection {
+-    kNext,
+-    kPrevious,
+-  };
+-
+   // Selects either the next tab or the previous tab.
+   // Uses MRU order if the user prefers it.
+   void SelectRelativeTabCycle(TabRelativeDirection direction,
+@@ -1210,7 +1212,8 @@ class TabStripModel {
+   // Selects either the most recently used tab
+   // or the least recently used tab.
+   void SelectMRUTab(TabRelativeDirection direction,
+-                    TabStripUserGestureDetails detail);
++                    TabStripUserGestureDetails detail,
++                    bool preview_only);
+ 
+   // Selects either the next tab (kNext), or the previous tab (kPrevious).
+   void SelectRelativeTab(TabRelativeDirection direction,
+@@ -1511,8 +1514,11 @@ class TabStripModel {
+   // The focused group. If no group is focused, this is nullopt.
+   std::optional<tab_groups::TabGroupId> focused_group_;
+ 
+-  // List of tabs for MRU cycling
+-  std::vector<int> mru_cycle_list_;
++  // Stable MRU snapshot. Previewing does not activate a tab or update recency.
++  // Structural changes and external activation cancel the snapshot.
++  std::vector<tabs::TabHandle> mru_cycle_list_;
++  size_t mru_cycle_index_ = 0;
++  std::optional<TabStripUserGestureDetails> mru_cycle_gesture_;
+ 
+   base::WeakPtrFactory<TabStripModel> weak_factory_{this};
+ };
+Index: src/chrome/browser/ui/views/frame/browser_view.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_view.h
++++ src/chrome/browser/ui/views/frame/browser_view.h
+@@ -90,6 +90,7 @@ class ExclusiveAccessBubbleViewsContext;
+ class HeliumLayoutStateController;
+ class InfoBarContainerView;
+ class LocationBarView;
++class MRUTabPreviewCache;
+ class MultiContentsView;
+ class ProjectsPanelView;
+ class ScrimView;
+@@ -602,7 +603,9 @@ class BrowserView : public BrowserWindow
+   BrowserView* AsBrowserView() override;
+   void ShowUpdateChromeDialog() override;
+   void StartTabCycling();
++  void CommitTabCycling();
+   void StopTabCycling();
++  MRUTabPreviewCache& mru_preview_cache() { return *mru_preview_cache_; }
+   void ShowIntentPickerBubble(
+       std::vector<IntentPickerBubbleView::AppInfo> app_info,
+       bool show_stay_in_chrome,
+@@ -673,6 +676,7 @@ class BrowserView : public BrowserWindow
+       bool is_tab_modal_popup_deprecated) override;
+ 
+   // TabStripModelObserver:
++  void OnTabWillBeRemoved(tabs::TabInterface* tab, int index) override;
+   void OnTabStripModelChanged(
+       TabStripModel* tab_strip_model,
+       const TabStripModelChange& change,
+@@ -1479,6 +1483,8 @@ class BrowserView : public BrowserWindow
+       tab_strip_web_apps_reparented_state_;
+ 
+   std::unique_ptr<TabCyclingEventHandler> tab_cycling_event_handler_;
++  // Retained across switcher sessions; destroyed before the tab model.
++  std::unique_ptr<MRUTabPreviewCache> mru_preview_cache_;
+ 
+   // Zen mode state.
+   std::unique_ptr<views::EventMonitor> zen_mode_event_monitor_;
+Index: src/chrome/browser/ui/thumbnails/thumbnail_image.cc
+===================================================================
+--- src.orig/chrome/browser/ui/thumbnails/thumbnail_image.cc
++++ src/chrome/browser/ui/thumbnails/thumbnail_image.cc
+@@ -99,6 +99,7 @@ void ThumbnailImage::ClearData() {
+   const bool should_notify = !!data_;
+ 
+   data_.reset();
++  ++cached_data_generation_;
+   thumbnail_id_ = base::Token();
+ 
+   // Notify observers of the new, blank thumbnail.
+@@ -126,6 +127,42 @@ size_t ThumbnailImage::GetCompressedData
+   return data_->data.size();
+ }
+ 
++void ThumbnailImage::RequestCachedImage(
++    const gfx::Size& size_hint,
++    base::OnceCallback<void(gfx::ImageSkia)> callback) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (!data_) {
++    std::move(callback).Run(gfx::ImageSkia());
++    return;
++  }
++
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE,
++      {base::TaskPriority::USER_VISIBLE,
++       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
++      base::BindOnce(&ThumbnailImage::UncompressImage, data_),
++      base::BindOnce(&ThumbnailImage::OnCachedImageDecoded,
++                     weak_ptr_factory_.GetWeakPtr(), thumbnail_id_, data_,
++                     size_hint, std::move(callback)));
++}
++
++void ThumbnailImage::OnCachedImageDecoded(
++    base::Token thumbnail_id,
++    CompressedThumbnailData data,
++    gfx::Size size_hint,
++    base::OnceCallback<void(gfx::ImageSkia)> callback,
++    gfx::ImageSkia image) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  // AssignSkBitmap changes the token before the replacement JPEG arrives, so
++  // the data identity must also match a request made during that interval.
++  if (thumbnail_id != thumbnail_id_ || data != data_) {
++    image = gfx::ImageSkia();
++  } else if (!image.isNull() && !size_hint.IsEmpty()) {
++    image = CropPreviewImage(image, size_hint);
++  }
++  std::move(callback).Run(std::move(image));
++}
++
+ void ThumbnailImage::AssignJPEGData(base::Token thumbnail_id,
+                                     base::TimeTicks assign_sk_bitmap_time,
+                                     std::optional<uint64_t> frame_id_for_trace,
+@@ -141,6 +178,7 @@ void ThumbnailImage::AssignJPEGData(base
+ 
+   data_ = base::MakeRefCounted<base::RefCountedData<std::vector<uint8_t>>>(
+       std::move(data));
++  ++cached_data_generation_;
+ 
+   // We select a TRACE_EVENT_* macro based on |frame_id|'s presence.
+   // Since these are scoped traces, the macro invocation must be in the
+Index: src/chrome/browser/ui/thumbnails/thumbnail_image.h
+===================================================================
+--- src.orig/chrome/browser/ui/thumbnails/thumbnail_image.h
++++ src/chrome/browser/ui/thumbnails/thumbnail_image.h
+@@ -158,6 +158,15 @@ class ThumbnailImage : public base::RefC
+   // Observer::OnCompressedThumbnailDataAvailable().
+   void RequestCompressedThumbnailData();
+ 
++  // Decodes only the currently cached JPEG, without subscribing or asking the
++  // delegate to capture or load the tab. An empty size hint leaves it uncropped;
++  // otherwise cropping follows Subscription::SetSizeHint(). The callback runs
++  // on this sequence, synchronously on a cache miss and asynchronously on a hit.
++  // It receives an empty image if decoding fails or the data changes while
++  // decoding. Destroying this ThumbnailImage cancels the callback.
++  void RequestCachedImage(const gfx::Size& size_hint,
++                          base::OnceCallback<void(gfx::ImageSkia)> callback);
++
+   // Returns the size of the compressed data backing this thumbnail.
+   // This size can be 0. Additionally, since this data is refcounted,
+   // it's possible this returns 0 even if the data is still allocated. A
+@@ -170,6 +179,8 @@ class ThumbnailImage : public base::RefC
+   }
+ 
+   CompressedThumbnailData data() { return data_; }
++  // Revision of the stored JPEG, not of a capture still being compressed.
++  uint64_t cached_data_generation() const { return cached_data_generation_; }
+ 
+  private:
+   friend class Delegate;
+@@ -186,6 +197,12 @@ class ThumbnailImage : public base::RefC
+   void NotifyUncompressedDataObservers(base::Token thumbnail_id,
+                                        gfx::ImageSkia image);
+   void NotifyCompressedDataObservers(CompressedThumbnailData data);
++  void OnCachedImageDecoded(
++      base::Token thumbnail_id,
++      CompressedThumbnailData data,
++      gfx::Size size_hint,
++      base::OnceCallback<void(gfx::ImageSkia)> callback,
++      gfx::ImageSkia image);
+ 
+   static std::vector<uint8_t> CompressBitmap(SkBitmap bitmap,
+                                              std::optional<uint64_t> frame_id);
+@@ -205,6 +222,7 @@ class ThumbnailImage : public base::RefC
+   // |data_| itself can be changed as this does not affect references to
+   // the old data.
+   CompressedThumbnailData data_;
++  uint64_t cached_data_generation_ = 0;
+ 
+   // A randomly generated ID associated with each image assigned by
+   // AssignSkBitmap().
+Index: src/chrome/browser/ui/thumbnails/thumbnail_image_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/thumbnails/thumbnail_image_unittest.cc
++++ src/chrome/browser/ui/thumbnails/thumbnail_image_unittest.cc
+@@ -12,6 +12,8 @@
+ #include "base/memory/weak_ptr.h"
+ #include "base/run_loop.h"
+ #include "base/test/task_environment.h"
++#include "base/test/test_future.h"
++#include "base/time/time.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkBitmap.h"
+ #include "ui/gfx/image/image_skia.h"
+@@ -86,17 +88,87 @@ class ThumbnailImageTest : public testin
+ 
+   bool is_being_observed() const { return is_being_observed_; }
+ 
++  int observation_change_count() const { return observation_change_count_; }
++
++  void ReplaceJPEGData(ThumbnailImage* image, std::vector<uint8_t> data) {
++    image->AssignJPEGData(image->thumbnail_id_, base::TimeTicks::Now(),
++                          std::nullopt, std::move(data));
++  }
++
+  private:
+   void ThumbnailImageBeingObservedChanged(bool is_being_observed) override {
++    ++observation_change_count_;
+     is_being_observed_ = is_being_observed;
+   }
+ 
+   bool is_being_observed_ = false;
++  int observation_change_count_ = 0;
+   base::test::TaskEnvironment task_environment_;
+ };
+ 
+ using Subscription = ThumbnailImage::Subscription;
+ 
++TEST_F(ThumbnailImageTest, CachedImageMissDoesNotObserve) {
++  auto image = base::MakeRefCounted<ThumbnailImage>(this);
++  base::test::TestFuture<gfx::ImageSkia> result;
++  image->RequestCachedImage(gfx::Size(100, 100), result.GetCallback());
++  EXPECT_TRUE(result.Get().isNull());
++  EXPECT_EQ(0, observation_change_count());
++}
++
++TEST_F(ThumbnailImageTest, CachedImageDecodesAndCropsWithoutObserving) {
++  auto data = base::MakeRefCounted<base::RefCountedData<std::vector<uint8_t>>>(
++      Compress(gfx::test::CreateBitmap(kTestBitmapWidth, kTestBitmapHeight)));
++  auto image = base::MakeRefCounted<ThumbnailImage>(this, data);
++  base::test::TestFuture<gfx::ImageSkia> result;
++  image->RequestCachedImage(gfx::Size(100, 100), result.GetCallback());
++  ASSERT_FALSE(result.Get().isNull());
++  EXPECT_EQ(gfx::Size(kTestBitmapHeight, kTestBitmapHeight), result.Get().size());
++  EXPECT_EQ(0, observation_change_count());
++}
++
++TEST_F(ThumbnailImageTest, CachedImageClearCompletesWithEmptyImage) {
++  auto data = base::MakeRefCounted<base::RefCountedData<std::vector<uint8_t>>>(
++      Compress(gfx::test::CreateBitmap(kTestBitmapWidth, kTestBitmapHeight)));
++  auto image = base::MakeRefCounted<ThumbnailImage>(this, data);
++  base::test::TestFuture<gfx::ImageSkia> result;
++  image->RequestCachedImage(gfx::Size(), result.GetCallback());
++  image->ClearData();
++  EXPECT_TRUE(result.Get().isNull());
++  EXPECT_EQ(0, observation_change_count());
++}
++
++TEST_F(ThumbnailImageTest, CachedImageNewBitmapCompletesWithEmptyImage) {
++  auto data = base::MakeRefCounted<base::RefCountedData<std::vector<uint8_t>>>(
++      Compress(gfx::test::CreateBitmap(kTestBitmapWidth, kTestBitmapHeight)));
++  auto image = base::MakeRefCounted<ThumbnailImage>(this, data);
++  base::test::TestFuture<gfx::ImageSkia> result;
++  image->RequestCachedImage(gfx::Size(), result.GetCallback());
++  image->AssignSkBitmap(gfx::test::CreateBitmap(100, 100));
++  EXPECT_TRUE(result.Get().isNull());
++}
++
++TEST_F(ThumbnailImageTest, CachedImageReplacementWithSameTokenIsRejected) {
++  auto data = base::MakeRefCounted<base::RefCountedData<std::vector<uint8_t>>>(
++      Compress(gfx::test::CreateBitmap(kTestBitmapWidth, kTestBitmapHeight)));
++  auto image = base::MakeRefCounted<ThumbnailImage>(this, data);
++  base::test::TestFuture<gfx::ImageSkia> result;
++  image->RequestCachedImage(gfx::Size(), result.GetCallback());
++  ReplaceJPEGData(image.get(), Compress(gfx::test::CreateBitmap(100, 100)));
++  EXPECT_TRUE(result.Get().isNull());
++  EXPECT_EQ(0, observation_change_count());
++}
++
++TEST_F(ThumbnailImageTest, CachedImageInvalidJPEGCompletesWithEmptyImage) {
++  auto data = base::MakeRefCounted<base::RefCountedData<std::vector<uint8_t>>>(
++      std::vector<uint8_t>{0, 1, 2});
++  auto image = base::MakeRefCounted<ThumbnailImage>(this, data);
++  base::test::TestFuture<gfx::ImageSkia> result;
++  image->RequestCachedImage(gfx::Size(), result.GetCallback());
++  EXPECT_TRUE(result.Get().isNull());
++  EXPECT_EQ(0, observation_change_count());
++}
++
+ TEST_F(ThumbnailImageTest, AddRemoveSubscriber) {
+   auto image = base::MakeRefCounted<ThumbnailImage>(this);
+   EXPECT_FALSE(is_being_observed());
+Index: src/chrome/browser/ui/views/frame/mru_tab_preview_cache.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/mru_tab_preview_cache.cc
++++ src/chrome/browser/ui/views/frame/mru_tab_preview_cache.cc
+@@ -0,0 +1,427 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/frame/mru_tab_preview_cache.h"
++
++#include <algorithm>
++#include <cmath>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/numerics/checked_math.h"
++#include "base/task/bind_post_task.h"
++#include "base/time/time.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/thumbnails/thumbnail_image.h"
++#include "chrome/browser/ui/thumbnails/thumbnail_tab_helper.h"
++#include "components/viz/common/frame_sinks/copy_output_result.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_widget_host_view.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/gfx/image/image_skia_rep.h"
++
++MRUTabPreviewCache::MRUTabPreviewCache(
++    TabStripModel* model,
++    base::RepeatingCallback<gfx::Size()> capture_size_pixels,
++    base::RepeatingCallback<bool()> enabled)
++    : model_(model),
++      capture_size_pixels_(std::move(capture_size_pixels)),
++      enabled_(std::move(enabled)),
++      memory_registration_("MRUTabPreviewCache", std::nullopt, this) {
++  OnUpdateMemoryLimit();
++  model_->AddObserver(this);
++  WatchActiveTab();
++}
++
++MRUTabPreviewCache::~MRUTabPreviewCache() {
++  model_->RemoveObserver(this);
++}
++
++gfx::ImageSkia MRUTabPreviewCache::Get(tabs::TabHandle handle) {
++  auto it = std::ranges::find(entries_, handle, &Entry::handle);
++  if (it == entries_.end()) {
++    return {};
++  }
++  auto* tab = handle.Get();
++  auto* helper = tab ? ThumbnailTabHelper::FromWebContents(tab->GetContents())
++                     : nullptr;
++  // Discard deliberately retains a last-good image. A live document change
++  // invalidates it, even when navigation reused the same RenderFrameHost.
++  if (!IsCurrent(handle, it->contents, it->document) &&
++      !(tab && model_->GetIndexOfTab(tab) != TabStripModel::kNoTab && helper &&
++        helper->is_tab_discarded())) {
++    bytes_ -= it->bytes;
++    entries_.erase(it);
++    return {};
++  }
++  entries_.splice(entries_.begin(), entries_, it);
++  return entries_.front().image;
++}
++
++void MRUTabPreviewCache::Request(tabs::TabHandle handle,
++                                 gfx::Size size,
++                                 ImageCallback callback, bool high_priority) {
++  auto image = Get(handle);
++  if (!image.isNull()) {
++    auto* tab = handle.Get();
++    auto* helper = ThumbnailTabHelper::FromWebContents(tab->GetContents());
++    const auto& entry = entries_.front();
++    if (entry.sharp || !helper ||
++        entry.thumbnail_generation == helper->thumbnail()->cached_data_generation()) {
++      std::move(callback).Run(std::move(image));
++      return;
++    }
++  }
++  Enqueue(handle, size, std::move(callback), high_priority);
++}
++
++void MRUTabPreviewCache::Prefetch(tabs::TabHandle handle, gfx::Size size) {
++  if (!Get(handle).isNull()) {
++    auto* helper = ThumbnailTabHelper::FromWebContents(handle.Get()->GetContents());
++    const auto& entry = entries_.front();
++    if (entry.sharp || !helper || entry.thumbnail_generation ==
++                                     helper->thumbnail()->cached_data_generation()) {
++      return;
++    }
++  }
++  Enqueue(handle, size, {}, false);
++}
++
++void MRUTabPreviewCache::Enqueue(tabs::TabHandle handle,
++                                 gfx::Size size,
++                                 ImageCallback callback, bool high_priority) {
++  size = BoundCaptureSize(size, size);
++  if (!enabled_.Run() || !budget_ || size.IsEmpty()) {
++    if (callback) {
++      std::move(callback).Run({});
++    }
++    return;
++  }
++  for (const auto& jobs : {running_,
++                          std::vector(queued_.begin(), queued_.end())}) {
++    for (auto& job : jobs) {
++      if (job->handle == handle && job->size == size &&
++          job->generation == generation_) {
++        if (callback) {
++          job->callbacks.push_back(std::move(callback));
++        }
++        return;
++      }
++    }
++  }
++  auto job = std::make_shared<Job>(handle, size, generation_,
++                                  std::vector<ImageCallback>(), nullptr);
++  if (callback) {
++    job->callbacks.push_back(std::move(callback));
++  }
++  // Keep a full five-card rail queued even while two stale decodes finish.
++  if (high_priority) {
++    if (queued_.size() >= 5) {
++      queued_.pop_back();
++    }
++    queued_.push_front(job);
++  } else if (queued_.size() < 5) {
++    queued_.push_back(job);
++  }
++  Pump();
++}
++
++void MRUTabPreviewCache::Pump() {
++  while (running_.size() < 2 && !queued_.empty()) {
++    auto job = queued_.front();
++    queued_.pop_front();
++    auto* tab = job->handle.Get();
++    auto* contents = tab && model_->GetIndexOfTab(tab) != TabStripModel::kNoTab
++                         ? tab->GetContents() : nullptr;
++    auto* helper = contents
++                       ? ThumbnailTabHelper::FromWebContents(contents)
++                       : nullptr;
++    if (!helper || !contents->GetPrimaryMainFrame()) {
++      auto alive = weak_factory_.GetWeakPtr();
++      for (auto& callback : job->callbacks) {
++        std::move(callback).Run({});
++        if (!alive) {
++          return;
++        }
++      }
++      continue;
++    }
++    running_.push_back(job);
++    job->thumbnail = helper->thumbnail();
++    auto alive = weak_factory_.GetWeakPtr();
++    job->thumbnail->RequestCachedImage(
++        job->size,
++        base::BindOnce(&MRUTabPreviewCache::Decoded, weak_factory_.GetWeakPtr(),
++                       job, contents->GetWeakPtr(),
++                       contents->GetPrimaryMainFrame()->GetWeakDocumentPtr()));
++    if (!alive) {
++      return;
++    }
++  }
++}
++
++bool MRUTabPreviewCache::IsCurrent(
++    tabs::TabHandle handle,
++    base::WeakPtr<content::WebContents> contents,
++    const content::WeakDocumentPtr& document) const {
++  auto* tab = handle.Get();
++  return tab && model_->GetIndexOfTab(tab) != TabStripModel::kNoTab && contents &&
++         tab->GetContents() == contents.get() &&
++         document.AsRenderFrameHostIfValid() &&
++         document.AsRenderFrameHostIfValid() == contents->GetPrimaryMainFrame();
++}
++
++void MRUTabPreviewCache::Decoded(
++    std::shared_ptr<Job> job,
++    base::WeakPtr<content::WebContents> contents,
++    content::WeakDocumentPtr document,
++    gfx::ImageSkia image) {
++  std::erase(running_, job);
++  job->thumbnail.reset();
++  if (job->generation == generation_) {
++    if (!IsCurrent(job->handle, contents, document)) {
++      image = {};
++    }
++    if (!image.isNull()) {
++      // A sharper departure capture may have arrived during the decode.
++      auto existing = Get(job->handle);
++      if (!existing.isNull() && entries_.front().sharp) {
++        image = existing;
++      } else {
++        Store(job->handle, image);
++        image = Get(job->handle);
++      }
++    }
++    auto callbacks = std::move(job->callbacks);
++    auto alive = weak_factory_.GetWeakPtr();
++    for (auto& callback : callbacks) {
++      std::move(callback).Run(image);
++      if (!alive) {
++        return;
++      }
++    }
++  }
++  Pump();
++}
++
++void MRUTabPreviewCache::CancelPendingRequests() {
++  ++generation_;
++  queued_.clear();
++  for (auto& job : running_) {
++    job->callbacks.clear();
++  }
++  // Running tasks still count toward the concurrency cap until they finish.
++}
++
++void MRUTabPreviewCache::Store(tabs::TabHandle handle, gfx::ImageSkia image,
++                               bool sharp) {
++  auto* tab = handle.Get();
++  if (!tab || model_->GetIndexOfTab(tab) == TabStripModel::kNoTab ||
++      !tab->GetContents()->GetPrimaryMainFrame()) {
++    return;
++  }
++  // Own a tightly sized bitmap: a crop subset otherwise keeps its larger
++  // source allocation alive and defeats byte accounting.
++  const auto& source = image.GetRepresentation(1.0f).GetBitmap();
++  if (source.drawsNothing()) {
++    return;
++  }
++  const int width = std::min(source.width(), source.height() * 16 / 9);
++  const int height = std::min(source.height(), width * 9 / 16);
++  if (!width || !height) {
++    return;
++  }
++  const auto allocation_size = base::CheckedNumeric<size_t>(width) * height * 4;
++  if (!allocation_size.IsValid() ||
++      allocation_size.ValueOrDie() > budget_) {
++    return;
++  }
++  SkBitmap bitmap;
++  if (!bitmap.tryAllocN32Pixels(width, height) ||
++      !source.readPixels(bitmap.info(), bitmap.getPixels(), bitmap.rowBytes(),
++                         (source.width() - width) / 2,
++                         0)) {
++    return;
++  }
++  bitmap.setImmutable();
++  image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
++  size_t bytes = 0;
++  for (const auto& rep : image.image_reps()) {
++    bytes += rep.GetBitmap().computeByteSize();
++  }
++  if (!bytes || bytes > budget_) {
++    return;
++  }
++  auto it = std::ranges::find(entries_, handle, &Entry::handle);
++  if (it != entries_.end()) {
++    bytes_ -= it->bytes;
++    entries_.erase(it);
++  }
++  auto* contents = tab->GetContents();
++  auto* helper = ThumbnailTabHelper::FromWebContents(contents);
++  entries_.push_front({handle, std::move(image), bytes, contents->GetWeakPtr(),
++                      contents->GetPrimaryMainFrame()->GetWeakDocumentPtr(),
++                      sharp,
++                      helper ? helper->thumbnail()->cached_data_generation() : 0});
++  bytes_ += bytes;
++  Trim();
++}
++
++void MRUTabPreviewCache::Trim() {
++  while (!entries_.empty() && (bytes_ > budget_ || entries_.size() > 64)) {
++    bytes_ -= entries_.back().bytes;
++    entries_.pop_back();
++  }
++}
++
++gfx::Size MRUTabPreviewCache::BoundCaptureSize(gfx::Size requested,
++                                             gfx::Size surface) {
++  if (requested.IsEmpty() || surface.IsEmpty()) {
++    return {};
++  }
++  const double scale = std::min(
++      {1.0, 1440.0 / requested.width(), 810.0 / requested.height(),
++       double(surface.width()) / requested.width(),
++       double(surface.height()) / requested.height()});
++  return gfx::Size(std::max(1, int(std::floor(requested.width() * scale))),
++                   std::max(1, int(std::floor(requested.height() * scale))));
++}
++
++void MRUTabPreviewCache::WatchActiveTab() {
++  deactivate_subscription_ = {};
++  if (auto* tab = model_->GetActiveTab()) {
++    deactivate_subscription_ = tab->RegisterWillDeactivate(base::BindRepeating(
++        &MRUTabPreviewCache::CaptureDepartingTab, weak_factory_.GetWeakPtr()));
++  }
++}
++
++void MRUTabPreviewCache::CaptureActiveTab() {
++  if (capture_running_) {
++    pending_active_capture_ = true;
++    return;
++  }
++  if (auto* tab = model_->GetActiveTab()) {
++    CaptureDepartingTab(tab);
++  }
++}
++
++base::CallbackListSubscription MRUTabPreviewCache::SubscribeToCaptures(
++    base::RepeatingCallback<void(tabs::TabHandle, gfx::ImageSkia)> callback) {
++  return capture_callbacks_.Add(std::move(callback));
++}
++
++bool MRUTabPreviewCache::IsPageReadyForCapture(content::WebContents* contents) {
++  if (!contents || contents->IsBeingDestroyed() ||
++      !contents->CompletedFirstVisuallyNonEmptyPaint()) {
++    return false;
++  }
++  auto* helper = ThumbnailTabHelper::FromWebContents(contents);
++  return helper && helper->thumbnail()->GetCaptureReadiness() !=
++                       ThumbnailImage::CaptureReadiness::kNotReady;
++}
++
++void MRUTabPreviewCache::CaptureDepartingTab(tabs::TabInterface* tab) {
++  if (!enabled_.Run() || !budget_ || capture_running_ || model_->closing_all()) {
++    return;
++  }
++  auto* contents = tab->GetContents();
++  // A committed document can still display its predecessor's surface until
++  // first paint. Readiness also rejects navigation starting during a copy.
++  if (!IsPageReadyForCapture(contents)) {
++    return;
++  }
++  auto* view = contents->GetRenderWidgetHostView();
++  if (contents->IsBeingDestroyed() ||
++      contents->GetVisibility() != content::Visibility::VISIBLE || !view ||
++      !view->IsSurfaceAvailableForCopy() || !contents->GetPrimaryMainFrame()) {
++    return;
++  }
++  // CopyFromSurface takes its source rectangle in DIPs and destination in
++  // physical pixels. Scaling the source too would double-scale on Retina.
++  const auto source_size = view->GetViewBounds().size();
++  const auto surface = gfx::ScaleToFlooredSize(source_size,
++                                              view->GetDeviceScaleFactor());
++  const auto size = BoundCaptureSize(capture_size_pixels_.Run(), surface);
++  if (size.IsEmpty()) {
++    return;
++  }
++  const int crop_width = std::min(source_size.width(), source_size.height() * 16 / 9);
++  const int crop_height = std::min(source_size.height(), crop_width * 9 / 16);
++  if (!crop_width || !crop_height) {
++    return;
++  }
++  capture_running_ = true;
++  const gfx::Rect source_rect((source_size.width() - crop_width) / 2, 0,
++                              crop_width, crop_height);
++  view->CopyFromSurface(
++      source_rect, size, base::Milliseconds(250),
++      base::BindPostTaskToCurrentDefault(base::BindOnce(
++          [](base::WeakPtr<MRUTabPreviewCache> self, tabs::TabHandle handle,
++             base::WeakPtr<content::WebContents> contents,
++             content::WeakDocumentPtr document, uint64_t generation,
++             const content::CopyFromSurfaceResult& result) {
++            if (!self) {
++              return;
++            }
++            self->Captured(handle, contents, document, generation,
++                           result.has_value() && !result->bitmap.drawsNothing()
++                               ? gfx::ImageSkia::CreateFrom1xBitmap(result->bitmap)
++                               : gfx::ImageSkia());
++          }, weak_factory_.GetWeakPtr(), tab->GetHandle(), contents->GetWeakPtr(),
++          contents->GetPrimaryMainFrame()->GetWeakDocumentPtr(),
++          capture_generation_)));
++}
++
++void MRUTabPreviewCache::Captured(
++    tabs::TabHandle handle, base::WeakPtr<content::WebContents> contents,
++    content::WeakDocumentPtr document, uint64_t generation,
++    gfx::ImageSkia image) {
++  capture_running_ = false;
++  const bool valid = generation == capture_generation_ && !image.isNull() &&
++                     IsCurrent(handle, contents, document) &&
++                     IsPageReadyForCapture(contents.get());
++  if (valid) {
++    Store(handle, image, true);
++    image = Get(handle);
++  }
++  // A departure copy may have occupied the single capture slot at entry.
++  if (std::exchange(pending_active_capture_, false)) {
++    CaptureActiveTab();
++  }
++  if (valid && !image.isNull()) {
++    capture_callbacks_.Notify(handle, image);
++  }
++}
++
++void MRUTabPreviewCache::OnTabStripModelChanged(
++    TabStripModel*, const TabStripModelChange&,
++    const TabStripSelectionChange&) {
++  WatchActiveTab();
++}
++
++void MRUTabPreviewCache::OnTabWillBeRemoved(tabs::TabInterface* tab, int) {
++  CancelPendingRequests();
++  ++capture_generation_;
++  auto it = std::ranges::find(entries_, tab->GetHandle(), &Entry::handle);
++  if (it != entries_.end()) {
++    bytes_ -= it->bytes;
++    entries_.erase(it);
++  }
++  if (tab == model_->GetActiveTab()) {
++    deactivate_subscription_ = {};
++  }
++}
++
++void MRUTabPreviewCache::OnUpdateMemoryLimit() {
++  budget_ = (24 * 1024 * 1024) *
++            static_cast<size_t>(std::clamp(memory_limit(), 0, 100)) / 100;
++}
++
++void MRUTabPreviewCache::OnReleaseMemory() {
++  CancelPendingRequests();
++  ++capture_generation_;
++  pending_active_capture_ = false;
++  entries_.clear();
++  bytes_ = 0;
++}
+Index: src/chrome/browser/ui/views/frame/mru_tab_preview_cache.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/frame/mru_tab_preview_cache.h
+@@ -0,0 +1,112 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PREVIEW_CACHE_H_
++#define CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PREVIEW_CACHE_H_
++
++#include <deque>
++#include <list>
++#include <memory>
++#include <vector>
++
++#include "base/callback_list.h"
++#include "base/functional/callback.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory_coordinator/memory_consumer.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/gfx/image/image_skia.h"
++
++class TabStripModel;
++class ThumbnailImage;
++
++// Window-owned, bounded last-good previews. Reading/prefetching never subscribes
++// to thumbnail capture, activates a tab, or loads a background page.
++class MRUTabPreviewCache : public TabStripModelObserver,
++                           public base::MemoryConsumer {
++ public:
++  using ImageCallback = base::OnceCallback<void(gfx::ImageSkia)>;
++  MRUTabPreviewCache(TabStripModel* model,
++                    base::RepeatingCallback<gfx::Size()> capture_size_pixels,
++                    base::RepeatingCallback<bool()> enabled);
++  ~MRUTabPreviewCache() override;
++  gfx::ImageSkia Get(tabs::TabHandle handle);
++  void Request(tabs::TabHandle handle, gfx::Size size, ImageCallback callback,
++               bool high_priority = true);
++  void Prefetch(tabs::TabHandle handle, gfx::Size size);
++  void CancelPendingRequests();
++  // One visible-page copy on switcher entry, without activating another tab.
++  void CaptureActiveTab();
++  base::CallbackListSubscription SubscribeToCaptures(
++      base::RepeatingCallback<void(tabs::TabHandle, gfx::ImageSkia)> callback);
++
++  static gfx::Size BoundCaptureSize(gfx::Size requested, gfx::Size surface);
++
++ private:
++  friend class MRUTabPreviewCacheTest;
++  struct Entry {
++    tabs::TabHandle handle;
++    gfx::ImageSkia image;
++    size_t bytes;
++    base::WeakPtr<content::WebContents> contents;
++    content::WeakDocumentPtr document;
++    bool sharp;
++    uint64_t thumbnail_generation;
++  };
++  struct Job {
++    tabs::TabHandle handle;
++    gfx::Size size;
++    uint64_t generation;
++    std::vector<ImageCallback> callbacks;
++    scoped_refptr<ThumbnailImage> thumbnail;
++  };
++  void Enqueue(tabs::TabHandle handle, gfx::Size size, ImageCallback callback,
++               bool high_priority);
++  void Pump();
++  void Decoded(std::shared_ptr<Job> job,
++               base::WeakPtr<content::WebContents> contents,
++               content::WeakDocumentPtr document,
++               gfx::ImageSkia image);
++  bool IsCurrent(tabs::TabHandle handle,
++                 base::WeakPtr<content::WebContents> contents,
++                 const content::WeakDocumentPtr& document) const;
++  void Store(tabs::TabHandle handle, gfx::ImageSkia image, bool sharp = false);
++  void Trim();
++  void WatchActiveTab();
++  static bool IsPageReadyForCapture(content::WebContents* contents);
++  void CaptureDepartingTab(tabs::TabInterface* tab);
++  void Captured(tabs::TabHandle handle,
++                base::WeakPtr<content::WebContents> contents,
++                content::WeakDocumentPtr document, uint64_t generation,
++                gfx::ImageSkia image);
++  void OnTabStripModelChanged(TabStripModel*, const TabStripModelChange&,
++                             const TabStripSelectionChange&) override;
++  void OnTabWillBeRemoved(tabs::TabInterface* tab, int index) override;
++  void OnUpdateMemoryLimit() override;
++  void OnReleaseMemory() override;
++
++  const raw_ptr<TabStripModel> model_;
++  base::RepeatingCallback<gfx::Size()> capture_size_pixels_;
++  base::RepeatingCallback<bool()> enabled_;
++  std::list<Entry> entries_;
++  size_t bytes_ = 0;
++  size_t budget_ = 24 * 1024 * 1024;
++  uint64_t generation_ = 0;
++  uint64_t capture_generation_ = 0;
++  bool capture_running_ = false;
++  bool pending_active_capture_ = false;
++  base::RepeatingCallbackList<void(tabs::TabHandle, gfx::ImageSkia)>
++      capture_callbacks_;
++  std::deque<std::shared_ptr<Job>> queued_;
++  std::vector<std::shared_ptr<Job>> running_;
++  base::CallbackListSubscription deactivate_subscription_;
++  base::MemoryConsumerRegistration memory_registration_;
++  base::WeakPtrFactory<MRUTabPreviewCache> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PREVIEW_CACHE_H_
+Index: src/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
+@@ -0,0 +1,315 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/frame/mru_tab_preview_cache.h"
++
++#include "base/functional/bind.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/thumbnails/thumbnail_tab_helper.h"
++#include "chrome/test/base/browser_with_test_window_test.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/test/navigation_simulator.h"
++#include "content/public/test/test_utils.h"
++#include "content/public/test/web_contents_tester.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "url/gurl.h"
++
++class MRUTabPreviewCacheTest : public BrowserWithTestWindowTest {
++ protected:
++  std::unique_ptr<MRUTabPreviewCache> MakeCache(bool enabled = false) {
++    return std::make_unique<MRUTabPreviewCache>(
++        browser()->tab_strip_model(),
++        base::BindRepeating([] { return gfx::Size(800, 450); }),
++        base::BindRepeating([](bool enabled) { return enabled; }, enabled));
++  }
++  tabs::TabHandle AddHandle() {
++    AddTab(browser(), GURL("https://example.test/"));
++    return browser()->tab_strip_model()->GetActiveTab()->GetHandle();
++  }
++  void Put(MRUTabPreviewCache& cache, tabs::TabHandle handle, int width) {
++    SkBitmap bitmap;
++    bitmap.allocN32Pixels(width, width * 9 / 16);
++    bitmap.eraseColor(SK_ColorBLUE);
++    cache.Store(handle, gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
++  }
++  void Budget(MRUTabPreviewCache& cache, size_t bytes) { cache.budget_ = bytes; }
++  size_t Bytes(const MRUTabPreviewCache& cache) { return cache.bytes_; }
++  void Release(MRUTabPreviewCache& cache) { cache.OnReleaseMemory(); }
++  void SeedThumbnail(tabs::TabHandle handle) {
++    auto* contents = handle.Get()->GetContents();
++    if (!ThumbnailTabHelper::FromWebContents(contents)) {
++      ThumbnailTabHelper::CreateForWebContents(contents);
++    }
++    SkBitmap bitmap;
++    bitmap.allocN32Pixels(160, 90);
++    bitmap.eraseColor(SK_ColorBLUE);
++    ThumbnailTabHelper::FromWebContents(contents)->thumbnail()->AssignSkBitmap(
++        bitmap);
++    content::RunAllTasksUntilIdle();
++  }
++  size_t Running(const MRUTabPreviewCache& cache) { return cache.running_.size(); }
++  size_t Queued(const MRUTabPreviewCache& cache) { return cache.queued_.size(); }
++  tabs::TabHandle NextQueued(const MRUTabPreviewCache& cache) {
++    return cache.queued_.front()->handle;
++  }
++  bool ReadyToCapture(content::WebContents* contents) {
++    return MRUTabPreviewCache::IsPageReadyForCapture(contents);
++  }
++  void CompleteCapture(MRUTabPreviewCache& cache, tabs::TabHandle handle,
++                       content::WeakDocumentPtr document) {
++    SkBitmap bitmap;
++    bitmap.allocN32Pixels(160, 90);
++    bitmap.eraseColor(SK_ColorBLUE);
++    cache.Captured(handle, handle.Get()->GetContents()->GetWeakPtr(), document,
++                   0, gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
++  }
++};
++
++class PreviewLoadObserver : public content::WebContentsObserver {
++ public:
++  explicit PreviewLoadObserver(content::WebContents* contents)
++      : content::WebContentsObserver(contents) {}
++  void DidStartLoading() override { ++loads; }
++  int loads = 0;
++};
++
++TEST_F(MRUTabPreviewCacheTest, ActiveCapturePublishesWithoutDeactivation) {
++  const auto handle = AddHandle();
++  SeedThumbnail(handle);
++  auto* contents = handle.Get()->GetContents();
++  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  ASSERT_TRUE(ReadyToCapture(contents));
++  auto cache = MakeCache(true);
++  ASSERT_TRUE(cache->Get(handle).isNull());
++  int updates = 0;
++  auto subscription = cache->SubscribeToCaptures(base::BindRepeating(
++      [](tabs::TabHandle expected, int* updates, tabs::TabHandle actual,
++         gfx::ImageSkia image) {
++        EXPECT_EQ(expected, actual);
++        EXPECT_FALSE(image.isNull());
++        ++*updates;
++      }, handle, &updates));
++  // Rebuilding the selected rail cancels decodes, not a valid page capture.
++  cache->CancelPendingRequests();
++  CompleteCapture(*cache, handle,
++                  contents->GetPrimaryMainFrame()->GetWeakDocumentPtr());
++  EXPECT_EQ(updates, 1);
++  EXPECT_FALSE(cache->Get(handle).isNull());
++  EXPECT_EQ(browser()->tab_strip_model()->GetActiveTab()->GetHandle(), handle);
++}
++
++TEST_F(MRUTabPreviewCacheTest, ActiveCaptureRejectsNavigationAndMemoryRelease) {
++  const auto handle = AddHandle();
++  SeedThumbnail(handle);
++  auto* contents = handle.Get()->GetContents();
++  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  auto document = contents->GetPrimaryMainFrame()->GetWeakDocumentPtr();
++  auto cache = MakeCache(true);
++  int updates = 0;
++  auto subscription = cache->SubscribeToCaptures(base::BindRepeating(
++      [](int* updates, tabs::TabHandle, gfx::ImageSkia) { ++*updates; },
++      &updates));
++  content::NavigationSimulator::NavigateAndCommitFromBrowser(
++      contents, GURL("https://next.test/"));
++  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  CompleteCapture(*cache, handle, document);
++  EXPECT_TRUE(cache->Get(handle).isNull());
++  Release(*cache);
++  CompleteCapture(*cache, handle,
++                  contents->GetPrimaryMainFrame()->GetWeakDocumentPtr());
++  EXPECT_TRUE(cache->Get(handle).isNull());
++  EXPECT_EQ(updates, 0);
++}
++
++TEST_F(MRUTabPreviewCacheTest, FiveVisibleCardsWaitBehindStaleDecodes) {
++  std::vector<tabs::TabHandle> handles;
++  for (int i = 0; i < 7; ++i) {
++    handles.push_back(AddHandle());
++    SeedThumbnail(handles.back());
++  }
++  auto cache = MakeCache(true);
++  const gfx::Size size(160, 90);
++  int obsolete_callbacks = 0;
++  for (size_t i = 0; i < 2; ++i) {
++    cache->Request(handles[i], size, base::BindOnce(
++        [](int* count, gfx::ImageSkia) { ++*count; }, &obsolete_callbacks));
++  }
++  ASSERT_EQ(Running(*cache), 2u);
++  cache->CancelPendingRequests();
++  int visible_callbacks = 0;
++  for (size_t i = 2; i < handles.size(); ++i) {
++    cache->Request(handles[i], size, base::BindOnce(
++        [](int* count, gfx::ImageSkia image) {
++          EXPECT_FALSE(image.isNull());
++          ++*count;
++        }, &visible_callbacks), i == 2);
++  }
++  EXPECT_EQ(Running(*cache), 2u);
++  EXPECT_EQ(Queued(*cache), 5u);
++  EXPECT_EQ(NextQueued(*cache), handles[2]);
++  content::RunAllTasksUntilIdle();
++  EXPECT_EQ(obsolete_callbacks, 0);
++  EXPECT_EQ(visible_callbacks, 5);
++}
++
++TEST_F(MRUTabPreviewCacheTest, CaptureRequiresPaintAndRejectsPendingNavigation) {
++  auto handle = AddHandle();
++  SeedThumbnail(handle);
++  auto* contents = handle.Get()->GetContents();
++  content::NavigationSimulator::NavigateAndCommitFromBrowser(
++      contents, GURL("https://paint.test/"));
++  ASSERT_NE(ThumbnailImage::CaptureReadiness::kNotReady,
++            ThumbnailTabHelper::FromWebContents(contents)
++                ->thumbnail()->GetCaptureReadiness());
++  ASSERT_FALSE(contents->CompletedFirstVisuallyNonEmptyPaint());
++  EXPECT_FALSE(ReadyToCapture(contents));
++  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  EXPECT_TRUE(ReadyToCapture(contents));
++  auto navigation = content::NavigationSimulator::CreateBrowserInitiated(
++      GURL("https://next.test/"), contents);
++  navigation->Start();
++  EXPECT_FALSE(ReadyToCapture(contents));
++}
++
++TEST_F(MRUTabPreviewCacheTest, EvictsLeastRecentlyUsedWithinExactByteBudget) {
++  auto a = AddHandle();
++  auto b = AddHandle();
++  auto c = AddHandle();
++  auto cache = MakeCache();
++  Budget(*cache, 1152);
++  Put(*cache, a, 16);
++  Put(*cache, b, 16);
++  EXPECT_FALSE(cache->Get(a).isNull());
++  Put(*cache, c, 16);
++  EXPECT_TRUE(cache->Get(b).isNull());
++  EXPECT_FALSE(cache->Get(a).isNull());
++  EXPECT_FALSE(cache->Get(c).isNull());
++  EXPECT_EQ(1152u, Bytes(*cache));
++}
++
++TEST_F(MRUTabPreviewCacheTest, OversizeImagePreservesLastGoodEntry) {
++  auto handle = AddHandle();
++  auto cache = MakeCache();
++  Budget(*cache, 576);
++  Put(*cache, handle, 16);
++  Put(*cache, handle, 32);
++  EXPECT_EQ(16, cache->Get(handle).width());
++  EXPECT_EQ(576u, Bytes(*cache));
++}
++
++TEST_F(MRUTabPreviewCacheTest, ReleaseDropsCacheButCurrentImageRemainsUsable) {
++  auto handle = AddHandle();
++  auto cache = MakeCache();
++  Put(*cache, handle, 16);
++  auto displayed = cache->Get(handle);
++  Release(*cache);
++  EXPECT_TRUE(cache->Get(handle).isNull());
++  EXPECT_FALSE(displayed.isNull());
++  EXPECT_EQ(0u, Bytes(*cache));
++}
++
++TEST_F(MRUTabPreviewCacheTest, DisabledRequestAndPrefetchDoNotActivateTabs) {
++  auto first = AddHandle();
++  auto second = AddHandle();
++  auto cache = MakeCache();
++  bool replied = false;
++  cache->Request(first, {800, 450}, base::BindOnce(
++      [](bool* replied, gfx::ImageSkia image) {
++        *replied = true;
++        EXPECT_TRUE(image.isNull());
++      }, &replied));
++  cache->Prefetch(first, {800, 450});
++  EXPECT_TRUE(replied);
++  EXPECT_EQ(second, browser()->tab_strip_model()->GetActiveTab()->GetHandle());
++  EXPECT_EQ(0u, Bytes(*cache));
++}
++
++TEST_F(MRUTabPreviewCacheTest, NavigationInvalidatesRetainedImage) {
++  auto handle = AddHandle();
++  auto cache = MakeCache();
++  Put(*cache, handle, 16);
++  ASSERT_FALSE(cache->Get(handle).isNull());
++  content::NavigationSimulator::NavigateAndCommitFromBrowser(
++      handle.Get()->GetContents(), GURL("https://different.test/"));
++  EXPECT_TRUE(cache->Get(handle).isNull());
++  EXPECT_EQ(0u, Bytes(*cache));
++}
++
++TEST_F(MRUTabPreviewCacheTest, ClosingTabRemovesRetainedImage) {
++  auto handle = AddHandle();
++  AddHandle();
++  auto cache = MakeCache();
++  Put(*cache, handle, 16);
++  auto* model = browser()->tab_strip_model();
++  model->CloseWebContentsAt(model->GetIndexOfTab(handle.Get()),
++                            TabCloseTypes::CLOSE_NONE);
++  EXPECT_TRUE(cache->Get(handle).isNull());
++  EXPECT_EQ(0u, Bytes(*cache));
++}
++
++TEST_F(MRUTabPreviewCacheTest, EnabledReadsDecodeWithoutActivationOrLoading) {
++  auto requested = AddHandle();
++  auto prefetched = AddHandle();
++  auto active = AddHandle();
++  SeedThumbnail(requested);
++  SeedThumbnail(prefetched);
++  PreviewLoadObserver requested_loads(requested.Get()->GetContents());
++  PreviewLoadObserver prefetched_loads(prefetched.Get()->GetContents());
++  auto cache = MakeCache(true);
++  bool replied = false;
++  cache->Request(requested, {160, 90}, base::BindOnce(
++      [](bool* replied, gfx::ImageSkia image) {
++        *replied = true;
++        EXPECT_FALSE(image.isNull());
++      }, &replied));
++  cache->Prefetch(prefetched, {160, 90});
++  content::RunAllTasksUntilIdle();
++  EXPECT_TRUE(replied);
++  EXPECT_FALSE(cache->Get(prefetched).isNull());
++  EXPECT_EQ(active, browser()->tab_strip_model()->GetActiveTab()->GetHandle());
++  EXPECT_EQ(0, requested_loads.loads);
++  EXPECT_EQ(0, prefetched_loads.loads);
++}
++
++TEST_F(MRUTabPreviewCacheTest, CancellationSuppressesDecodeCallbackAndRefill) {
++  auto handle = AddHandle();
++  SeedThumbnail(handle);
++  auto cache = MakeCache(true);
++  bool replied = false;
++  cache->Request(handle, {160, 90}, base::BindOnce(
++      [](bool* replied, gfx::ImageSkia) { *replied = true; }, &replied));
++  ASSERT_EQ(1u, Running(*cache));
++  cache->CancelPendingRequests();
++  // The physically running decode continues to count until its reply arrives.
++  EXPECT_EQ(1u, Running(*cache));
++  content::RunAllTasksUntilIdle();
++  EXPECT_FALSE(replied);
++  EXPECT_EQ(0u, Running(*cache));
++  EXPECT_TRUE(cache->Get(handle).isNull());
++  EXPECT_EQ(0u, Bytes(*cache));
++}
++
++TEST(MRUTabPreviewCacheSizeTest, RetinaCaptureHasBoundedPixelCost) {
++  EXPECT_EQ(gfx::Size(1440, 810), MRUTabPreviewCache::BoundCaptureSize(
++                                      {2880, 1620}, {3840, 2160}));
++}
++
++TEST(MRUTabPreviewCacheSizeTest, NeverUpscalesSourceSurface) {
++  EXPECT_EQ(gfx::Size(640, 360), MRUTabPreviewCache::BoundCaptureSize(
++                                     {1280, 720}, {640, 360}));
++}
++
++TEST(MRUTabPreviewCacheSizeTest, PreservesSmallRequestedSize) {
++  EXPECT_EQ(gfx::Size(480, 270), MRUTabPreviewCache::BoundCaptureSize(
++                                     {480, 270}, {1920, 1080}));
++}
++
++TEST(MRUTabPreviewCacheSizeTest, EmptyDimensionsDoNotCapture) {
++  EXPECT_TRUE(MRUTabPreviewCache::BoundCaptureSize({}, {1920, 1080}).IsEmpty());
++  EXPECT_TRUE(MRUTabPreviewCache::BoundCaptureSize({480, 270}, {}).IsEmpty());
++}
+Index: src/chrome/test/BUILD.gn
+===================================================================
+--- src.orig/chrome/test/BUILD.gn
++++ src/chrome/test/BUILD.gn
+@@ -8895,6 +8895,7 @@ test("unit_tests") {
+       "../browser/ui/views/extensions/extensions_toolbar_unittest.h",
+       "../browser/ui/views/frame/browser_frame_view_unittest.cc",
+       "../browser/ui/views/frame/browser_view_unittest.cc",
++      "../browser/ui/views/frame/mru_tab_preview_cache_unittest.cc",
+       "../browser/ui/views/helium/glass_surface_unittest.cc",
+       "../browser/ui/views/frame/layout/browser_view_layout_params_unittest.cc",
+       "../browser/ui/views/frame/multi_contents_drop_target_view_unittest.cc",
+Index: src/chrome/browser/ui/views/frame/mru_tab_preview_rail.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/frame/mru_tab_preview_rail.cc
+@@ -0,0 +1,208 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/frame/mru_tab_preview_rail.h"
++
++#include <algorithm>
++#include <memory>
++
++#include "base/functional/bind.h"
++#include "base/strings/string_number_conversions.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tab_ui_helper.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/mru_tab_preview_cache.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_provider.h"
++#include "ui/display/screen.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/geometry/size_conversions.h"
++#include "ui/gfx/shadow_value.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/background.h"
++#include "ui/views/border.h"
++#include "ui/views/controls/image_view.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/layout/fill_layout.h"
++#include "ui/views/widget/widget.h"
++
++namespace {
++constexpr int kPanelInset = 12;
++constexpr int kCardInset = 8;
++constexpr int kCardGap = 8;
++constexpr int kMetadataHeight = 24;
++constexpr int kIconSize = 16;
++constexpr int kCornerRadius = 12;
++constexpr size_t kMaxCards = 5;
++}  // namespace
++
++MRUTabPreviewRail::MRUTabPreviewRail(BrowserView* browser_view)
++    : browser_view_(browser_view) {
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(kPanelInset), 8));
++  cards_view_ = AddChildView(std::make_unique<views::View>());
++  cards_view_->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), kCardGap));
++  position_ = AddChildView(std::make_unique<views::Label>());
++  position_->SetSubpixelRenderingEnabled(false);
++  position_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  capture_subscription_ = browser_view_->mru_preview_cache().SubscribeToCaptures(
++      base::BindRepeating(&MRUTabPreviewRail::OnCaptured, base::Unretained(this)));
++}
++
++MRUTabPreviewRail::~MRUTabPreviewRail() {
++  browser_view_->mru_preview_cache().CancelPendingRequests();
++}
++
++void MRUTabPreviewRail::Update(
++    const std::vector<content::WebContents*>& tabs, size_t selected) {
++  if (tabs.empty() || selected >= tabs.size()) {
++    return;
++  }
++  // A five-card viewport becomes narrower/fewer cards on small windows rather
++  // than overflowing or shrinking the title into an unreadable strip.
++  const int available = std::max(120, browser_view_->width() - 48);
++  const size_t count = std::min({kMaxCards, tabs.size(),
++      static_cast<size_t>(std::max(1, (available - 2 * kPanelInset + kCardGap) /
++                                         (140 + kCardGap)))});
++  const int card_width = std::min(256,
++      (available - 2 * kPanelInset - (static_cast<int>(count) - 1) * kCardGap) /
++          static_cast<int>(count));
++  const int preview_width = std::max(1, card_width - 2 * kCardInset - 4);
++  const gfx::Size preview_size(preview_width, preview_width * 9 / 16);
++  const size_t first = std::min(selected > count / 2 ? selected - count / 2 : 0,
++                                tabs.size() - count);
++  auto& cache = browser_view_->mru_preview_cache();
++  weak_factory_.InvalidateWeakPtrs();
++  cache.CancelPendingRequests();
++  cards_.clear();
++  cards_view_->RemoveAllChildViews();
++  std::vector<tabs::TabHandle> handles;
++  auto* model = browser_view_->browser()->tab_strip_model();
++  for (size_t offset = 0; offset < count; ++offset) {
++    const size_t index = first + offset;
++    const int model_index = model->GetIndexOfWebContents(tabs[index]);
++    if (model_index == TabStripModel::kNoTab) {
++      return;
++    }
++    auto* tab = model->GetTabAtIndex(model_index);
++    auto* helper = TabUIHelper::From(tab);
++    handles.push_back(tab->GetHandle());
++    const auto favicon = helper ? helper->GetFavicon() : ui::ImageModel();
++    const auto title = helper ? helper->GetTitle() : tabs[index]->GetTitle();
++    auto* card = cards_view_->AddChildView(std::make_unique<views::View>());
++    card->SetPreferredSize(gfx::Size(card_width,
++        preview_size.height() + 2 * kCardInset + 4 + 8 + kMetadataHeight));
++    card->SetLayoutManager(std::make_unique<views::BoxLayout>(
++        views::BoxLayout::Orientation::kVertical, gfx::Insets(kCardInset), 8));
++    card->SetTooltipText(title);
++    card->GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
++    card->GetViewAccessibility().SetName(title);
++    auto* preview = card->AddChildView(std::make_unique<views::View>());
++    preview->SetPreferredSize(preview_size);
++    preview->SetBackground(views::CreateRoundedRectBackground(
++        SkColorSetARGB(32, 127, 127, 127), 8));
++    preview->SetLayoutManager(std::make_unique<views::FillLayout>());
++    auto* image = preview->AddChildView(std::make_unique<views::ImageView>());
++    image->SetImageSize(preview_size);
++    image->SetCornerRadius(8);
++    auto* placeholder = preview->AddChildView(std::make_unique<views::ImageView>());
++    placeholder->SetImageSize(gfx::Size(32, 32));
++    placeholder->SetImage(favicon);
++    auto* metadata = card->AddChildView(std::make_unique<views::View>());
++    metadata->SetPreferredSize(gfx::Size(preview_width, kMetadataHeight));
++    auto* row = metadata->SetLayoutManager(std::make_unique<views::BoxLayout>(
++        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
++    row->set_cross_axis_alignment(views::BoxLayout::CrossAxisAlignment::kCenter);
++    auto* icon = metadata->AddChildView(std::make_unique<views::ImageView>());
++    icon->SetImage(favicon);
++    icon->SetImageSize(gfx::Size(kIconSize, kIconSize));
++    auto* label = metadata->AddChildView(std::make_unique<views::Label>(title));
++    label->SetSubpixelRenderingEnabled(false);
++    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    label->SetElideBehavior(gfx::ELIDE_TAIL);
++    label->SetMaximumWidthSingleLine(std::max(1, preview_width - kIconSize - 8));
++    row->SetFlexForView(label, 1);
++    cards_.push_back(
++        {card, image, placeholder, label, index == selected, handles.back()});
++    const auto cached = cache.Get(handles.back());
++    if (!cached.isNull()) {
++      OnThumbnail(offset, cached);
++    }
++  }
++  position_->SetText(base::NumberToString16(selected + 1) + u" / " +
++                     base::NumberToString16(tabs.size()));
++  position_->SetVisible(tabs.size() > count);
++  SetLabelContrast(background_, shadow_);
++  float scale = 1.0f;
++  if (auto* widget = browser_view_->GetWidget(); widget && widget->GetNativeWindow()) {
++    scale = display::Screen::Get()->GetDisplayNearestWindow(
++        widget->GetNativeWindow()).device_scale_factor();
++  }
++  const auto capture_size = gfx::ScaleToCeiledSize(preview_size,
++                                                 std::clamp(scale, 1.0f, 2.0f));
++  const size_t selected_card = selected - first;
++  auto request = [&](size_t i, bool priority) {
++    cache.Request(handles[i], capture_size,
++        base::BindOnce(&MRUTabPreviewRail::OnThumbnail,
++                       weak_factory_.GetWeakPtr(), i), priority);
++  };
++  request(selected_card, true);
++  for (size_t i = 0; i < count; ++i) {
++    if (i != selected_card) {
++      request(i, false);
++    }
++  }
++  InvalidateLayout();
++  PreferredSizeChanged();
++}
++
++void MRUTabPreviewRail::OnThumbnail(size_t card, gfx::ImageSkia image) {
++  if (image.isNull() || card >= cards_.size()) {
++    return;
++  }
++  cards_[card].preview->SetImage(ui::ImageModel::FromImageSkia(image));
++  cards_[card].placeholder->SetVisible(false);
++}
++
++void MRUTabPreviewRail::OnCaptured(tabs::TabHandle handle, gfx::ImageSkia image) {
++  // Selection can move while the copy is in flight. Resolve the current slot
++  // by tab identity rather than writing into the original card index.
++  for (size_t i = 0; i < cards_.size(); ++i) {
++    if (cards_[i].handle == handle) {
++      OnThumbnail(i, image);
++      return;
++    }
++  }
++}
++
++void MRUTabPreviewRail::SetLabelContrast(SkColor background, bool shadow) {
++  background_ = background;
++  shadow_ = shadow;
++  const SkColor foreground = color_utils::GetColorWithMaxContrast(background);
++  auto style = [&](views::Label* label) {
++    label->SetBackgroundColor(background);
++    label->SetEnabledColor(foreground);
++    label->SetShadows(shadow ? gfx::ShadowValues{gfx::ShadowValue(
++        gfx::Vector2d(0, 1), 2, SkColorSetA(
++            color_utils::GetColorWithMaxContrast(foreground), 0x99))}
++                            : gfx::ShadowValues());
++  };
++  style(position_);
++  for (auto& card : cards_) {
++    style(card.title);
++    card.container->SetBackground(card.selected
++        ? views::CreateRoundedRectBackground(SkColorSetA(foreground, 36), kCornerRadius)
++        : nullptr);
++    card.container->SetBorder(card.selected
++        ? views::CreateRoundedRectBorder(2, kCornerRadius, SkColorSetA(foreground, 160))
++        : views::CreateEmptyBorder(2));
++  }
++}
++
++BEGIN_METADATA(MRUTabPreviewRail)
++END_METADATA
+Index: src/chrome/browser/ui/views/frame/mru_tab_preview_rail.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/frame/mru_tab_preview_rail.h
+@@ -0,0 +1,55 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PREVIEW_RAIL_H_
++#define CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PREVIEW_RAIL_H_
++
++#include <vector>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "components/tabs/public/tab_interface.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/view.h"
++
++class BrowserView;
++namespace content { class WebContents; }
++namespace gfx { class ImageSkia; }
++namespace views { class ImageView; class Label; }
++
++// The MRU feature owns card layout and cached images. The hosting overlay owns
++// glass/materials and event handling.
++class MRUTabPreviewRail : public views::View {
++  METADATA_HEADER(MRUTabPreviewRail, views::View)
++
++ public:
++  explicit MRUTabPreviewRail(BrowserView* browser_view);
++  ~MRUTabPreviewRail() override;
++  void Update(const std::vector<content::WebContents*>& tabs, size_t selected);
++  void SetLabelContrast(SkColor background, bool shadow);
++
++ private:
++  struct Card {
++    raw_ptr<views::View> container;
++    raw_ptr<views::ImageView> preview;
++    raw_ptr<views::ImageView> placeholder;
++    raw_ptr<views::Label> title;
++    bool selected;
++    tabs::TabHandle handle;
++  };
++  void OnThumbnail(size_t card, gfx::ImageSkia image);
++  void OnCaptured(tabs::TabHandle handle, gfx::ImageSkia image);
++  const raw_ptr<BrowserView> browser_view_;
++  raw_ptr<views::View> cards_view_;
++  raw_ptr<views::Label> position_;
++  std::vector<Card> cards_;
++  SkColor background_ = SkColorSetRGB(28, 28, 30);
++  bool shadow_ = false;
++  base::CallbackListSubscription capture_subscription_;
++  base::WeakPtrFactory<MRUTabPreviewRail> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_FRAME_MRU_TAB_PREVIEW_RAIL_H_

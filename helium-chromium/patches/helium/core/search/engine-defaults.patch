@@ -1,0 +1,52 @@
+--- a/components/search_engines/template_url_prepopulate_data.cc
++++ b/components/search_engines/template_url_prepopulate_data.cc
+@@ -276,7 +276,7 @@ std::unique_ptr<TemplateURLData> GetPrep
+     const std::vector<const PrepopulatedEngine*>&
+         regional_prepopulated_engines) {
+   return FindPrepopulatedEngineInternal(prefs, regional_prepopulated_engines,
+-                                        google.id,
++                                        duckduckgo.id,
+                                         /*use_first_as_fallback=*/true);
+ }
+ 
+--- a/third_party/search_engines_data/resources/definitions/regional_settings.json
++++ b/third_party/search_engines_data/resources/definitions/regional_settings.json
+@@ -4,7 +4,8 @@
+ {
+   "aggregation": {
+     "export_items": false,
+-    "map_aliases": {
++    "map_aliases": {},
++    "map_aliases_ignored": {
+       "AD": "ZZ",
+       "AG": "ZZ",
+       "AI": "GB",
+@@ -130,6 +131,21 @@
+     "type": "map"
+   },
+   "elements": {
++    "ZZ": {
++      // Default
++      "search_engines": [
++          "&duckduckgo",
++          "&ecosia",
++          "&bing",
++          "&break_stuff_google",
++          "&qwant",
++          "&kagi",
++          "&startpage",
++          "&brave"
++      ]
++    }
++  },
++  "elements_ignored": {
+     "AE": {
+       "search_engines": [
+         "&google",
+@@ -1425,4 +1441,4 @@
+       ]
+     }
+   }
+-}
+\ No newline at end of file
++}

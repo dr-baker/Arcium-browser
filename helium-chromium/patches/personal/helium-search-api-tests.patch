@@ -1,0 +1,831 @@
+diff --git a/chrome/browser/autocomplete/search_provider_unittest.cc b/chrome/browser/autocomplete/search_provider_unittest.cc
+--- a/chrome/browser/autocomplete/search_provider_unittest.cc
++++ b/chrome/browser/autocomplete/search_provider_unittest.cc
+@@ -752,7 +752,7 @@
+   EXPECT_TRUE(template_url);
+   template_url_service->ResetTemplateURL(
+       template_url, template_url->short_name(), u"new_keyword_asdf",
+-      template_url->url());
++      template_url->url(), template_url->suggestions_url());
+ 
+   // In resetting the default provider, the fetcher should've been canceled.
+   EXPECT_FALSE(
+diff --git a/chrome/browser/search_engine_choice/search_engine_choice_dialog_browsertest.cc b/chrome/browser/search_engine_choice/search_engine_choice_dialog_browsertest.cc
+--- a/chrome/browser/search_engine_choice/search_engine_choice_dialog_browsertest.cc
++++ b/chrome/browser/search_engine_choice/search_engine_choice_dialog_browsertest.cc
+@@ -855,7 +855,7 @@
+                 ->GetDefaultSearchProvider()
+                 ->data()
+                 .prepopulate_id,
+-            TemplateURLPrepopulateData::google.id);
++            TemplateURLPrepopulateData::break_stuff_google.id);
+ 
+   // The choice was not persisted across Guest sessions, so the
+   // the search engine choice dialog gets displayed again.
+@@ -1031,8 +1031,9 @@
+   // displayed list.
+   int prepopulate_id = service->GetSearchEngines().at(0)->prepopulate_id();
+   if (select_google_in_pre()) {
+-    prepopulate_id = TemplateURLPrepopulateData::google.id;
+-  } else if (prepopulate_id == TemplateURLPrepopulateData::google.id) {
++    prepopulate_id = TemplateURLPrepopulateData::break_stuff_google.id;
++  } else if (prepopulate_id ==
++             TemplateURLPrepopulateData::break_stuff_google.id) {
+     // The first item was Google, pick the second then.
+     prepopulate_id = service->GetSearchEngines().at(1)->prepopulate_id();
+   }
+diff --git a/chrome/browser/search_engine_choice/search_engine_choice_dialog_service_unittest.cc b/chrome/browser/search_engine_choice/search_engine_choice_dialog_service_unittest.cc
+--- a/chrome/browser/search_engine_choice/search_engine_choice_dialog_service_unittest.cc
++++ b/chrome/browser/search_engine_choice/search_engine_choice_dialog_service_unittest.cc
+@@ -297,7 +297,7 @@
+       GetSearchEngineChoiceDialogService(/*force_fetch_search_engines=*/true);
+ 
+   search_engine_choice_dialog_service->NotifyChoiceMade(
+-      TemplateURLPrepopulateData::google.id,
++      TemplateURLPrepopulateData::break_stuff_google.id,
+       /*save_guest_mode_selection=*/false,
+       SearchEngineChoiceDialogService::EntryPoint::kDialog);
+   EXPECT_THAT(
+@@ -307,7 +307,7 @@
+   // Recorded when we call `SetUserSelectedDefaultSearchProvider()`.
+   histogram_tester().ExpectUniqueSample(
+       search_engines::kSearchEngineChoiceScreenDefaultSearchEngineTypeHistogram,
+-      SearchEngineType::SEARCH_ENGINE_GOOGLE, 1);
++      SearchEngineType::SEARCH_ENGINE_OTHER, 1);
+ }
+ 
+ TEST_F(SearchEngineChoiceDialogServiceTest, NotifyChoiceMade_Fre) {
+@@ -315,7 +315,7 @@
+       GetSearchEngineChoiceDialogService(/*force_fetch_search_engines=*/true);
+ 
+   search_engine_choice_dialog_service->NotifyChoiceMade(
+-      TemplateURLPrepopulateData::google.id,
++      TemplateURLPrepopulateData::break_stuff_google.id,
+       /*save_guest_mode_selection=*/false,
+       SearchEngineChoiceDialogService::EntryPoint::kFirstRunExperience);
+   EXPECT_THAT(
+@@ -324,7 +324,7 @@
+           search_engines::SearchEngineChoiceScreenEvents::kFreDefaultWasSet));
+   histogram_tester().ExpectUniqueSample(
+       search_engines::kSearchEngineChoiceScreenDefaultSearchEngineTypeHistogram,
+-      SearchEngineType::SEARCH_ENGINE_GOOGLE, 1);
++      SearchEngineType::SEARCH_ENGINE_OTHER, 1);
+ }
+ 
+ TEST_F(SearchEngineChoiceDialogServiceTest, NotifyChoiceMade_ProfileCreation) {
+@@ -332,7 +332,7 @@
+       GetSearchEngineChoiceDialogService(/*force_fetch_search_engines=*/true);
+ 
+   search_engine_choice_dialog_service->NotifyChoiceMade(
+-      TemplateURLPrepopulateData::google.id,
++      TemplateURLPrepopulateData::break_stuff_google.id,
+       /*save_guest_mode_selection=*/false,
+       SearchEngineChoiceDialogService::EntryPoint::kProfileCreation);
+   EXPECT_THAT(
+@@ -341,7 +341,7 @@
+                                     kProfileCreationDefaultWasSet));
+   histogram_tester().ExpectUniqueSample(
+       search_engines::kSearchEngineChoiceScreenDefaultSearchEngineTypeHistogram,
+-      SearchEngineType::SEARCH_ENGINE_GOOGLE, 1);
++      SearchEngineType::SEARCH_ENGINE_OTHER, 1);
+ }
+ 
+ TEST_F(SearchEngineChoiceDialogServiceTest,
+diff --git a/chrome/browser/search_engines/prepopulated_engines_migration_browsertest.cc b/chrome/browser/search_engines/prepopulated_engines_migration_browsertest.cc
+--- a/chrome/browser/search_engines/prepopulated_engines_migration_browsertest.cc
++++ b/chrome/browser/search_engines/prepopulated_engines_migration_browsertest.cc
+@@ -38,7 +38,8 @@
+ namespace {
+ 
+ using ::TemplateURLPrepopulateData::bing;
+-using ::TemplateURLPrepopulateData::google;
++// Arcium retains Google's ID and data under this generic engine symbol.
++using ::TemplateURLPrepopulateData::break_stuff_google;
+ using ::TemplateURLPrepopulateData::PrepopulatedEngine;
+ using ::testing::ElementsAreArray;
+ using TemplateURLVector = ::TemplateURL::TemplateURLVector;
+@@ -106,7 +107,7 @@
+ // android codesearch are known variants that are assumed to be used in
+ // different regions.
+ RegionalAndNonRegionalEngines android_region_engines = {
+-    {&google, &bing, &android_codesearch},
++    {&break_stuff_google, &bing, &android_codesearch},
+     {&chromium_codesearch, &chrome_codesearch},
+ };
+ 
+@@ -114,7 +115,7 @@
+ // Android codesearch is still in the current region, but we are indicating that
+ // we are migrating it to a new standalone entry with its own ID.
+ RegionalAndNonRegionalEngines android_migrated_region_engines = {
+-    {&google, &bing, &android_codesearch_migrating},
++    {&break_stuff_google, &bing, &android_codesearch_migrating},
+     {&chromium_codesearch, &android_codesearch_next, &chrome_codesearch},
+ };
+ 
+@@ -124,12 +125,12 @@
+ // URL is not matching the value from the migrated engine.
+ // This is the set with Chrome codesearch being the relevant regional variant.
+ RegionalAndNonRegionalEngines chrome_region_engines = {
+-    {&google, &bing, &chrome_codesearch},
++    {&break_stuff_google, &bing, &chrome_codesearch},
+     {&chromium_codesearch, &android_codesearch},
+ };
+ 
+ RegionalAndNonRegionalEngines chrome_migrated_region_engines = {
+-    {&google, &bing, &chrome_codesearch},
++    {&break_stuff_google, &bing, &chrome_codesearch},
+     {&chromium_codesearch, &android_codesearch_migrating,
+      &android_codesearch_next},
+ };
+@@ -186,10 +187,11 @@
+   }
+   if (summary.search_url.has_value()) {
+     os << ", search_url: "
+-       << (summary.search_url == TemplateURLPrepopulateData::google.search_url
++       << (summary.search_url ==
++                   TemplateURLPrepopulateData::break_stuff_google.search_url
+                ?
+                // Because that URL is super long and spams the error logs!
+-               "<google search url>"
++               "<legacy Google search URL>"
+                : *summary.search_url);
+   }
+   if (summary.name.has_value()) {
+@@ -389,7 +391,7 @@
+   ASSERT_EQ(active_engines_config_, android_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, true},
++      {break_stuff_google.id, break_stuff_google.keyword, true},
+       {bing.id, bing.keyword, false},
+       {generic_id, android_keyword, false}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -398,7 +400,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations{
+-      {google.id, google.keyword, true},
++      {break_stuff_google.id, break_stuff_google.keyword, true},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, android_keyword, false}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -413,7 +415,7 @@
+       template_url_service().GetTemplateURLForKeyword(android_keyword));
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, android_keyword, true}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -430,7 +432,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations{
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, android_keyword, true}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -457,7 +459,7 @@
+                   android_codesearch.search_url);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {.id = generic_id,
+        .keyword = android_keyword,
+@@ -486,7 +488,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations{
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {.id = IsParamFeatureEnabled() ? new_id : generic_id,
+        .keyword = android_keyword,
+@@ -522,12 +524,12 @@
+       template_url_service().GetTemplateURLForKeyword(android_keyword);
+   ASSERT_EQ(generic_id, migrating_t_url->prepopulate_id());
+ 
+-  template_url_service().ResetTemplateURL(migrating_t_url, u"Searchy Search",
+-                                          custom_keyword,
+-                                          android_codesearch.search_url);
+-
+-  std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, true},
++  template_url_service().ResetTemplateURL(
++      migrating_t_url, u"Searchy Search", custom_keyword,
++      android_codesearch.search_url, migrating_t_url->suggestions_url());
++
++  std::vector<SearchProviderSummary> expectations = {
++      {break_stuff_google.id, break_stuff_google.keyword, true},
+       {bing.id, bing.keyword, false},
+       {generic_id, custom_keyword, false}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -536,7 +538,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations{
+-      {google.id, google.keyword, true},
++      {break_stuff_google.id, break_stuff_google.keyword, true},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, custom_keyword, false}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -572,7 +574,7 @@
+   ASSERT_EQ(active_engines_config_, android_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, true},
++      {break_stuff_google.id, break_stuff_google.keyword, true},
+       {bing.id, bing.keyword, false},
+       {generic_id, android_codesearch.keyword, false}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -582,7 +584,7 @@
+   ASSERT_EQ(active_engines_config_, chrome_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, true},
++      {break_stuff_google.id, break_stuff_google.keyword, true},
+       {bing.id, bing.keyword, false},
+       {generic_id, chrome_codesearch.keyword, false}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -592,7 +594,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations{
+-      {google.id, google.keyword, true},
++      {break_stuff_google.id, break_stuff_google.keyword, true},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, android_keyword, false}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -608,7 +610,7 @@
+       template_url_service().GetTemplateURLForKeyword(android_keyword));
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, android_codesearch.keyword, true}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -625,7 +627,7 @@
+   ASSERT_EQ(active_engines_config_, chrome_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, chrome_codesearch.keyword, true}};
+ 
+@@ -646,7 +648,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations{
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, android_keyword, true}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -673,7 +675,7 @@
+                   android_codesearch.search_url);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {.id = generic_id,
+        .keyword = android_keyword,
+@@ -697,7 +699,7 @@
+   ASSERT_EQ(active_engines_config_, chrome_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {.id = generic_id,
+        .keyword = android_keyword,
+@@ -718,7 +720,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations{
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {.id = IsParamFeatureEnabled() ? new_id : generic_id,
+        .keyword = android_keyword,
+@@ -766,7 +768,7 @@
+           chrome_codesearch.keyword));
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, chrome_codesearch.keyword, true}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -783,7 +785,7 @@
+   ASSERT_EQ(active_engines_config_, android_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, android_codesearch.keyword, true}};
+ 
+@@ -804,7 +806,8 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations;
+-  expectations.push_back({google.id, google.keyword, false});
++  expectations.push_back(
++      {break_stuff_google.id, break_stuff_google.keyword, false});
+   expectations.push_back({bing.id, bing.keyword, false});
+   if (IsParamFeatureEnabled()) {
+     // `chrome_codesearch` is identified as not matching with
+@@ -895,7 +898,7 @@
+       template_url_service().GetTemplateURLForKeyword(android_keyword));
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, android_keyword, true, android_codesearch.search_url}};
+   EXPECT_THAT(GetServiceSearchProviders(), ElementsAreArray(expectations));
+@@ -920,7 +923,7 @@
+   ASSERT_EQ(active_engines_config_, chrome_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, chrome_codesearch.keyword, true,
+        chrome_codesearch.search_url, chrome_codesearch.name}};
+@@ -943,7 +946,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, android_keyword, true,
+        android_codesearch.search_url, android_codesearch.name}};
+@@ -964,7 +967,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, android_keyword, true,
+        android_codesearch.search_url, android_codesearch.name}};
+@@ -987,7 +990,7 @@
+   ASSERT_EQ(active_engines_config_, chrome_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+   };
+ 
+@@ -1025,7 +1028,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, android_keyword, true,
+        android_codesearch_next.search_url, android_codesearch_next.name}};
+@@ -1049,19 +1052,25 @@
+   // DSE.
+   ASSERT_EQ(active_engines_config_, android_region_engines);
+ 
++  TemplateURL* android_template_url =
++      template_url_service().GetTemplateURLForKeyword(android_keyword);
++  ASSERT_TRUE(android_template_url);
+   template_url_service().ResetTemplateURL(
+-      template_url_service().GetTemplateURLForKeyword(android_keyword),
+-      android_codesearch.name, custom_keyword, android_codesearch.search_url);
++      android_template_url, android_codesearch.name, custom_keyword,
++      android_codesearch.search_url, android_template_url->suggestions_url());
+ 
+   template_url_service().SetUserSelectedDefaultSearchProvider(
+       template_url_service().GetTemplateURLForKeyword(custom_keyword));
+ 
++  TemplateURL* custom_template_url =
++      template_url_service().GetTemplateURLForKeyword(custom_keyword);
++  ASSERT_TRUE(custom_template_url);
+   template_url_service().ResetTemplateURL(
+-      template_url_service().GetTemplateURLForKeyword(custom_keyword),
+-      u"Searchy Search", custom_keyword, android_codesearch.search_url);
+-
+-  std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      custom_template_url, u"Searchy Search", custom_keyword,
++      android_codesearch.search_url, custom_template_url->suggestions_url());
++
++  std::vector<SearchProviderSummary> expectations = {
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {generic_id, custom_keyword, true, android_codesearch.search_url,
+        u"Searchy Search"}};
+@@ -1086,7 +1095,7 @@
+   ASSERT_EQ(active_engines_config_, chrome_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       // Since the keyword was changed, the entry is not `safe_for_autoreplace`
+       // anymore. So the variant is switched to the "chrome" one, but keeping
+@@ -1113,7 +1122,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, custom_keyword, true,
+        android_codesearch.search_url, u"Searchy Search"}};
+@@ -1136,7 +1145,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, custom_keyword, true,
+        android_codesearch.search_url, u"Searchy Search"}};
+@@ -1160,7 +1169,7 @@
+   ASSERT_EQ(active_engines_config_, chrome_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+   };
+ 
+@@ -1196,7 +1205,7 @@
+   ASSERT_EQ(active_engines_config_, android_migrated_region_engines);
+ 
+   std::vector<SearchProviderSummary> expectations = {
+-      {google.id, google.keyword, false},
++      {break_stuff_google.id, break_stuff_google.keyword, false},
+       {bing.id, bing.keyword, false},
+       {IsParamFeatureEnabled() ? new_id : generic_id, custom_keyword, true,
+        android_codesearch.search_url, u"Searchy Search"}};
+diff --git a/chrome/browser/search_engines/template_url_service_sync_unittest.cc b/chrome/browser/search_engines/template_url_service_sync_unittest.cc
+--- a/chrome/browser/search_engines/template_url_service_sync_unittest.cc
++++ b/chrome/browser/search_engines/template_url_service_sync_unittest.cc
+@@ -635,7 +635,8 @@
+   // Change a keyword.
+   TemplateURL* existing_turl = model()->GetTemplateURLForGUID("guid1");
+   model()->ResetTemplateURL(existing_turl, existing_turl->short_name(), u"k",
+-                            existing_turl->url());
++                            existing_turl->url(),
++                            existing_turl->suggestions_url());
+   EXPECT_EQ(1U, processor()->change_list_size());
+   ASSERT_TRUE(processor()->contains_guid("guid1"));
+   change = processor()->change_for_guid("guid1");
+@@ -940,7 +941,8 @@
+   // Update the custom search engine that was default but now is hidden by
+   // |ext_dse|.
+   model()->ResetTemplateURL(user_dse, u"New search engine", u"new_keyword",
+-                            "http://new.com/{searchTerms}");
++                            "http://new.com/{searchTerms}",
++                            user_dse->suggestions_url());
+ 
+   // Change kSyncedDefaultSearchProviderGUID to point to an nonexisting entry.
+   // It can happen when the prefs are synced but the search engines are not.
+@@ -1888,7 +1890,8 @@
+ 
+   // Change a keyword.
+   ASSERT_EQ(turl, model()->GetTemplateURLForGUID("guid"));
+-  model()->ResetTemplateURL(turl, turl->short_name(), u"newkey", turl->url());
++  model()->ResetTemplateURL(turl, turl->short_name(), u"newkey", turl->url(),
++                            turl->suggestions_url());
+ 
+   EXPECT_FALSE(turl->safe_for_autoreplace());
+   EXPECT_EQ(turl->is_active(), TemplateURLData::ActiveStatus::kTrue);
+@@ -4527,7 +4530,8 @@
+ 
+   TemplateURL* turl = model()->GetTemplateURLForKeyword(u"key");
+   // Update the account-only search engine.
+-  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com");
++  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com",
++                            turl->suggestions_url());
+ 
+   // This should write the updated data to local and thus add to the database.
+   EXPECT_EQ(turl, model()->GetTemplateURLForKeyword(u"newkey"));
+@@ -4586,7 +4590,8 @@
+   ASSERT_EQ(0u, processor()->change_list_size());
+ 
+   // Update the local-only search engine.
+-  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com");
++  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com",
++                            turl->suggestions_url());
+ 
+   // This should update and write the new value to both local and account.
+   EXPECT_FALSE(model()->GetTemplateURLForKeyword(u"key"));
+@@ -4622,7 +4627,8 @@
+               Not(Contains(Property(&TemplateURLData::keyword, u"key"))));
+ 
+   TemplateURL* turl = model()->GetTemplateURLForKeyword(u"key");
+-  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com");
++  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com",
++                            turl->suggestions_url());
+ 
+   // This should update and write the new value to both local and account.
+   EXPECT_FALSE(model()->GetTemplateURLForKeyword(u"key"));
+@@ -4658,7 +4664,8 @@
+   ASSERT_EQ(processor()->change_for_guid("guid").change_type(),
+             syncer::SyncChange::ACTION_ADD);
+ 
+-  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com");
++  model()->ResetTemplateURL(turl, u"newtitle", u"newkey", "http://newurl.com",
++                            turl->suggestions_url());
+ 
+   // This should update and write the new value to both local and account.
+   EXPECT_FALSE(model()->GetTemplateURLForKeyword(u"key"));
+@@ -5402,7 +5409,8 @@
+   EXPECT_EQ(0U, processor()->change_list_size());
+ 
+   // Change a keyword.
+-  model()->ResetTemplateURL(turl, turl->short_name(), u"newkey", turl->url());
++  model()->ResetTemplateURL(turl, turl->short_name(), u"newkey", turl->url(),
++                            turl->suggestions_url());
+ 
+   // `safe_for_autoreplace` changes to false and the keyword is marked active,
+   // since the keyword was manually updated.
+diff --git a/chrome/browser/search_engines/template_url_service_unittest.cc b/chrome/browser/search_engines/template_url_service_unittest.cc
+--- a/chrome/browser/search_engines/template_url_service_unittest.cc
++++ b/chrome/browser/search_engines/template_url_service_unittest.cc
+@@ -439,7 +439,8 @@
+   model()->set_clock(std::move(clock));
+ 
+   // Mutate an element and verify it succeeded.
+-  model()->ResetTemplateURL(loaded_url, u"a", u"b", "c");
++  model()->ResetTemplateURL(loaded_url, u"a", u"b", "c",
++                            loaded_url->suggestions_url());
+   ASSERT_EQ(u"a", loaded_url->short_name());
+   ASSERT_EQ(u"b", loaded_url->keyword());
+   ASSERT_EQ("c", loaded_url->url());
+@@ -795,7 +796,8 @@
+   const std::u16string new_short_name(u"a");
+   const std::u16string new_keyword(u"b");
+   const std::string new_url("c");
+-  model()->ResetTemplateURL(t_url, new_short_name, new_keyword, new_url);
++  model()->ResetTemplateURL(t_url, new_short_name, new_keyword, new_url,
++                            t_url->suggestions_url());
+   ASSERT_EQ(new_short_name, t_url->short_name());
+   ASSERT_EQ(new_keyword, t_url->keyword());
+   ASSERT_EQ(new_url, t_url->url());
+@@ -849,7 +851,8 @@
+   const std::u16string new_short_name(u"a");
+   const std::u16string new_keyword(u"b");
+   const std::string new_url("c");
+-  model()->ResetTemplateURL(t_url, new_short_name, new_keyword, new_url);
++  model()->ResetTemplateURL(t_url, new_short_name, new_keyword, new_url,
++                            t_url->suggestions_url());
+   ASSERT_EQ(new_short_name, t_url->short_name());
+   ASSERT_EQ(new_keyword, t_url->keyword());
+   ASSERT_EQ(new_url, t_url->url());
+@@ -1133,7 +1136,7 @@
+   // ResetTemplateURL marks the TemplateURL as unsafe to replace, so it should
+   // no longer be replaceable.
+   model()->ResetTemplateURL(t_url, t_url->short_name(), t_url->keyword(),
+-                            t_url->url());
++                            t_url->url(), t_url->suggestions_url());
+ 
+   ASSERT_FALSE(
+       model()->CanAddAutogeneratedKeyword(u"foo", GURL("http://foo2")));
+@@ -1154,7 +1157,7 @@
+   // ResetTemplateURL marks the TemplateURL as unsafe to replace, so it should
+   // no longer be replaceable.
+   model()->ResetTemplateURL(t_url, t_url->short_name(), t_url->keyword(),
+-                            t_url->url());
++                            t_url->url(), t_url->suggestions_url());
+ 
+   ASSERT_FALSE(
+       model()->CanAddAutogeneratedKeyword(u"bar", GURL("http://foo.com")));
+@@ -1244,7 +1247,7 @@
+ TEST_F(TemplateURLServiceTest, RepairPrepopulatedSearchEngines) {
+   auto scoped_override =
+       regional_capabilities::SetPrepopulatedEnginesOverrideForTesting(
+-          /*regional_engines=*/{&TemplateURLPrepopulateData::google,
++          /*regional_engines=*/{&TemplateURLPrepopulateData::break_stuff_google,
+                                 &TemplateURLPrepopulateData::yahoo,
+                                 &TemplateURLPrepopulateData::bing},
+           /*other_known_engines=*/{&TemplateURLPrepopulateData::brave});
+@@ -1253,10 +1256,11 @@
+ 
+   // Edit Google search engine.
+   TemplateURL* google = model()->GetTemplateURLForKeyword(
+-      TemplateURLPrepopulateData::google.keyword);
++      TemplateURLPrepopulateData::break_stuff_google.keyword);
+   ASSERT_TRUE(google);
+   model()->ResetTemplateURL(google, u"trash", u"xxx",
+-                            "http://www.foo.com/s?q={searchTerms}");
++                            "http://www.foo.com/s?q={searchTerms}",
++                            google->suggestions_url());
+   EXPECT_EQ(u"trash", google->short_name());
+   EXPECT_EQ(u"xxx", google->keyword());
+ 
+@@ -1499,7 +1503,8 @@
+   TemplateURL* bookmarks = model()->GetTemplateURLForKeyword(u"@bookmarks");
+   ASSERT_TRUE(bookmarks);
+   model()->ResetTemplateURL(bookmarks, u"trash", u"xxx",
+-                            "http://www.foo.com/s?q={searchTerms}");
++                            "http://www.foo.com/s?q={searchTerms}",
++                            bookmarks->suggestions_url());
+   EXPECT_EQ(u"trash", bookmarks->short_name());
+   EXPECT_EQ(u"xxx", bookmarks->keyword());
+ 
+@@ -1801,9 +1806,12 @@
+ 
+   // Make default search provider unusable (no search terms).  Using
+   // GetTemplateURLForKeyword() returns a non-const pointer.
+-  model()->ResetTemplateURL(
+-      model()->GetTemplateURLForKeyword(default_search->keyword()), u"test",
+-      u"test", "http://example.com/");
++  TemplateURL* default_search_url =
++      model()->GetTemplateURLForKeyword(default_search->keyword());
++  ASSERT_TRUE(default_search_url);
++  model()->ResetTemplateURL(default_search_url, u"test", u"test",
++                            "http://example.com/",
++                            default_search_url->suggestions_url());
+   base::RunLoop().RunUntilIdle();
+ 
+   // Reset the model and load it. There should be a usable default search
+@@ -1833,7 +1841,8 @@
+             template_url_starter_pack_data::StarterPackId::kNone);
+   const std::u16string original_title = t_url->short_name();
+ 
+-  model()->ResetTemplateURL(t_url, u"not history", u"@history", t_url->url());
++  model()->ResetTemplateURL(t_url, u"not history", u"@history", t_url->url(),
++                            t_url->suggestions_url());
+   base::RunLoop().RunUntilIdle();
+ 
+   // Reset the model and load it.
+@@ -2259,13 +2268,13 @@
+                          std::string(), std::string(), true);
+   // Update first engine to conflict with second by keyword. This should
+   // overwrite the second engine.
+-  model()->ResetTemplateURL(user1, u"title", u"user2",
+-                            "http://test_search.com");
++  model()->ResetTemplateURL(user1, u"title", u"user2", "http://test_search.com",
++                            user1->suggestions_url());
+   // Check that first engine can now be found by new keyword.
+   EXPECT_EQ(user1, model()->GetTemplateURLForKeyword(u"user2"));
+   // Update to return first engine original keyword.
+-  model()->ResetTemplateURL(user1, u"title", u"user1",
+-                            "http://test_search.com");
++  model()->ResetTemplateURL(user1, u"title", u"user1", "http://test_search.com",
++                            user1->suggestions_url());
+   EXPECT_EQ(user1, model()->GetTemplateURLForKeyword(u"user1"));
+   // Expect that |user2| is now unmasked, since we don't delete replaceable
+   // engines during the Update() phase, only on Add().
+@@ -2503,7 +2512,8 @@
+   TemplateURL* original_url = model()->Add(std::make_unique<TemplateURL>(data));
+   const Time original_last_modified = original_url->last_modified();
+   model()->ResetTemplateURL(original_url, u"test_engine2", u"engine_keyword",
+-                            "http://test_engine");
++                            "http://test_engine",
++                            original_url->suggestions_url());
+   TemplateURL* update_url =
+       model()->GetTemplateURLForKeyword(u"engine_keyword");
+   const Time update_last_modified = update_url->last_modified();
+diff --git a/chrome/browser/ui/search_engines/keyword_editor_controller_unittest.cc b/chrome/browser/ui/search_engines/keyword_editor_controller_unittest.cc
+--- a/chrome/browser/ui/search_engines/keyword_editor_controller_unittest.cc
++++ b/chrome/browser/ui/search_engines/keyword_editor_controller_unittest.cc
+@@ -131,7 +131,7 @@
+ 
+ // Tests adding a TemplateURL.
+ TEST_F(KeywordEditorControllerTest, Add) {
+-  controller()->AddTemplateURL(kA, kB, "http://c");
++  controller()->AddTemplateURL(kA, kB, "http://c", "");
+ 
+   // Verify the observer was notified.
+   VerifyChanged();
+@@ -149,12 +149,13 @@
+ 
+ // Tests modifying a TemplateURL.
+ TEST_F(KeywordEditorControllerTest, Modify) {
+-  controller()->AddTemplateURL(kA, kB, "http://c");
++  controller()->AddTemplateURL(kA, kB, "http://c", "");
+   ClearChangeCount();
+ 
+   // Modify the entry.
+   TemplateURL* turl = util()->model()->GetTemplateURLs()[0];
+-  controller()->ModifyTemplateURL(turl, kA1, kB1, "http://c1");
++  controller()->ModifyTemplateURL(turl, kA1, kB1, "http://c1",
++                                  turl->suggestions_url());
+ 
+   // Make sure it was updated appropriately.
+   VerifyChanged();
+@@ -171,14 +172,14 @@
+ // Regression test for crbug.com/499223471.
+ TEST_F(KeywordEditorControllerTest, ModifyWithoutChange) {
+   const TemplateURLID turl_id =
+-      controller()->AddTemplateURL(kA, kB, "c1.com/?s=%s");
++      controller()->AddTemplateURL(kA, kB, "c1.com/?s=%s", "");
+   ClearChangeCount();
+ 
+   // Trigger a modification, but the URL is the same as the original one, only
+   // in a fixed up format.
+   TemplateURL* turl = controller()->GetTemplateURL(turl_id);
+-  controller()->ModifyTemplateURL(turl, kA, kB,
+-                                  "http://c1.com/?s={searchTerms}");
++  controller()->ModifyTemplateURL(
++      turl, kA, kB, "http://c1.com/?s={searchTerms}", turl->suggestions_url());
+ 
+   // Make sure it was not updated.
+   VerifyNotChanged();
+@@ -204,7 +205,8 @@
+   ClearChangeCount();
+ 
+   // Modify the entry.
+-  controller()->ModifyTemplateURL(turl, kA1, kB1, "http://c1");
++  controller()->ModifyTemplateURL(turl, kA1, kB1, "http://c1",
++                                  turl->suggestions_url());
+ 
+   // Make sure it was updated appropriately.
+   VerifyChanged();
+@@ -226,7 +228,7 @@
+ 
+ // Tests removing a TemplateURL.
+ TEST_F(KeywordEditorControllerTest, Remove) {
+-  TemplateURLID id = controller()->AddTemplateURL(kA, kB, "http://c");
++  TemplateURLID id = controller()->AddTemplateURL(kA, kB, "http://c", "");
+   auto original_size = util()->model()->GetTemplateURLs().size();
+   ClearChangeCount();
+ 
+@@ -291,7 +293,7 @@
+ // Tests making a TemplateURL the default search provider.
+ TEST_F(KeywordEditorControllerTest, MakeDefault) {
+   TemplateURLID id =
+-      controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}");
++      controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}", "");
+   ClearChangeCount();
+ 
+   const TemplateURL* turl = util()->model()->GetTemplateURLForKeyword(kB);
+@@ -311,8 +313,8 @@
+ // Tests that a TemplateURL can't be made the default if the default search
+ // provider is managed via policy.
+ TEST_F(KeywordEditorControllerManagedDSPTest, CannotSetDefaultWhileManaged) {
+-  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}");
+-  controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}");
++  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}", "");
++  controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}", "");
+   ClearChangeCount();
+ 
+   const TemplateURL* turl1 = util()->model()->GetTemplateURLForKeyword(u"b");
+@@ -338,7 +340,7 @@
+ // Tests that a TemplateURL can be made the default if the default search
+ // provider is recommended via policy.
+ TEST_F(KeywordEditorControllerManagedDSPTest, SetDefaultWhileRecommended) {
+-  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}");
++  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}", "");
+   ClearChangeCount();
+   const TemplateURL* turl1 = util()->model()->GetTemplateURLForKeyword(kB);
+   ASSERT_NE(turl1, nullptr);
+@@ -355,7 +357,7 @@
+       controller()->IsManaged(util()->model()->GetDefaultSearchProvider()));
+ 
+   TemplateURLID id =
+-      controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}");
++      controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}", "");
+   ClearChangeCount();
+   const TemplateURL* turl2 = util()->model()->GetTemplateURLForKeyword(kB1);
+   ASSERT_NE(turl2, nullptr);
+@@ -423,8 +425,8 @@
+ // Tests that a TemplateURL can't be edited if it is the managed default search
+ // provider.
+ TEST_F(KeywordEditorControllerManagedDSPTest, EditManagedDefault) {
+-  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}");
+-  controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}");
++  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}", "");
++  controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}", "");
+   ClearChangeCount();
+ 
+   const TemplateURL* turl1 = util()->model()->GetTemplateURLForKeyword(u"b");
+@@ -450,8 +452,8 @@
+ // Tests that a `TemplateURL` can be edited if it is the recommended default
+ // search provider.
+ TEST_F(KeywordEditorControllerManagedDSPTest, EditRecommendedDefault) {
+-  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}");
+-  controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}");
++  controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}", "");
++  controller()->AddTemplateURL(kA1, kB1, "http://d{searchTerms}", "");
+   ClearChangeCount();
+ 
+   const TemplateURL* turl1 = util()->model()->GetTemplateURLForKeyword(u"b");
+@@ -478,7 +480,7 @@
+ 
+ TEST_F(KeywordEditorControllerNoWebDataTest, MakeDefaultNoWebData) {
+   TemplateURLID id =
+-      controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}");
++      controller()->AddTemplateURL(kA, kB, "http://c{searchTerms}", "");
+   ClearChangeCount();
+ 
+   // This should not result in a crash.

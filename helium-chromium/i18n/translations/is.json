@@ -1,0 +1,1234 @@
+[
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Helium losar um minni frá óvirkum flipum. Þetta gefur virkum flipum og öðrum forritum meiri tölvuauðlindir og heldur Helium hraðvirku. Óvirkir flipar verða sjálfkrafa virkir aftur þegar þú ferð aftur á þá."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Helium sparar rafhlöðuorku með því að takmarka bakgrunnsvinnslu og sjónræn áhrif, svo sem mjúka skrun og rammahraða myndbanda."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "Helium preloads pages which makes browsing and searching faster.",
+    "message": "Helium forhleður síður sem gerir vafra- og leitarnotkun hraðari."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
+    "source": "Sites you add will always stay active and memory won't be freed up from them.",
+    "message": "Vefsvæði sem þú bætir við verða alltaf virk og minni verður ekki losað frá þeim."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_DISCARD_RING_TREATMENT_ENABLED_DESCRIPTION_WITH_LEARN_LINK",
+    "source": "A dotted circle appears around site icons.",
+    "message": "Punktalínuhringur birtist utan um vefsvæðistákn."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_INTERVENTION_NOTIFICATION_ENABLED_DESCRIPTION",
+    "source": "Get notifications that suggest ways to improve detected performance issues.",
+    "message": "Fáðu tilkynningar sem leggja til leiðir til að bæta greind afkastamál."
+  },
+  {
+    "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
+    "message": "Flutt inn frá <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
+    "source": "Import profile still in use",
+    "message": "Innflutningssnið enn í notkun"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TEXT",
+    "source": "To continue importing data, first close the browser you're importing from.",
+    "message": "Til að halda innflutningi áfram skaltu fyrst loka vafranum sem þú flytur inn úr."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES",
+    "source": "Helium services",
+    "message": "Helium þjónustur"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
+    "source": "Manage what Helium services are allowed in your browser",
+    "message": "Stjórnaðu hvaða Helium þjónustur eru leyfðar í vafranum þínum"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
+    "source": "Updates to Helium services:",
+    "message": "Uppfærslur á Helium þjónustum:"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
+    "source": "These changes are not active until you dismiss this notice.",
+    "message": "Þessar breytingar taka ekki gildi fyrr en þú lokar þessari tilkynningu."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_IGNORE",
+    "source": "Don't notify me again",
+    "message": "Ekki tilkynna mér aftur"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Leyfa tengingu við Helium þjónustur"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Þegar kveikt er á þessu getur Helium tengst nafnlausum vefþjónustum til að veita viðbótarvirkni. Þegar slökkt er á þessu munu viðbótareiginleikar ekki virka."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
+    "source": "Use your own instance of Helium services",
+    "message": "Nota eigin tilvik af Helium þjónustum"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Þú getur hýst þitt eigið tilvik af Helium þjónustum og notað það í vafranum í stað sjálfgefna tilviksins. Aðeins HTTPS."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
+    "source": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.",
+    "message": "Ekki nota þennan reit nema þú vitir nákvæmlega hvað þú ert að gera. Límdu aldrei vefslóðir frá öðrum hér, þeir eru að reyna að stela gögnunum þínum. Við berum enga ábyrgð á tjóni af völdum notkunar sérsniðins þjóns og getum ekki aðstoðað þig."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
+    "source": "Custom origin URL for Helium services",
+    "message": "Sérsniðin upprunavefslóð fyrir Helium þjónustur"
+  },
+  {
+    "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
+    "source": "Helium services have been updated. Please review the changes.",
+    "message": "Helium þjónustur hafa verið uppfærðar. Vinsamlegast skoðaðu breytingarnar."
+  },
+  {
+    "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
+    "source": "Review Helium services updates",
+    "message": "Skoða uppfærslur á Helium þjónustum"
+  },
+  {
+    "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
+    "source": "Services updated",
+    "message": "Þjónustur uppfærðar"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT",
+    "source": "Helium services are not available until setup is complete to ensure your privacy and consent.",
+    "message": "Helium þjónustur eru ekki tiltækar fyrr en uppsetning er lokið til að tryggja friðhelgi þína og samþykki."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON",
+    "source": "Complete setup",
+    "message": "Ljúka uppsetningu"
+  },
+  {
+    "name": "IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE_HELIUM",
+    "source": "This list of search engines is shown in random order.",
+    "message": "Þessi listi yfir leitarvélar er sýndur í handahófskenndri röð."
+  },
+  {
+    "name": "IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR",
+    "source": "Appearance and behavior",
+    "message": "Útlit og hegðun"
+  },
+  {
+    "name": "IDS_SETTINGS_BEHAVIOR",
+    "source": "Behavior",
+    "message": "Hegðun"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with ⌘+Shift+C",
+    "message": "Virkja flýtiafritun síðutengils með ⌘+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with Ctrl+Shift+C",
+    "message": "Virkja flýtiafritun síðutengils með Ctrl+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Beina niðurhali og uppfærslum viðbóta um milliliðaþjón"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Þegar kveikt er á þessu mun Helium beina niðurhali og uppfærslum viðbóta um milliliðaþjón til að vernda friðhelgi þína. Þegar slökkt er á þessu mun niðurhal og uppfærsla viðbóta ekki virka."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "Leyfa niðurhal á !bangs-listanum"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium mun sækja lista yfir bangs sem hjálpa þér að vafra hraðar um netið, eins og !w eða !gh. Þegar slökkt er á þessu munu bangs ekki virka."
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM",
+    "source": "Please check that Helium services are enabled (including spell check downloads) and make sure that the firewall is not blocking downloads from Helium servers.",
+    "message": "Vinsamlegast athugaðu að Helium þjónustur séu virkar (þar á meðal niðurhal á stafsetningarskrám) og gakktu úr skugga um að eldveggurinn loki ekki niðurhali frá Helium þjónum."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Leyfa niðurhal á orðabókarskrám fyrir stafsetningarathugun"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium mun sækja orðabókarskrár sem notaðar eru við stafsetningarathugun þegar þess er óskað. Þegar slökkt er á þessu mun stafsetningarathugun ekki virka."
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",
+    "source": "Version <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>",
+    "message": "Útgáfa <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Leyfa niðurhal á síulista fyrir uBlock Origin"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO_DESCRIPTION",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium mun sækja nýja síulista fyrir uBlock Origin. Öllum beiðnum um lista er beint um milliliðaþjón til að vernda friðhelgi þína. Þegar slökkt er á þessu verða sjálfgefnir síulistar hlaðnir úr staðbundinni geymslu, sem eru aðeins uppfærðir samhliða Helium. Valfrjálsir síulistar verða sóttir án milliliðunar."
+  },
+  {
+    "name": "IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON",
+    "source": "Open new tabs next to the active tab",
+    "message": "Opna nýja flipa við hliðina á virka flipanum"
+  },
+  {
+    "name": "IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER",
+    "source": "Cycle through tabs in most recently used order with Ctrl+Tab",
+    "message": "Fara á milli flipa í röð síðast notaðra með Ctrl+Tab"
+  },
+  {
+    "name": "IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES",
+    "source": "Component updates are disabled. See Helium services in settings.",
+    "message": "Slökkt er á uppfærslum íhluta. Sjá Helium þjónustur í stillingum."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE",
+    "source": "Hibernate",
+    "message": "Setja í dvala"
+  },
+  {
+    "name": "IDS_SETTINGS_PERMISSIONS_DESCRIPTION_NORMAL",
+    "source": "Manage site permissions and content settings (cookies, pop-ups, and more)",
+    "message": "Stjórnaðu heimildaveitingum og innihaldsstillingum vefsvæða (vefkökur, sprettigluggar og fleira)"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_DESCRIPTION_NORMAL",
+    "source": "Connection security, DNS settings, certificate management, and other security settings",
+    "message": "Tengingaröryggi, DNS-stillingar, vottorðastjórnun og aðrar öryggisstillingar"
+  },
+  {
+    "name": "IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT_HELIUM",
+    "source": "Enabling \"Do Not Track\" means that Helium will include a request not to be tracked with your browsing traffic. Whether this request is honored depends on whether a website responds to it and on how it is interpreted. For example, some websites may respond by showing you ads that aren't personalized using your previous browsing data. Many websites may still track you regardless of the request.",
+    "message": "Með því að virkja „Do Not Track\" mun Helium bæta beiðni um að vera ekki rakinn í vafraflæðið þitt. Hvort þessi beiðni er virt fer eftir því hvort vefsvæði bregst við henni og hvernig hún er túlkuð. Til dæmis geta sum vefsvæði brugðist við með því að sýna þér auglýsingar sem eru ekki sérsniðnar út frá fyrri vafragögnum þínum. Mörg vefsvæði geta samt rakið þig óháð beiðninni."
+  },
+  {
+    "name": "IDS_SETTINGS_ALLOWED_THIRD_PARTY_COOKIES_DESCRIPTION_HELIUM",
+    "source": "Affects the sites listed here. Inserting “[*.]” before a domain name creates an exception for the entire domain. For example, adding “[*.]example.com” means that third-party cookies can also be active for second.example.com, because it’s part of example.com.",
+    "message": "Hefur áhrif á vefsvæðin sem eru á þessum lista. Með því að setja „[*.]\" á undan léninu er búin til undanþága fyrir allt lénið. Til dæmis þýðir að bæta við „[*.]example.com\" að þriðja aðila vefkökur geta líka verið virkar á second.example.com, vegna þess að það er hluti af example.com."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC_HELIUM",
+    "source": "When you type in the address bar, Helium sends what you type to your default search engine to get suggestions. This is off in Incognito.",
+    "message": "Þegar þú skrifar í veffangastikuna sendir Helium það sem þú skrifar til sjálfgefinnar leitarvélar þinnar til að fá tillögur. Þetta er slökkt á í huliðsstillingu."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_HELIUM",
+    "source": "Suggestions from the search engine",
+    "message": "Tillögur frá leitarvélinni"
+  },
+  {
+    "name": "IDS_SETTINGS_AUTO_PIN_NEW_TAB_GROUPS_HELIUM",
+    "source": "Automatically pin new tab groups to the bookmarks bar",
+    "message": "Festa nýja flipahópa sjálfkrafa á bókamerkjastikuna"
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE",
+    "source": "Add search engine",
+    "message": "Bæta við leitarvél"
+  },
+  {
+    "name": "IDS_ADD_AS_DEFAULT",
+    "source": "Add as default",
+    "message": "Bæta við sem sjálfgefna"
+  },
+  {
+    "name": "IDS_POLICY_SOURCE_HOP",
+    "source": "Helium defaults",
+    "message": "Sjálfgefnar stillingar Helium"
+  },
+  {
+    "name": "IDS_ACCNAME_APP_MENU",
+    "source": "Main Menu",
+    "message": "Aðalvalmynd"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_HELIUM_SERVICES_DISABLED",
+    "source": "Extension downloads are disabled. Enable this feature in Helium services settings and try again.",
+    "message": "Slökkt er á niðurhali viðbóta. Virkjaðu þennan eiginleika í stillingum Helium þjónusta og reyndu aftur."
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_EXTENSION_DL_DISABLED",
+    "source": "Extension downloads are disabled",
+    "message": "Slökkt er á niðurhali viðbóta"
+  },
+  {
+    "name": "IDS_NTP_CUSTOMIZE_CHROME_CHANGE_WALLPAPER_LABEL",
+    "source": "Change wallpaper",
+    "message": "Breyta veggfóðri"
+  },
+  {
+    "name": "IDS_NEW_TAB_OTR_SUBTITLE_HELIUM",
+    "source": "Helium will not save anything about your browsing in Incognito, but downloads and bookmarks will stick around. Your browsing won't leave any traces on this device, and other users won't be able to see your activity.",
+    "message": "Helium vistar ekkert um vafraferðir þínar í huliðsstillingu, en niðurhal og bókamerki haldast. Vöfrun þín skilur engin ummerki eftir á þessu tæki og aðrir notendur geta ekki séð virkni þína."
+  },
+  {
+    "name": "IDS_EXTENSIONS_INSTALL_LOCATION_HELIUM",
+    "source": "Helium component",
+    "message": "Helium íhlutur"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT",
+    "source": "Browser layout",
+    "message": "Útlit vafra"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klassískt"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Kvikt"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Þétt"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Lóðrétt"
+  },
+  {
+    "name": "IDS_SETTINGS_TAB_STRIP_RIGHT_ALIGN",
+    "source": "Show vertical tabs on right side",
+    "message": "Sýna lóðrétta flipa hægra megin"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser Layout",
+    "message": "Útlit vafra"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klassískt"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Kvikt"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Þétt"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Lóðrétt"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on Right Side",
+    "message": "Flipar hægra megin"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser layout",
+    "message": "Útlit vafra"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on right side",
+    "message": "Flipar hægra megin"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use ⌘+S to toggle vertical tabs in Vertical layout",
+    "message": "Nota ⌘+S til að skipta um lóðrétta flipa í lóðréttu útliti"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use Ctrl+S to toggle vertical tabs in Vertical layout",
+    "message": "Nota Ctrl+S til að skipta um lóðrétta flipa í lóðréttu útliti"
+  },
+  {
+    "name": "IDS_SETTINGS_CENTERED_LOCATION_BAR",
+    "source": "Center the address bar",
+    "message": "Miðja veffangastikuna"
+  },
+  {
+    "name": "IDS_SETTINGS_MINIMAL_LOCATION_BAR",
+    "source": "Minimal address bar",
+    "message": "Lágmarks veffangastika"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "Helium cannot be set as default, because no <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.",
+    "message": "Ekki er hægt að setja Helium sem sjálfgefinn vafra, vegna þess að engin <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> skrá fannst í neinu af: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications."
+  },
+  {
+    "name": "IDS_SETTINGS_CHOOSE_CUSTOM_AVATAR_FILE",
+    "source": "Choose file",
+    "message": "Velja skrá"
+  },
+  {
+    "name": "IDS_SETTINGS_CLEAR_CUSTOM_AVATAR_DIALOG_TITLE",
+    "source": "Clear custom avatar?",
+    "message": "Hreinsa sérsniðinn táknmynd?"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_FILE_TOO_LARGE",
+    "source": "Selected file is too large. Please select a file smaller than 30MB.",
+    "message": "Valin skrá er of stór. Veldu skrá sem er minni en 30 MB."
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_ERROR",
+    "source": "Image could not be loaded",
+    "message": "Ekki tókst að hlaða mynd"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_LABEL",
+    "source": "Custom avatar",
+    "message": "Sérsniðin táknmynd"
+  },
+  {
+    "name": "IDS_SETTINGS_ROUNDED_FRAME",
+    "source": "Show a rounded frame around web contents",
+    "message": "Sýna ávalan ramma utan um vefefni"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_SIDEBAR",
+    "source": "Always show the sidebar",
+    "message": "Sýna hliðarstikuna alltaf"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_TOP_TOOLBAR",
+    "source": "Always show the top bar",
+    "message": "Sýna efstu stikuna alltaf"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close tabs above",
+    "message": "Loka flipum fyrir ofan"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close Tabs Above",
+    "message": "Loka flipum fyrir ofan"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_TITLE",
+    "source": "Full Disk Access required",
+    "message": "Fullur aðgangur að diski áskilinn"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
+    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Helium þarf fullan aðgang að diski til að flytja inn bókamerkin þín úr Safari."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
+    "source": "Learn how to grant Full Disk Access from your System Preferences.",
+    "message": "Kynntu þér hvernig á að veita fullan aðgang að diski í Kerfisstillingum."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_OPEN_SETTINGS",
+    "source": "Open System Preferences",
+    "message": "Opna Kerfisstillingar"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
+    "source": "Invalid origin",
+    "message": "Ógildur uppruni"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_NEXT_TAB",
+    "source": "Next tab",
+    "message": "Næsti flipi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_PREVIOUS_TAB",
+    "source": "Previous tab",
+    "message": "Fyrri flipi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_LOCATION",
+    "source": "Focus address bar",
+    "message": "Setja fókus á veffangastiku"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_NEXT",
+    "source": "Find next",
+    "message": "Finna næsta"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_PREVIOUS",
+    "source": "Find previous",
+    "message": "Finna fyrra"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_BACK",
+    "source": "Back",
+    "message": "Til baka"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FORWARD",
+    "source": "Forward",
+    "message": "Áfram"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_HOME",
+    "source": "Home",
+    "message": "Heim"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB",
+    "source": "New split tab",
+    "message": "Nýr skiptur flipi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_LAST_TAB",
+    "source": "Last tab",
+    "message": "Síðasti flipi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_TAB",
+    "source": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>",
+    "message": "Flipi <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_NEXT",
+    "source": "Move tab right",
+    "message": "Færa flipa til hægri"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_PREVIOUS",
+    "source": "Move tab left",
+    "message": "Færa flipa til vinstri"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_TAB_GROUP",
+    "source": "Next tab group",
+    "message": "Næsti flipahópur"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_TAB_GROUP",
+    "source": "Previous tab group",
+    "message": "Fyrri flipahópur"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_TAB_GROUP",
+    "source": "Close tab group",
+    "message": "Loka flipahópi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_BOOKMARKS",
+    "source": "Focus bookmarks bar",
+    "message": "Setja fókus á bókamerkjastiku"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS",
+    "source": "Toggle vertical tabs",
+    "message": "Kveikja/slökkva á lóðréttum flipum"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP",
+    "source": "Close find bar or stop loading",
+    "message": "Loka leitarstiku eða stöðva hleðslu"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_SEARCH",
+    "source": "Focus search",
+    "message": "Setja fókus á leit"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_PANE",
+    "source": "Focus next pane",
+    "message": "Setja fókus á næstu rúðu"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_PANE",
+    "source": "Focus previous pane",
+    "message": "Setja fókus á fyrri rúðu"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_WEB_CONTENTS_PANE",
+    "source": "Focus page content",
+    "message": "Setja fókus á innihald síðu"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_MENU_BAR",
+    "source": "Focus menu bar",
+    "message": "Setja fókus á valmyndastiku"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_TOOLBAR",
+    "source": "Focus toolbar",
+    "message": "Setja fókus á tækjastiku"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_INACTIVE_POPUP",
+    "source": "Focus inactive popup",
+    "message": "Setja fókus á óvirkan sprettiglugga"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_AVATAR_MENU",
+    "source": "Profile menu",
+    "message": "Prófílvalmynd"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_APP_MENU",
+    "source": "App menu",
+    "message": "Forritavalmynd"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_ZEN_MODE_TOP_CHROME_PIN",
+    "source": "Pin top toolbar",
+    "message": "Festa efstu tækjastikuna"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_DEV_TOOLS",
+    "source": "Toggle developer tools",
+    "message": "Kveikja/slökkva á þróunartólum"
+  },
+  {
+    "name": "IDS_APP_PLUS_KEY",
+    "source": "Plus",
+    "message": "Plús"
+  },
+  {
+    "name": "IDS_APP_NUMPAD_KEY",
+    "source": "Numpad <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>",
+    "message": "Talnaborð <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_TITLE",
+    "source": "Keyboard shortcuts",
+    "message": "Flýtilyklar"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SEARCH_LABEL",
+    "source": "Search shortcuts",
+    "message": "Leita í flýtilyklum"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_REMOVE_A11Y_LABEL",
+    "source": "Remove <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> from <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>",
+    "message": "Fjarlægja <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> úr <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_ALL",
+    "source": "Reset all to defaults",
+    "message": "Endurstilla allt á sjálfgefin gildi"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_ADD_DIALOG_TITLE",
+    "source": "Add shortcut",
+    "message": "Bæta við flýtilykli"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_DIALOG_DESCRIPTION",
+    "source": "All keyboard shortcuts will be reset to their default values. Any custom shortcuts you've set will be lost.",
+    "message": "Allir flýtilyklar verða endurstilltir á sjálfgefin gildi. Allir sérsniðnir flýtilyklar sem þú hefur stillt tapast."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_PRESS_SHORTCUT",
+    "source": "Press a combination of keys to create a new shortcut",
+    "message": "Ýttu á lyklasamsetningu til að búa til nýjan flýtilykil"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_NEED_KEY",
+    "source": "Include a key that is not a modifier.",
+    "message": "Hafðu með lykil sem er ekki breytilykill."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_WILL_OVERRIDE",
+    "source": "Saving will remove this shortcut from <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>.",
+    "message": "Við vistun verður þessi flýtilykill fjarlægður úr <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SYSTEM_CONFLICT",
+    "source": "This shortcut is managed by <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> and cannot be changed.",
+    "message": "Þessum flýtilykli er stýrt af <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> og ekki er hægt að breyta honum."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_INVALID",
+    "source": "This shortcut cannot be saved.",
+    "message": "Ekki er hægt að vista þennan flýtilykil."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_NOTICE",
+    "source": "Some keyboard shortcuts are protected and can't be changed here. To change them, go to:",
+    "message": "Sumir flýtilyklar eru varðir og ekki er hægt að breyta þeim hér. Til að breyta þeim skaltu fara í:"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_LINK",
+    "source": "System Settings &gt; Keyboard &gt; Keyboard Shortcuts &gt; App Shortcuts",
+    "message": "Kerfisstillingar &gt; Lyklaborð &gt; Flýtilyklar &gt; Flýtilyklar forrita"
+  },
+  {
+    "name": "IDS_ZEN_MODE_NEW_TAB_CREATED_TOAST_BODY",
+    "source": "New tab opened",
+    "message": "Nýr flipi opnaður"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic browser updates",
+    "message": "Leyfa sjálfvirkar uppfærslur vafrans"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium mun sjálfkrafa athuga með uppfærslur og setja þær upp. Þetta felur í sér uppfærslur vafra og íhluta. Við mælum með að hafa þessa stillingu virka til að tryggja að þú fáir nýjustu eiginleikana og öryggisuppfærslurnar."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic component updates",
+    "message": "Leyfa sjálfvirkar uppfærslur íhluta"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium mun sjálfkrafa athuga með uppfærslur íhluta og setja þær upp. Við mælum með að hafa þessa stillingu virka. Á Linux er uppfærslum vafrans sinnt af pakkastjóra dreifingarinnar þinnar. Athugaðu að minnsta kosti vikulega hvort uppfærslur séu til fyrir Helium-pakkann."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate other tabs",
+    "message": "Setja aðra flipa í dvala"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate Other Tabs",
+    "message": "Setja aðra flipa í dvala"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URL",
+    "source": "Copy URL",
+    "message": "Afrita URL"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URLS",
+    "source": "Copy URLs",
+    "message": "Afrita URL-slóðir"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_TITLE",
+    "source": "Background action confirmation toasts",
+    "message": "Staðfestingarsprettir fyrir bakgrunnsaðgerðir"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_DESCRIPTION",
+    "source": "Shows a toast notification when you copy content, such as links and images, or open a new background tab in Frameless mode",
+    "message": "Sýnir sprettitilkynningu þegar þú afritar efni, svo sem tengla og myndir, eða opnar nýjan bakgrunnsflipa í rammalausri stillingu"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE",
+    "source": "Frameless mode",
+    "message": "Rammalaus stilling"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE_DESCRIPTION",
+    "source": "Automatically hide browser UI until you hover the window edge",
+    "message": "Felur vafraviðmótið sjálfkrafa þar til þú bendir á brún gluggans"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_NEXT",
+    "source": "Next",
+    "message": "Áfram"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES",
+    "source": "Yes",
+    "message": "Já"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_HISTORY",
+    "source": "History",
+    "message": "Ferill"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALLED",
+    "source": "Installed",
+    "message": "Uppsett"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALL",
+    "source": "Install",
+    "message": "Setja upp"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_BACK",
+    "source": "Back",
+    "message": "Til baka"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO",
+    "source": "No",
+    "message": "Nei"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_PRIVACY",
+    "source": "Privacy",
+    "message": "Persónuvernd"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_EXTENSIONS",
+    "source": "Extensions",
+    "message": "Viðbætur"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_CONFIGURE",
+    "source": "Configure",
+    "message": "Grunnstilla"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_IMPORT_GUIDE",
+    "source": "Import",
+    "message": "Flytja inn"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_BOOKMARKS",
+    "source": "Bookmarks",
+    "message": "Bókamerki"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SEARCHWEBWITH",
+    "source": "&amp;Search with <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>",
+    "message": "&amp;Leita með <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force paste",
+    "message": "Þvinga límingu"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force Paste",
+    "message": "Þvinga límingu"
+  },
+  {
+    "name": "IDS_SETTINGS_SHIFT_RIGHT_CLICK_CONTEXT_MENU",
+    "source": "Force context menu with Shift+Right Click",
+    "message": "Þvinga samhengisvalmynd með Shift+hægrismelli"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_TITLE",
+    "source": "Crash reporting",
+    "message": "Tilkynningar um hrun"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DESCRIPTION",
+    "source": "Choose whether Helium can ask to send crash reports or send them automatically. Disabling reports will delete all pending reports.",
+    "message": "Veldu hvort Helium megi biðja um að senda hruntilkynningar eða senda þær sjálfkrafa. Ef slökkt er á tilkynningum verður öllum tilkynningum í bið eytt."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED",
+    "source": "Disabled",
+    "message": "Óvirkt"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_ASK",
+    "source": "Ask after a crash",
+    "message": "Spyrja eftir hrun"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC",
+    "source": "Send automatically",
+    "message": "Senda sjálfkrafa"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_TITLE",
+    "source": "{COUNT, plural, =1 {Would you like to send a crash report?} other {Would you like to send # crash reports?}}",
+    "message": "{COUNT, plural, =1 {Viltu senda hruntilkynningu?} one {Viltu senda # hruntilkynningu?} other {Viltu senda # hruntilkynningar?}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_DESCRIPTION",
+    "source": "Helium closed unexpectedly. A crash report could help us fix the issue you ran into and prevent it from happening again.",
+    "message": "Helium lokaðist óvænt. Hruntilkynning gæti hjálpað okkur að laga vandamálið sem þú lentir í og komið í veg fyrir að það gerist aftur."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_PRIVACY",
+    "source": "A crash report may incidentally include some sensitive data present in Helium's memory at the time of crash.",
+    "message": "Hruntilkynning kann óvart að innihalda einhver viðkvæm gögn sem voru í minni Helium þegar hrunið átti sér stað."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_OPTIONAL",
+    "source": "Nothing has been sent yet. Sending a crash report is optional.",
+    "message": "Ekkert hefur verið sent enn. Það er valfrjálst að senda hruntilkynningu."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send Report} other {Send # Reports}}",
+    "message": "{COUNT, plural, =1 {Senda tilkynningu} one {Senda # tilkynningu} other {Senda # tilkynningar}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send report} other {Send # reports}}",
+    "message": "{COUNT, plural, =1 {Senda tilkynningu} one {Senda # tilkynningu} other {Senda # tilkynningar}}"
+  },
+  {
+    "name": "IDS_CRASH_DISABLED_MESSAGE",
+    "source": "Crash reporting is disabled in Helium settings or by policy.",
+    "message": "Slökkt er á tilkynningum um hrun í stillingum Helium eða með reglu."
+  },
+  {
+    "name": "IDS_CRASH_BUG_LINK_LABEL",
+    "source": "Create an issue with details",
+    "message": "Búa til mál með nánari upplýsingum"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS",
+    "source": "Use native frame materials (experimental)",
+    "message": "Nota innbyggð rammaefni (tilraun)"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION",
+    "source": "Applies native materials to the browser frame surfaces. May cause UI clarity issues.",
+    "message": "Beitir innbyggðum efnum á yfirborð vafraramma. Getur valdið vandamálum með skýrleika viðmóts."
+  },
+  {
+    "name": "IDS_SETTINGS_SHOW_ZOOM_INDICATOR",
+    "source": "Show the zoom indicator in the address bar",
+    "message": "Sýna aðdráttarvísi í veffangastikunni"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
+    "source": "Translate “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”",
+    "message": "Þýða „<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>“"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PAGE_TITLE",
+    "source": "Helium Setup",
+    "message": "Uppsetning Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_USE_DEFAULTS",
+    "source": "Use defaults",
+    "message": "Nota sjálfgefið"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_LETS_GO",
+    "source": "Let's go!",
+    "message": "Af stað!"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TITLE",
+    "source": "Helium Partner",
+    "message": "Helium samstarfsaðili"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TOOLTIP",
+    "source": "Paying for this service will support the development of Helium.",
+    "message": "Að greiða fyrir þessa þjónustu styður þróun Helium."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_GREETING",
+    "source": "Meet Helium",
+    "message": "Kynntu þér Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_FINISH_TITLE",
+    "source": "Ready to browse?",
+    "message": "Tilbúinn að vafra?",
+    "feminine": "Tilbúin að vafra?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_TITLE",
+    "source": "Helium services",
+    "message": "Þjónustur Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SUBTITLE",
+    "source": "Services are not active until you consent to using them. Changes will be applied after you go to the next page.",
+    "message": "Þjónustur eru ekki virkar fyrr en þú samþykkir að nota þær. Breytingar taka gildi eftir að þú ferð á næstu síðu."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_TITLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Leyfa tengingu við þjónustur Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_DESC",
+    "source": "Helium services provide additional functionality, such as: extension downloads, native !bangs, filter list updates, and browser updates. When disabled, none of these features will work, but Helium will not make any web requests.",
+    "message": "Þjónustur Helium bjóða upp á viðbótarvirkni, svo sem: niðurhal viðbóta, innbyggð !bangs, uppfærslur á síulistum og uppfærslur á vafra. Þegar slökkt er á þessu virkar ekkert af þessum eiginleikum, en Helium sendir engar vefbeiðnir."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_TITLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "Leyfa niðurhal á !bangs-listanum"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_DESC",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium sækir lista yfir bangs sem hjálpa þér að vafra hraðar um netið, svo sem !w eða !gh. Þegar slökkt er á þessu virka bangs ekki."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_TITLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Nota milliþjón fyrir niðurhal og uppfærslur viðbóta"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_DESC",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Þegar kveikt er á þessu beinir Helium niðurhali og uppfærslum viðbóta um milliþjón til að vernda persónuvernd þína. Þegar slökkt er á þessu virkar ekki að hlaða niður og uppfæra viðbætur."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_TITLE",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Leyfa niðurhal á síulistum fyrir uBlock Origin"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_DESC",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium sækir nýja síulista fyrir uBlock Origin. Öllum beiðnum um lista er beint um milliþjón til að vernda persónuvernd þína. Þegar slökkt er á þessu eru sjálfgefnir síulistar hlaðnir úr staðbundinni geymslu, sem eru aðeins uppfærðir samhliða Helium. Valfrjálsir síulistar eru sóttir án milliþjóns."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE",
+    "source": "Allow automatic browser updates",
+    "message": "Leyfa sjálfvirkar uppfærslur á vafra"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium athugar sjálfkrafa með uppfærslur og setur þær upp. Þetta á við um uppfærslur á vafra og einingum. Við mælum með að hafa þessa stillingu virka til að tryggja að þú fáir nýjustu eiginleika og öryggisuppfærslur."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE_LINUX",
+    "source": "Allow automatic component updates",
+    "message": "Leyfa sjálfvirkar uppfærslur á einingum"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC_LINUX",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium athugar sjálfkrafa með uppfærslur á einingum og setur þær upp. Við mælum með að hafa þessa stillingu virka. Á Linux sér pakkastjóri dreifingarinnar þinnar um uppfærslur á vafra. Athugaðu með pakkauppfærslur fyrir Helium að minnsta kosti vikulega."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_TITLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Leyfa niðurhal á orðabókaskrám fyrir stafsetningarleiðréttingu"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_DESC",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium sækir orðabókaskrár sem notaðar eru við stafsetningarleiðréttingu þegar óskað er eftir því. Þegar slökkt er á þessu virkar stafsetningarleiðrétting ekki."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_TITLE",
+    "source": "Use your own instance of Helium services",
+    "message": "Nota þitt eigið tilvik af þjónustum Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_DESC",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the pre-hosted server. If you have one, you can set it in Helium settings.",
+    "message": "Þú getur hýst þitt eigið tilvik af þjónustum Helium og notað það í vafranum þínum í stað fyrirfram hýsta þjónsins. Ef þú átt slíkt geturðu stillt það í stillingum Helium."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_PRIVATE",
+    "source": "A privacy-first search engine which doesn't profile or track you.",
+    "message": "Leitarvél þar sem persónuvernd er í forgangi og sem gerir ekki persónusnið af þér né rekur þig."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_SMALL",
+    "source": "Transparent, but not privacy-focused. Offers better privacy than mainstream search engines.",
+    "message": "Gagnsæ, en ekki með áherslu á persónuvernd. Býður betri persónuvernd en almennar leitarvélar."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_MAINSTREAM",
+    "source": "A mainstream search engine which collects extensive personal data.",
+    "message": "Almenn leitarvél sem safnar umfangsmiklum persónuupplýsingum."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_CUSTOM",
+    "source": "A custom search engine. Its privacy wasn't verified by Helium.",
+    "message": "Sérsniðin leitarvél. Persónuvernd hennar var ekki staðfest af Helium."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BING",
+    "source": "Collects extensive personal data. Privacy controls are buried and limited. Subjectively overwhelming UI.",
+    "message": "Safnar umfangsmiklum persónuupplýsingum. Persónuverndarstýringar eru faldar og takmarkaðar. Huglægt yfirþyrmandi viðmót."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_GOOGLE",
+    "source": "It's Google. It dominates the search market, collects extensive personal data, and profiles you.",
+    "message": "Þetta er Google. Það drottnar yfir leitarmarkaðnum, safnar umfangsmiklum persónuupplýsingum og gerir persónusnið af þér."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_TITLE",
+    "source": "Ready to switch to Helium?",
+    "message": "Tilbúinn að skipta yfir í Helium?",
+    "feminine": "Tilbúin að skipta yfir í Helium?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES_DESC",
+    "source": "Make Helium my default browser.",
+    "message": "Gera Helium að sjálfgefnum vafra mínum."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO_DESC",
+    "source": "Just trying Helium for now.",
+    "message": "Bara að prófa Helium í bili."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_TITLE",
+    "source": "Take your stuff with you",
+    "message": "Taktu dótið þitt með þér"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_SUBTITLE",
+    "source": "Transfer your most important bookmarks, history, and extensions from other browsers.",
+    "message": "Fluttu mikilvægustu bókamerkin, ferilinn og viðbæturnar þínar frá öðrum vöfrum."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_TITLE",
+    "source": "Password manager",
+    "message": "Lykilorðastjóri"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_SETUP_GUIDE",
+    "source": "Setup",
+    "message": "Uppsetning"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_ERROR",
+    "source": "Error:",
+    "message": "Villa:"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_MANAGERS_DASHLANE",
+    "source": "Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.",
+    "message": "Vinsæll, greiddur lykilorðastjóri með lokuðum grunnkóða. Geymir gögn í Evrópu. Þekktur fyrir ágenga sölutækni."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE",
+    "source": "Fingerprinting protection",
+    "message": "Vörn gegn fingrafaragreiningu"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_LINK_DESCRIPTION",
+    "source": "Manage how Helium protects you against fingerprinting",
+    "message": "Stjórna því hvernig Helium ver þig gegn fingrafaragreiningu"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_TOGGLE_DESCRIPTION",
+    "source": "Make it harder for sites to fingerprint your browser and device",
+    "message": "Gera vefsvæðum erfiðara fyrir að taka fingraför af vafranum þínum og tækinu"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you. Each site sees consistent randomized information during your browsing session to reduce the chances of detection.",
+    "message": "Þegar vörn gegn fingrafaragreiningu er virk bætir Helium suði við tiltekna eiginleika vafrans til að gera vefsvæðum erfiðara að rekja þig og gera af þér persónusnið. Hvert vefsvæði sér samræmdar slembnar upplýsingar á meðan vafralotu þinni stendur til að draga úr líkum á uppgötvun."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DISCLAIMER",
+    "source": "Fingerprinting cannot be fully prevented, but Helium's analysis defenses make it harder to recover the original fingerprint.",
+    "message": "Ekki er hægt að koma alveg í veg fyrir fingrafaragreiningu, en greiningarvarnir Helium gera erfiðara að endurheimta upprunalega fingrafarið."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION",
+    "source": "When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting \"[*.]\" before a domain name applies it to the entire domain.",
+    "message": "Þegar almenni eiginleikinn fyrir vörn gegn fingrafaragreiningu er virkur fylgja vefsvæðin hér að neðan sérsniðinni stillingu. Ef „[*.]“ er sett á undan lénsheiti gildir stillingin fyrir allt lénið."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_EXCEPTIONS_TITLE",
+    "source": "Sites without fingerprinting protection",
+    "message": "Vefsvæði án varnar gegn fingrafaragreiningu"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_ALLOW_OVERRIDES_TITLE",
+    "source": "Overrides to allow fingerprinting protection",
+    "message": "Frávik sem leyfa vörn gegn fingrafaragreiningu"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_HEADER",
+    "source": "Fingerprinting protection",
+    "message": "Vörn gegn fingrafaragreiningu"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP",
+    "source": "Manage fingerprinting protection for this site",
+    "message": "Stjórna vörn gegn fingrafaragreiningu fyrir þetta vefsvæði"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you.",
+    "message": "Þegar vörn gegn fingrafaragreiningu er virk bætir Helium suði við tiltekna eiginleika vafrans til að gera vefsvæðum erfiðara að rekja þig og gera af þér persónusnið."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_BREAKAGE",
+    "source": "Turning off the protection will reduce your privacy, but may fix site features that require fingerprinting.",
+    "message": "Ef slökkt er á vörninni dregur það úr persónuvernd þinni, en getur lagað eiginleika vefsvæðis sem krefjast fingrafaragreiningar."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_GLOBALLY_DISABLED",
+    "source": "Fingerprinting protection is turned off in Helium settings.",
+    "message": "Slökkt er á vörn gegn fingrafaragreiningu í stillingum Helium."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_SETTINGS_BUTTON",
+    "source": "Manage fingerprinting protection",
+    "message": "Stjórna vörn gegn fingrafaragreiningu"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_TERMS",
+    "source": "By continuing, you agree to the <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privacy policy<ph name=\"END_LINK_PRIVACY\">$2</ph> and <ph name=\"BEGIN_LINK_TERMS\">$3</ph>terms of use<ph name=\"END_LINK_TERMS\">$4</ph>.",
+    "message": "Með því að halda áfram samþykkir þú <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>persónuverndarstefnuna<ph name=\"END_LINK_PRIVACY\">$2</ph> og <ph name=\"BEGIN_LINK_TERMS\">$3</ph>notkunarskilmálana<ph name=\"END_LINK_TERMS\">$4</ph>."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_DUCKDUCKGO",
+    "source": "Privacy-focused. Relies on Bing for results. Promises not to track or profile you.",
+    "message": "Leggur áherslu á persónuvernd. Reiðir sig á Bing fyrir niðurstöður. Lofar að rekja þig ekki og gera ekki persónusnið af þér."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_KAGI",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Has custom ranking. Requires a paid account. No ads, tracking, or profiling.",
+    "message": "Leggur áherslu á persónuvernd. Notar hvorki Google né Bing. Er með sérsniðna röðun. Krefst greidds aðgangs. Engar auglýsingar, rakning eða persónusnið."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_QWANT",
+    "source": "Based in Europe. Relies on Bing for results. Sends tracking data to Microsoft.",
+    "message": "Með aðsetur í Evrópu. Reiðir sig á Bing fyrir niðurstöður. Sendir rakningargögn til Microsoft."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_ECOSIA",
+    "source": "May plant trees for clicking ads. Relies on Google and Bing for results. Sends tracking data to Google and Microsoft.",
+    "message": "Gæti gróðursett tré þegar smellt er á auglýsingar. Reiðir sig á Google og Bing fyrir niðurstöður. Sendir rakningargögn til Google og Microsoft."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_STARTPAGE",
+    "source": "Privacy-focused. Relies on Google and Bing for results. Promises not to track or profile you.",
+    "message": "Leggur áherslu á persónuvernd. Reiðir sig á Google og Bing fyrir niðurstöður. Lofar að rekja þig ekki og gera ekki persónusnið af þér."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BRAVE",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Promises not to track or profile you. May show promotions related to Brave services.",
+    "message": "Leggur áherslu á persónuvernd. Notar hvorki Google né Bing. Lofar að rekja þig ekki og gera ekki persónusnið af þér. Gæti sýnt kynningar tengdar þjónustum Brave."
+  }
+]

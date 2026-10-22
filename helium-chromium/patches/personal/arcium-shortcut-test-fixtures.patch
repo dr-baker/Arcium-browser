@@ -1,0 +1,30 @@
+# Register the profile-owned Spaces test service before exercising shortcut tab actions.
+# Requires arcium-shortcut-presets and arcium-spaces.
+Index: src/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions_unittest.cc
++++ src/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions_unittest.cc
+@@ -6,6 +6,8 @@
+ #include <optional>
+ #include <string>
+ 
++#include "base/functional/bind.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/helium/helium_space.h"
+@@ -53,7 +55,13 @@
+  protected:
+   void SetUp() override {
+     BrowserWithTestWindowTest::SetUp();
+-    service_ = helium::HeliumSpaceServiceFactory::GetForProfile(profile());
++    service_ = helium::HeliumSpaceServiceFactory::GetInstance()
++                   ->SetTestingSubclassFactoryAndUse(
++                       profile(),
++                       base::BindOnce([](content::BrowserContext* context) {
++                         return std::make_unique<helium::HeliumSpaceService>(
++                             Profile::FromBrowserContext(context));
++                       }));
+     ASSERT_TRUE(service_);
+     space_ = service_->GetDefaultSpace();
+     ASSERT_TRUE(space_);

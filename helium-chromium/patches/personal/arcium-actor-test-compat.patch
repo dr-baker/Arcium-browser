@@ -1,0 +1,26 @@
+--- a/chrome/browser/actor/execution_engine_browsertest.cc
++++ b/chrome/browser/actor/execution_engine_browsertest.cc
+@@ -63,6 +63,7 @@
+ #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
+ #include "components/optimization_guide/core/filters/optimization_hints_component_update_listener.h"
+ #include "components/optimization_guide/proto/features/actions_data.pb.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/viz/common/frame_sinks/copy_output_result.h"
+ #include "content/public/browser/render_frame_host.h"
+@@ -476,6 +477,7 @@
+   EXPECT_FALSE(browser_client().external_protocol_result().value());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Regression test for https://crbug.com/502819675.
+ IN_PROC_BROWSER_TEST_F(ExecutionEngineBrowserTest, HistoryBackIsChecked) {
+   // Disable SafeBrowsing so that MayActOnUrl rejects every non-localhost URL
+@@ -516,6 +518,7 @@
+   EXPECT_FALSE(navigation_handle_observer.has_committed());
+   EXPECT_EQ(second_url, web_contents()->GetLastCommittedURL());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // TODO(crbug.com/456759397): Add coverage for multi-tab cases in
+ // foreground/background visibility metric.

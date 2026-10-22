@@ -1,0 +1,66 @@
+--- a/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h
+@@ -52,7 +52,8 @@
+ // browser command with different behavior.
+ PresetReport GetArcShortcutPresetReport(const BrowserShortcutService& service);
+ 
+-// Applies every currently supported Arc mapping as one service transaction.
++// Applies supported Arc mappings and the fully hidden sidebar style as one
++// service transaction. Restoring the backup restores both settings.
+ // Unsupported Arc actions remain in the report and do not make the supported
+ // subset fail.
+ PresetResult ApplyArcShortcutPreset(BrowserShortcutService* service);
+--- a/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc
+@@ -447,6 +447,25 @@
+   EXPECT_FALSE(service.HasPreviousConfiguration());
+ }
+ 
++TEST(ArciumShortcutPresetsTest, MalformedProfileBackupRejectsReapplication) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  ASSERT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  pref_service.SetInteger(::arcium::kCollapsedSidebarStylePref, 0);
++  const auto configured = service.GetAcceleratorMap();
++  const auto shortcuts = pref_service.GetDict(prefs::kCustomAccelerators).Clone();
++  auto backup = pref_service.GetDict(prefs::kArcShortcutBackup).Clone();
++  backup.Set("profile_preferences", "invalid saved preferences");
++  pref_service.SetDict(prefs::kArcShortcutBackup, backup.Clone());
++
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kInvalidConfiguration);
++  EXPECT_EQ(service.GetAcceleratorMap(), configured);
++  EXPECT_EQ(pref_service.GetDict(prefs::kCustomAccelerators), shortcuts);
++  EXPECT_EQ(pref_service.GetDict(prefs::kArcShortcutBackup), backup);
++  EXPECT_EQ(pref_service.GetInteger(::arcium::kCollapsedSidebarStylePref), 0);
++}
++
+ TEST(ArciumShortcutPresetsTest, ManagedCollapseBlocksRestoreWithoutConsumingBackup) {
+   TestingPrefServiceSimple pref_service;
+   RegisterPrefs(&pref_service);
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.cc
+@@ -232,7 +232,22 @@
+   }
+ 
+   base::DictValue backup = prefs_->GetDict(prefs::kArcShortcutBackup).Clone();
+-  if (!HasPreviousConfiguration()) {
++  if (HasPreviousConfiguration()) {
++    const auto* saved_preferences =
++        backup.FindDict(kBackupProfilePreferencesKey);
++    if (backup.contains(kBackupProfilePreferencesKey) && !saved_preferences) {
++      return ConfigurationResult::kInvalidConfiguration;
++    }
++    if (saved_preferences) {
++      for (const auto [name, value] : *saved_preferences) {
++        const auto* preference = prefs_->FindPreference(name);
++        if (!preference || preference->GetType() != base::Value::Type::INTEGER ||
++            (!value.is_none() && !value.is_int())) {
++          return ConfigurationResult::kInvalidConfiguration;
++        }
++      }
++    }
++  } else {
+     backup.clear();
+     backup.Set(kBackupVersionKey, kBackupVersion);
+     backup.Set(kBackupConfigurationKey,

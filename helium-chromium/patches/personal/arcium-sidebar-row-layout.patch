@@ -1,0 +1,1346 @@
+Index: src/chrome/browser/ui/views/tabs/common/BUILD.gn
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/BUILD.gn
++++ src/chrome/browser/ui/views/tabs/common/BUILD.gn
+@@ -50,6 +50,7 @@ source_set("impl") {
+     "persistent_tab_view.cc",
+     "pinned_tab_container_view.cc",
+     "root_tab_collection_node.cc",
++    "sidebar_row_layout.h",
+     "split_tab_view.cc",
+     "tab_collection_animating_layout_manager.cc",
+     "tab_collection_node.cc",
+Index: src/chrome/browser/ui/views/tabs/common/folder_tab_container_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/folder_tab_container_view.cc
++++ src/chrome/browser/ui/views/tabs/common/folder_tab_container_view.cc
+@@ -11,6 +11,8 @@
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+@@ -29,8 +31,6 @@
+ namespace {
+ constexpr int kHeaderHeight = 28;
+ constexpr int kTabVerticalPadding = 2;
+-constexpr int kExpandedChildIndent = 16;
+-constexpr int kFolderIconSize = 18;
+ constexpr int kConnectorLeadingInset = 14;
+ constexpr int kConnectorLaneGap = 2;
+ constexpr int kConnectorMaxLane = 2;
+@@ -40,9 +40,31 @@ class FolderHeaderButton : public views:
+  public:
+   using views::LabelButton::LabelButton;
+ 
+-  void DisableSubpixelText() {
+-    label()->SetSubpixelRenderingEnabled(false);
++  void DisableSubpixelText() { label()->SetSubpixelRenderingEnabled(false); }
++
++  void OnThemeChanged() override {
++    views::LabelButton::OnThemeChanged();
++    UpdateRowMetrics();
++  }
++
++  void SetFolderCollapsed(bool collapsed) {
++    collapsed_ = collapsed;
++    UpdateRowMetrics();
+   }
++
++ private:
++  void UpdateRowMetrics() {
++    const arcium::SidebarRowMetrics metrics =
++        arcium::GetSidebarRowMetrics(this);
++    arcium::ApplySidebarRowMetricsToLabelButton(this, metrics);
++    SetImageModel(views::Button::STATE_NORMAL,
++                  ui::ImageModel::FromVectorIcon(
++                      collapsed_ ? vector_icons::kFolderFlippableIcon
++                                 : vector_icons::kFolderOpenIcon,
++                      ui::kColorIcon, metrics.icon_slot_width));
++  }
++
++  bool collapsed_ = false;
+ };
+ 
+ // True if `node` is the active tab, or a folder that contains the active tab.
+@@ -78,7 +100,6 @@ FolderTabContainerView::FolderTabContain
+           folder->title());
+   static_cast<FolderHeaderButton*>(header.get())->DisableSubpixelText();
+   header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+-  header->SetImageLabelSpacing(8);
+   header_ = AddChildView(std::move(header));
+ 
+   collection_node_->set_add_child_to_node(base::BindRepeating(
+@@ -155,13 +176,9 @@ void FolderTabContainerView::UpdateHeade
+   header_->SetText(compact_ ? std::u16string() : folder->title());
+   header_->SetTooltipText(folder->title());
+   header_->SetHorizontalAlignment(compact_ ? gfx::ALIGN_CENTER
+-                                            : gfx::ALIGN_LEFT);
+-  header_->SetImageModel(
+-      views::Button::STATE_NORMAL,
+-      ui::ImageModel::FromVectorIcon(
+-          folder->collapsed() ? vector_icons::kFolderFlippableIcon
+-                              : vector_icons::kFolderOpenIcon,
+-          ui::kColorIcon, kFolderIconSize));
++                                           : gfx::ALIGN_LEFT);
++  static_cast<FolderHeaderButton*>(header_.get())
++      ->SetFolderCollapsed(folder->collapsed());
+   header_->GetViewAccessibility().SetName(folder->title());
+   if (folder->collapsed()) {
+     header_->GetViewAccessibility().SetIsCollapsed();
+@@ -297,6 +314,7 @@ views::ProposedLayout FolderTabContainer
+   }
+ 
+   const int width = size_bounds.width().value();
++  const int depth_indent = arcium::GetSidebarRowMetrics(this).depth_indent;
+   int y = 0;
+ 
+   gfx::Rect header_bounds(0, y, width, kHeaderHeight);
+@@ -308,16 +326,14 @@ views::ProposedLayout FolderTabContainer
+     if (child == header_ || !child->GetVisible()) {
+       continue;
+     }
+-    const int child_x = compact_ ? 0 : kExpandedChildIndent;
+-    views::SizeBounds child_size_bounds(
+-        size_bounds.width().is_bounded()
+-            ? size_bounds.width() - child_x
+-            : size_bounds.width(),
+-        {});
++    const int child_x = compact_ ? 0 : std::min(depth_indent, width);
++    views::SizeBounds child_size_bounds(size_bounds.width().is_bounded()
++                                            ? size_bounds.width() - child_x
++                                            : size_bounds.width(),
++                                        {});
+     const int height = child->GetPreferredSize(child_size_bounds).height();
+-    layouts.child_layouts.emplace_back(child, true,
+-                                       gfx::Rect(child_x, y, width - child_x,
+-                                                 height));
++    layouts.child_layouts.emplace_back(
++        child, true, gfx::Rect(child_x, y, width - child_x, height));
+     y += height + kTabVerticalPadding;
+   }
+ 
+Index: src/chrome/browser/ui/views/tabs/common/persistent_tab_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/persistent_tab_view.cc
++++ src/chrome/browser/ui/views/tabs/common/persistent_tab_view.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/tabs/common/favorite_favicon_style.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
+@@ -63,11 +64,9 @@ namespace {
+ constexpr int kIconDesignWidth = 16;
+ constexpr int kFavoriteIconDesignWidth = 24;
+ constexpr int kFavoriteCornerRadius = 8;
+-constexpr int kHorizontalInset = 7;
+ 
+ favicon_base::IconTypeSet GetPersistentIconTypes() {
+-  return {favicon_base::IconType::kFavicon,
+-          favicon_base::IconType::kTouchIcon,
++  return {favicon_base::IconType::kFavicon, favicon_base::IconType::kTouchIcon,
+           favicon_base::IconType::kTouchPrecomposedIcon,
+           favicon_base::IconType::kWebManifestIcon};
+ }
+@@ -131,7 +130,8 @@ PersistentTabView::PersistentTabView(Pro
+       presentation_mode_(presentation_mode),
+       tab_style_(TabStyle::Get()),
+       icon_(AddChildView(std::make_unique<TabIcon>())),
+-      title_(AddChildView(std::make_unique<TabTitle>(profile))),
++      title_(AddChildView(std::make_unique<TabTitle>(
++          profile, TabTitle::FadeStyle::kSidebar))),
+       close_button_(AddChildView(std::make_unique<TabCloseButton>(
+           base::BindRepeating(&PersistentTabView::CloseButtonPressed,
+                               base::Unretained(this)),
+@@ -261,37 +261,15 @@ void PersistentTabView::Layout(PassKey)
+     return;
+   }
+ 
+-  const int icon_design_width = arcium::ScaleChromeDip(this, kIconDesignWidth);
+-  const int horizontal_inset = arcium::ScaleChromeDip(this, kHorizontalInset);
+-  const int icon_x =
+-      contents.x() + horizontal_inset +
+-      (icon_design_width - icon_->GetPreferredSize().width()) / 2;
+-  icon_->SetBounds(
+-      icon_x,
+-      contents.y() +
+-          (contents.height() - icon_->GetPreferredSize().height()) / 2,
+-      icon_->GetPreferredSize().width(), icon_->GetPreferredSize().height());
+-
+-  const int title_x =
+-      contents.x() + horizontal_inset + icon_design_width + horizontal_inset;
+-  if (close_button_->GetVisible()) {
+-    const gfx::Size close_size = close_button_->GetPreferredSize();
+-    close_button_->SetBounds(
+-        contents.right() - close_size.width(),
+-        contents.y() + (contents.height() - close_size.height()) / 2,
+-        close_size.width(), close_size.height());
+-  } else {
+-    close_button_->SetBounds(0, 0, 0, 0);
+-  }
+-  const int trailing_edge = close_button_->GetVisible()
+-                                ? close_button_->x()
+-                                : contents.right() - horizontal_inset;
+-  const int title_width =
+-      std::max(0, trailing_edge - horizontal_inset - title_x);
+-  const int title_height = title_->GetLineHeight();
+-  title_->SetBounds(title_x,
+-                    contents.y() + (contents.height() - title_height) / 2,
+-                    title_width, title_height);
++  const arcium::SidebarRowBounds bounds = arcium::CalculateSidebarRowBounds(
++      contents, arcium::GetSidebarRowMetrics(this), icon_->GetPreferredSize(),
++      title_->GetLineHeight(),
++      close_button_->GetVisible()
++          ? std::make_optional(close_button_->GetPreferredSize())
++          : std::nullopt);
++  icon_->SetBoundsRect(bounds.icon);
++  close_button_->SetBoundsRect(bounds.close_button);
++  title_->SetBoundsRect(bounds.title);
+   LayoutSuperclass<views::Button>(this);
+ }
+ 
+Index: src/chrome/browser/ui/views/tabs/common/persistent_tab_view_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/persistent_tab_view_unittest.cc
++++ src/chrome/browser/ui/views/tabs/common/persistent_tab_view_unittest.cc
+@@ -18,8 +18,10 @@
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/tab_data.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
++#include "chrome/browser/ui/views/tabs/tab/tab_title.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "chrome/test/views/chrome_views_test_base.h"
+@@ -33,17 +35,22 @@
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/accessibility/ax_node_data.h"
+-#include "ui/base/resource/resource_scale_factor.h"
+ #include "ui/base/l10n/l10n_util.h"
++#include "ui/base/resource/resource_scale_factor.h"
+ #include "ui/events/event.h"
+ #include "ui/events/types/event_type.h"
+ #include "ui/gfx/codec/png_codec.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/image/image_skia.h"
+ #include "ui/gfx/image/image_skia_rep.h"
++#include "ui/gfx/render_text.h"
+ #include "ui/menus/simple_menu_model.h"
+ #include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/label.h"
+ #include "ui/views/test/button_test_api.h"
++#include "ui/views/test/views_test_utils.h"
++#include "ui/views/widget/widget.h"
+ #include "url/gurl.h"
+ 
+ class PersistentTabViewTest : public ChromeViewsTestBase {
+@@ -75,10 +82,15 @@ class PersistentTabViewTest : public Chr
+ 
+ namespace {
+ 
+-favicon_base::FaviconRawBitmapResult MakeCachedFaviconResult(
+-    SkColor color,
+-    const GURL& icon_url,
+-    int pixel_size) {
++class TestFolderButton : public views::LabelButton {
++ public:
++  using views::LabelButton::image_container_view;
++  using views::LabelButton::label;
++  using views::LabelButton::LabelButton;
++};
++
++favicon_base::FaviconRawBitmapResult
++MakeCachedFaviconResult(SkColor color, const GURL& icon_url, int pixel_size) {
+   SkBitmap bitmap;
+   bitmap.allocN32Pixels(pixel_size, pixel_size);
+   bitmap.eraseColor(color);
+@@ -98,6 +110,148 @@ favicon_base::FaviconRawBitmapResult Mak
+ 
+ }  // namespace
+ 
++class TestTabTitle : public TabTitle {
++ public:
++  using TabTitle::CreateRenderText;
++  using TabTitle::TabTitle;
++};
++
++TEST_F(PersistentTabViewTest, SidebarFadeIsAnExplicitTitleStyle) {
++  TestTabTitle sidebar(nullptr, TabTitle::FadeStyle::kSidebar);
++  TestTabTitle standard;
++  EXPECT_EQ(16, sidebar.CreateRenderText()->fade_gradient_width());
++  EXPECT_EQ(std::nullopt, standard.CreateRenderText()->fade_gradient_width());
++}
++
++TEST(SidebarRowLayoutTest, ExpandedRowsShareColumnsAtEachUIScale) {
++  struct ScaleCase {
++    double scale;
++    int inset;
++    int slot;
++    int gap;
++    int indent;
++  };
++  for (const auto& test :
++       {ScaleCase{0.8, 5, 14, 6, 13}, ScaleCase{1.0, 6, 18, 8, 16},
++        ScaleCase{1.25, 8, 23, 10, 20}, ScaleCase{1.5, 9, 27, 12, 24}}) {
++    SCOPED_TRACE(test.scale);
++    const arcium::SidebarRowMetrics metrics =
++        arcium::SidebarRowMetrics::ForScale(test.scale);
++    EXPECT_EQ(test.inset, metrics.container_padding);
++    EXPECT_EQ(test.inset, metrics.horizontal_inset);
++    EXPECT_EQ(test.slot, metrics.icon_slot_width);
++    EXPECT_EQ(test.gap, metrics.icon_title_gap);
++    EXPECT_EQ(test.slot, metrics.close_slot_width);
++    EXPECT_EQ(test.gap, metrics.close_title_gap);
++    EXPECT_EQ(test.indent, metrics.depth_indent);
++
++    const int sidebar_width = base::ClampRound(300 * test.scale);
++    const int favicon_size = base::ClampRound(16 * test.scale);
++    const int icon_inset = base::ClampRound(3 * test.scale);
++    const gfx::Size decorated_icon(favicon_size + 2 * icon_inset,
++                                   favicon_size + 2 * icon_inset);
++    for (int depth : {0, 1, 2}) {
++      SCOPED_TRACE(depth);
++      const int row_x = test.inset + depth * test.indent;
++      const gfx::Rect row(row_x, 0, sidebar_width - row_x - test.inset,
++                          base::ClampRound(28 * test.scale));
++      const arcium::SidebarRowBounds tab = arcium::CalculateSidebarRowBounds(
++          row, metrics, decorated_icon, base::ClampRound(16 * test.scale));
++      const arcium::SidebarRowBounds folder = arcium::CalculateSidebarRowBounds(
++          row, metrics, gfx::Size(test.slot, test.slot),
++          base::ClampRound(16 * test.scale));
++      EXPECT_EQ(row_x + test.inset + test.slot + test.gap, tab.title.x());
++      EXPECT_EQ(tab.title, folder.title);
++      const int favicon_edge = test.inset + test.slot / 2 - favicon_size / 2;
++      EXPECT_EQ(sidebar_width - test.inset - favicon_edge, tab.title.right());
++      EXPECT_EQ(tab.icon.x() + icon_inset - depth * test.indent,
++                sidebar_width - tab.title.right());
++      EXPECT_EQ(folder.icon.CenterPoint().x(),
++                tab.icon.x() + icon_inset + favicon_size / 2);
++
++      // The hit target can be 26 or 28 DIP; neither changes the text endpoint
++      // or the visual close icon's column.
++      for (int close_design_size : {26, 28}) {
++        SCOPED_TRACE(close_design_size);
++        const int close_size = base::ClampRound(close_design_size * test.scale);
++        const arcium::SidebarRowBounds with_close =
++            arcium::CalculateSidebarRowBounds(
++                row, metrics, decorated_icon, base::ClampRound(16 * test.scale),
++                gfx::Size(close_size, close_size));
++        EXPECT_EQ(tab.title.x(), with_close.title.x());
++        EXPECT_EQ(sidebar_width - 2 * test.inset - test.slot - test.gap,
++                  with_close.title.right());
++        EXPECT_EQ(sidebar_width - 2 * test.inset - test.slot + test.slot / 2,
++                  with_close.close_button.CenterPoint().x());
++      }
++    }
++  }
++}
++
++TEST(SidebarRowLayoutTest, AlertsPreserveTrailingColumn) {
++  const arcium::SidebarRowMetrics metrics =
++      arcium::SidebarRowMetrics::ForScale(1.0);
++  const gfx::Rect row(0, 0, 240, 28);
++  const gfx::Size favicon(22, 22);
++  const gfx::Size alert(16, 16);
++  const gfx::Size close(26, 26);
++  const arcium::SidebarRowBounds ordinary = arcium::CalculateSidebarRowBounds(
++      row, metrics, favicon, 16, close, alert);
++  EXPECT_EQ(58, ordinary.title.x());
++  EXPECT_EQ(208, ordinary.title.right());
++  EXPECT_EQ(41, ordinary.alert_indicator.CenterPoint().x());
++  EXPECT_EQ(225, ordinary.close_button.CenterPoint().x());
++
++  const arcium::SidebarRowBounds pinned = arcium::CalculateSidebarRowBounds(
++      row, metrics, std::nullopt, 16, std::nullopt, alert);
++  EXPECT_EQ(32, pinned.title.x());
++  EXPECT_EQ(233, pinned.title.right());
++  EXPECT_EQ(15, pinned.alert_indicator.CenterPoint().x());
++}
++
++TEST(SidebarRowLayoutTest, NarrowRowsHaveNonnegativeContainedBounds) {
++  for (double scale : {0.8, 1.0, 1.25, 1.5}) {
++    SCOPED_TRACE(scale);
++    const arcium::SidebarRowMetrics metrics =
++        arcium::SidebarRowMetrics::ForScale(scale);
++    const int icon_width =
++        base::ClampRound(16 * scale) + 2 * base::ClampRound(3 * scale);
++    // Cover ordinary widths and extreme constraints during collapse, nesting,
++    // or split layout. Clipping below the expanded minimum is defensive.
++    for (int width : {0, 1, 8, 12, 20, 26, 38, 64, 80, 148, 188, 288}) {
++      SCOPED_TRACE(width);
++      const gfx::Rect row(0, 0, width, base::ClampRound(28 * scale));
++      for (bool show_close : {false, true}) {
++        for (bool show_alert : {false, true}) {
++          const int close_width = base::ClampRound(26 * scale);
++          const int alert_width = base::ClampRound(16 * scale);
++          const arcium::SidebarRowBounds bounds =
++              arcium::CalculateSidebarRowBounds(
++                  row, metrics, gfx::Size(icon_width, icon_width),
++                  base::ClampRound(16 * scale),
++                  show_close
++                      ? std::make_optional(gfx::Size(close_width, close_width))
++                      : std::nullopt,
++                  show_alert
++                      ? std::make_optional(gfx::Size(alert_width, alert_width))
++                      : std::nullopt);
++          for (const gfx::Rect& child :
++               {bounds.icon, bounds.title, bounds.close_button,
++                bounds.alert_indicator}) {
++            EXPECT_GE(child.x(), 0);
++            EXPECT_GE(child.y(), 0);
++            EXPECT_GE(child.width(), 0);
++            EXPECT_GE(child.height(), 0);
++            if (!child.IsEmpty()) {
++              EXPECT_TRUE(row.Contains(child));
++            }
++          }
++        }
++      }
++    }
++  }
++}
++
+ class TestPersistentTabDragDelegate : public PersistentTabDragDelegate {
+  public:
+   bool BeginPersistentTabDrag(PersistentTabView&,
+@@ -119,6 +273,50 @@ class TestPersistentTabDragDelegate : pu
+   bool accept_drag = true;
+ };
+ 
++TEST_F(PersistentTabViewTest,
++       FolderButtonPreservesVerticalInsetsAndExpandedColumns) {
++  for (double scale : {0.8, 1.0, 1.25, 1.5}) {
++    SCOPED_TRACE(scale);
++    const arcium::SidebarRowMetrics metrics =
++        arcium::SidebarRowMetrics::ForScale(scale);
++    auto widget =
++        CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
++    auto* folder = widget->SetContentsView(std::make_unique<TestFolderButton>(
++        base::BindRepeating([](const ui::Event&) {}),
++        u"A folder title long enough to exceed the entire sidebar row width"));
++    folder->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    SkBitmap bitmap;
++    bitmap.allocN32Pixels(metrics.icon_slot_width, metrics.icon_slot_width);
++    bitmap.eraseColor(SK_ColorBLUE);
++    folder->SetImageModel(views::Button::STATE_NORMAL,
++                          ui::ImageModel::FromImageSkia(
++                              gfx::ImageSkia::CreateFromBitmap(bitmap, 1.0f)));
++    const gfx::Insets original_insets = folder->GetInsets();
++    const int original_height = folder->GetPreferredSize().height();
++
++    arcium::ApplySidebarRowMetricsToLabelButton(folder, metrics);
++    EXPECT_EQ(original_insets.top(), folder->GetInsets().top());
++    EXPECT_EQ(original_insets.bottom(), folder->GetInsets().bottom());
++    EXPECT_EQ(original_height, folder->GetPreferredSize().height());
++    widget->SetBounds(gfx::Rect(0, 0, 240, original_height));
++    views::test::RunScheduledLayout(widget.get());
++    EXPECT_EQ(metrics.horizontal_inset + metrics.icon_slot_width / 2,
++              folder->image_container_view()->bounds().CenterPoint().x());
++    EXPECT_EQ(metrics.horizontal_inset + metrics.icon_slot_width +
++                  metrics.icon_title_gap,
++              folder->label()->x());
++    EXPECT_EQ(240 - metrics.horizontal_inset,
++              folder->label()->bounds().right());
++
++    folder->SetText(u"");
++    folder->SetHorizontalAlignment(gfx::ALIGN_CENTER);
++    views::test::RunScheduledLayout(widget.get());
++    EXPECT_EQ((folder->width() - metrics.icon_slot_width) / 2,
++              folder->image_container_view()->x());
++    EXPECT_EQ(original_height, folder->GetPreferredSize().height());
++  }
++}
++
+ TEST_F(PersistentTabViewTest, UsesNativeTabSemanticsAndSelection) {
+   auto row = MakeView(PersistentTabView::PresentationMode::kFullRow);
+ 
+@@ -165,6 +363,96 @@ TEST_F(PersistentTabViewTest, LiveAndDor
+   EXPECT_FALSE(row->close_button_for_testing()->GetVisible());
+ }
+ 
++TEST_F(PersistentTabViewTest, ExpandedColumnsSurviveLiveAndDormantTransitions) {
++  auto row = MakeView(PersistentTabView::PresentationMode::kFullRow);
++  row->SetBounds(0, 0, 240, row->GetPreferredSize().height());
++  views::View* const icon = row->children()[0];
++  views::View* const title = row->children()[1];
++  const auto check_columns = [&](bool close_visible) {
++    views::test::RunScheduledLayout(row.get());
++    EXPECT_EQ(32, title->x());
++    EXPECT_EQ(close_visible ? 208 : 233, title->bounds().right());
++    EXPECT_EQ(15, icon->bounds().CenterPoint().x());
++    EXPECT_EQ(close_visible, row->close_button_for_testing()->GetVisible());
++    if (close_visible) {
++      EXPECT_EQ(225,
++                row->close_button_for_testing()->bounds().CenterPoint().x());
++      EXPECT_EQ(row->close_button_for_testing()->GetPreferredSize(),
++                row->close_button_for_testing()->size());
++    } else {
++      EXPECT_TRUE(row->close_button_for_testing()->bounds().IsEmpty());
++    }
++  };
++  check_columns(false);
++
++  PersistentTabView::PresentationState live_state;
++  live_state.live = true;
++  live_state.dematerialize_callback = base::BindRepeating([] { return true; });
++  row->UpdatePresentation(u"Live", GURL("https://example.test/"), live_state);
++  check_columns(false);
++
++  live_state.selected = true;
++  row->UpdatePresentation(u"Live", GURL("https://example.test/"), live_state);
++  check_columns(true);
++
++  for (tabs::TabNetworkState network_state :
++       {tabs::TabNetworkState::kWaiting, tabs::TabNetworkState::kLoading,
++        tabs::TabNetworkState::kNone}) {
++    SCOPED_TRACE(static_cast<int>(network_state));
++    live_state.network_state = network_state;
++    row->UpdatePresentation(u"Live", GURL("https://example.test/"), live_state);
++    check_columns(true);
++  }
++
++  live_state.selected = false;
++  row->UpdatePresentation(u"Live", GURL("https://example.test/"), live_state);
++  row->SetState(views::Button::STATE_HOVERED);
++  check_columns(true);
++  row->SetState(views::Button::STATE_NORMAL);
++  check_columns(false);
++
++  row->UpdatePresentation(u"Dormant", GURL("https://example.test/"), {});
++  check_columns(false);
++}
++
++TEST_F(PersistentTabViewTest, ExpandedNarrowRowsStayInsideTheirBounds) {
++  auto row = MakeView(PersistentTabView::PresentationMode::kFullRow);
++  PersistentTabView::PresentationState live_state;
++  live_state.live = true;
++  live_state.selected = true;
++  live_state.dematerialize_callback = base::BindRepeating([] { return true; });
++  row->UpdatePresentation(u"Live", GURL("https://example.test/"), live_state);
++  const views::View* const icon = row->children()[0];
++  const views::View* const title = row->children()[1];
++  const views::View* const close = row->close_button_for_testing();
++  // Include normal rows as well as defensive clipping below the sidebar's
++  // expanded minimum, where nesting or collapse can leave very little space.
++  for (int width : {0, 1, 12, 26, 38, 64, 80, 148, 188, 288}) {
++    SCOPED_TRACE(width);
++    row->SetBounds(0, 0, width, row->GetPreferredSize().height());
++    views::test::RunScheduledLayout(row.get());
++    if (width >= 148) {
++      EXPECT_EQ(32, row->children()[1]->x());
++      EXPECT_EQ(width - 32, row->children()[1]->bounds().right());
++      EXPECT_EQ(width - 15,
++                row->close_button_for_testing()->bounds().CenterPoint().x());
++      EXPECT_EQ(row->close_button_for_testing()->GetPreferredSize(),
++                row->close_button_for_testing()->size());
++    }
++    // The native focus ring is a decorative child with an intentional outset.
++    // Check only the icon, title, and close button placed by the row layout.
++    for (const views::View* child : {icon, title, close}) {
++      EXPECT_GE(child->x(), 0);
++      EXPECT_GE(child->y(), 0);
++      EXPECT_GE(child->width(), 0);
++      EXPECT_GE(child->height(), 0);
++      if (!child->bounds().IsEmpty()) {
++        EXPECT_TRUE(row->GetLocalBounds().Contains(child->bounds()));
++      }
++    }
++  }
++}
++
+ TEST_F(PersistentTabViewTest, AcceptedCloseWaitsForServiceProjection) {
+   int close_count = 0;
+   auto row = MakeView(PersistentTabView::PresentationMode::kFullRow);
+@@ -313,6 +601,11 @@ TEST_F(PersistentTabViewTest, CompactGri
+             tile->presentation_mode());
+   EXPECT_EQ(44, tile->GetPreferredSize().height());
+   EXPECT_EQ(56, tile->GetPreferredSize().width());
++  tile->SetBoundsRect(gfx::Rect(tile->GetPreferredSize()));
++  views::test::RunScheduledLayout(tile.get());
++  EXPECT_EQ(tile->GetLocalBounds().CenterPoint(),
++            tile->children()[0]->bounds().CenterPoint());
++  EXPECT_TRUE(tile->children()[1]->bounds().IsEmpty());
+ }
+ 
+ TEST_F(PersistentTabViewTest, FallsBackToGeneratedMonogramWithoutCachedIcon) {
+Index: src/chrome/browser/ui/views/tabs/common/pin_tab_container_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/pin_tab_container_view.cc
++++ src/chrome/browser/ui/views/tabs/common/pin_tab_container_view.cc
+@@ -35,6 +35,7 @@
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
+ #include "chrome/browser/ui/views/tabs/common/persistent_tab_view.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+@@ -84,8 +85,6 @@ std::string PersistentFolderKey(helium::
+ }
+ 
+ constexpr int kTabVerticalPadding = 2;
+-constexpr int kPersistentDepthIndent = 16;
+-constexpr int kFolderIconSize = 18;
+ constexpr int kConnectorLaneGap = 2;
+ constexpr int kConnectorLeadingInset = 14;
+ constexpr int kConnectorMaxLane = 2;
+@@ -142,12 +141,13 @@ class PersistentFolderRow : public views
+     // layer. Virtual rows have no opaque background of their own, so use
+     // grayscale antialiasing like other labels in translucent browser chrome.
+     label()->SetSkipSubpixelRenderingOpacityCheck(true);
++    UpdateRowMetrics();
+   }
+ 
+   void OnThemeChanged() override {
+     views::LabelButton::OnThemeChanged();
+     UpdateFolderIcon();
+-    SetImageLabelSpacing(arcium::ScaleChromeDip(this, 8));
++    UpdateRowMetrics();
+     const int scaled_font_size = base::ClampRound(
+         base_font_list_.GetFontSize() * arcium::GetChromeUIScale(this));
+     label()->SetFontList(base_font_list_.DeriveWithSizeDelta(
+@@ -168,18 +168,23 @@ class PersistentFolderRow : public views
+   }
+ 
+   void UpdateFolderIcon() {
+-    SetImageModel(
+-        views::Button::STATE_NORMAL,
+-        ui::ImageModel::FromVectorIcon(
+-            collapsed_ ? vector_icons::kFolderFlippableIcon
+-                       : vector_icons::kFolderOpenIcon,
+-            ui::kColorIcon, arcium::ScaleChromeDip(this, kFolderIconSize)));
++    SetImageModel(views::Button::STATE_NORMAL,
++                  ui::ImageModel::FromVectorIcon(
++                      collapsed_ ? vector_icons::kFolderFlippableIcon
++                                 : vector_icons::kFolderOpenIcon,
++                      ui::kColorIcon,
++                      arcium::GetSidebarRowMetrics(this).icon_slot_width));
+   }
+ 
+   void UpdatePresentation(bool compact) {
+     SetText(compact ? std::u16string() : title_);
+     SetHorizontalAlignment(compact ? gfx::ALIGN_CENTER : gfx::ALIGN_LEFT);
+-    SetImageLabelSpacing(arcium::ScaleChromeDip(this, 8));
++    UpdateRowMetrics();
++  }
++
++  void UpdateRowMetrics() {
++    arcium::ApplySidebarRowMetricsToLabelButton(
++        this, arcium::GetSidebarRowMetrics(this));
+   }
+ 
+   void SetDropTarget(bool drop_target) {
+@@ -379,15 +384,17 @@ views::ProposedLayout PinTabContainerVie
+   const bool stable_sidebar = UseSidebarProjection();
+   int width = 0;
+   int height = 0;
++  const bool is_compact = IsCompactSidebar();
+   // Apply horizontal padding immediately at start of collapse animation by
+   // including collapsing state.
+-  const int horizontal_padding = arcium::GetChromeLayoutConstant(
+-      this, LayoutConstant::kVerticalTabStripHorizontalPadding);
++  const int horizontal_padding =
++      is_compact ? arcium::GetChromeLayoutConstant(
++                       this, LayoutConstant::kVerticalTabStripHorizontalPadding)
++                 : arcium::GetSidebarRowMetrics(this).container_padding;
+   const int tab_vertical_padding =
+       arcium::ScaleChromeDip(this, kTabVerticalPadding);
+   const int persistent_depth_indent =
+-      arcium::ScaleChromeDip(this, kPersistentDepthIndent);
+-  const bool is_compact = IsCompactSidebar();
++      arcium::GetSidebarRowMetrics(this).depth_indent;
+   std::vector<views::View*> children;
+   if (stable_sidebar && sidebar_preview_active_) {
+     children.reserve(this->children().size());
+@@ -434,11 +441,12 @@ views::ProposedLayout PinTabContainerVie
+         horizontal_padding + (is_compact || depth == depths.end()
+                                   ? 0
+                                   : depth->second * persistent_depth_indent);
+-    views::SizeBounds child_size_bounds =
+-        views::SizeBounds(size_bounds.width().is_bounded()
+-                              ? (size_bounds.width() - (x + horizontal_padding))
+-                              : size_bounds.width(),
+-                          {});
++    views::SizeBounds child_size_bounds = views::SizeBounds(
++        size_bounds.width().is_bounded()
++            ? views::SizeBound(std::max(
++                  0, size_bounds.width().value() - x - horizontal_padding))
++            : size_bounds.width(),
++        {});
+     gfx::Rect bounds = gfx::Rect(child->GetPreferredSize(child_size_bounds));
+     bounds.set_x(x);
+ 
+@@ -469,8 +477,8 @@ views::ProposedLayout PinTabContainerVie
+     // If width is bounded, child views should respect the width constraints and
+     // take up the available width excluding trailing horizontal padding.
+     if (size_bounds.width().is_bounded()) {
+-      bounds.set_width(size_bounds.width().value() - bounds.x() -
+-                       horizontal_padding);
++      bounds.set_width(std::max(
++          0, size_bounds.width().value() - bounds.x() - horizontal_padding));
+     }
+     layouts.child_layouts.emplace_back(child, true, bounds);
+     const bool persistent_row_leaving =
+Index: src/chrome/browser/ui/views/tabs/common/sidebar_row_layout.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/tabs/common/sidebar_row_layout.h
+@@ -0,0 +1,129 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_TABS_COMMON_SIDEBAR_ROW_LAYOUT_H_
++#define CHROME_BROWSER_UI_VIEWS_TABS_COMMON_SIDEBAR_ROW_LAYOUT_H_
++
++#include <algorithm>
++#include <optional>
++
++#include "base/numerics/safe_conversions.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
++#include "ui/gfx/geometry/insets.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/views/border.h"
++#include "ui/views/controls/button/label_button.h"
++
++namespace arcium {
++
++// Expanded rows share design slots even when their actual images or button
++// hit targets have different sizes. All dimensions are scaled together.
++struct SidebarRowMetrics {
++  int container_padding;
++  int horizontal_inset;
++  int icon_slot_width;
++  int favicon_width;
++  int icon_title_gap;
++  int close_slot_width;
++  int close_title_gap;
++  int depth_indent;
++
++  static SidebarRowMetrics ForScale(double scale) {
++    const int edge_spacing = base::ClampRound(6 * scale);
++    return {.container_padding = edge_spacing,
++            .horizontal_inset = edge_spacing,
++            .icon_slot_width = base::ClampRound(18 * scale),
++            .favicon_width = base::ClampRound(16 * scale),
++            .icon_title_gap = base::ClampRound(8 * scale),
++            .close_slot_width = base::ClampRound(18 * scale),
++            .close_title_gap = base::ClampRound(8 * scale),
++            .depth_indent = base::ClampRound(16 * scale)};
++  }
++};
++
++inline SidebarRowMetrics GetSidebarRowMetrics(const views::View* view) {
++  return SidebarRowMetrics::ForScale(GetChromeUIScale(view));
++}
++
++inline void ApplySidebarRowMetricsToLabelButton(
++    views::LabelButton* button,
++    const SidebarRowMetrics& metrics) {
++  // Native vertical insets contribute to a folder row's preferred height.
++  // Replace only its horizontal insets so the row keeps that height.
++  gfx::Insets insets = button->GetInsets();
++  insets.set_left(metrics.horizontal_inset);
++  insets.set_right(metrics.horizontal_inset);
++  button->SetBorder(views::CreateEmptyBorder(insets));
++  button->SetImageLabelSpacing(metrics.icon_title_gap);
++}
++
++struct SidebarRowBounds {
++  gfx::Rect icon;
++  gfx::Rect title;
++  gfx::Rect close_button;
++  gfx::Rect alert_indicator;
++};
++
++inline gfx::Rect CenterSidebarRowChild(const gfx::Rect& contents,
++                                       int slot_x,
++                                       int slot_width,
++                                       const gfx::Size& child_size) {
++  // Use the same integer center for differently sized images at fractional
++  // scales. TabIcon includes extra insets for its attention/discard indicators.
++  gfx::Rect bounds(slot_x + slot_width / 2 - child_size.width() / 2,
++                   contents.y() + (contents.height() - child_size.height()) / 2,
++                   child_size.width(), child_size.height());
++  bounds.Intersect(contents);
++  return bounds;
++}
++
++inline SidebarRowBounds CalculateSidebarRowBounds(
++    const gfx::Rect& contents,
++    const SidebarRowMetrics& metrics,
++    const std::optional<gfx::Size>& icon_size,
++    int title_height,
++    const std::optional<gfx::Size>& close_size = std::nullopt,
++    const std::optional<gfx::Size>& alert_size = std::nullopt) {
++  SidebarRowBounds bounds;
++  const int leading_slot_x = contents.x() + metrics.horizontal_inset;
++  int title_x =
++      leading_slot_x + metrics.icon_slot_width + metrics.icon_title_gap;
++  if (icon_size) {
++    bounds.icon = CenterSidebarRowChild(contents, leading_slot_x,
++                                        metrics.icon_slot_width, *icon_size);
++  }
++  if (alert_size) {
++    // A pinned row can replace its favicon with the alert. Ordinary rows keep
++    // both, placing the alert between the favicon and title.
++    const int alert_x = icon_size ? title_x : leading_slot_x;
++    bounds.alert_indicator = CenterSidebarRowChild(
++        contents, alert_x, metrics.icon_slot_width, *alert_size);
++    title_x = alert_x + metrics.icon_slot_width + metrics.icon_title_gap;
++  }
++
++  int trailing_edge = contents.right() - metrics.horizontal_inset;
++  if (close_size) {
++    const int close_slot_x = trailing_edge - metrics.close_slot_width;
++    bounds.close_button = CenterSidebarRowChild(
++        contents, close_slot_x, metrics.close_slot_width, *close_size);
++    trailing_edge = close_slot_x - metrics.close_title_gap;
++  } else {
++    // Mirror the painted favicon's leading edge, including integer centering
++    // at fractional scales. Folder indentation does not move the trailing edge.
++    trailing_edge -= metrics.icon_slot_width / 2 - metrics.favicon_width / 2;
++  }
++
++  title_x = std::clamp(title_x, contents.x(), contents.right());
++  trailing_edge = std::clamp(trailing_edge, title_x, contents.right());
++  bounds.title =
++      gfx::Rect(title_x, contents.y() + (contents.height() - title_height) / 2,
++                trailing_edge - title_x, title_height);
++  bounds.title.Intersect(contents);
++  return bounds;
++}
++
++}  // namespace arcium
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TABS_COMMON_SIDEBAR_ROW_LAYOUT_H_
+Index: src/chrome/browser/ui/views/tabs/common/tab_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ src/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -19,11 +19,10 @@
+ #include "base/task/thread_pool.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+-#include "chrome/browser/history/history_service_factory.h"
+-#include "components/history/core/browser/history_service.h"
+ #include "chrome/browser/glic/browser_ui/tab_underline_controller.h"
+ #include "chrome/browser/glic/browser_ui/tab_underline_view.h"
+ #include "chrome/browser/glic/public/glic_enabling.h"
++#include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/themes/theme_properties.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+@@ -46,6 +45,7 @@
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/browser/ui/views/tabs/common/favorite_favicon_style.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_drag_handler.h"
+@@ -64,9 +64,10 @@
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/grit/theme_resources.h"
+ #include "components/contextual_tasks/public/features.h"
+-#include "components/favicon/core/favicon_service.h"
+ #include "components/favicon/content/content_favicon_driver.h"
++#include "components/favicon/core/favicon_service.h"
+ #include "components/favicon_base/favicon_types.h"
++#include "components/history/core/browser/history_service.h"
+ #include "components/keyed_service/core/service_access_type.h"
+ #include "components/tabs/public/tab_alert.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -82,8 +83,8 @@
+ #include "ui/compositor/layer.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
+ #include "ui/events/types/event_type.h"
+-#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/animation/animation.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/insets.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/rounded_corners_f.h"
+@@ -159,7 +160,8 @@ TabView::TabView(TabCollectionNode* coll
+       tab_style_(TabStyle::Get()),
+       icon_(AddChildView(std::make_unique<TabIcon>())),
+       title_(AddChildView(std::make_unique<TabTitle>(
+-          collection_node ? GetTabInterface()->GetProfile() : nullptr))),
++          collection_node ? GetTabInterface()->GetProfile() : nullptr,
++          TabTitle::FadeStyle::kSidebar))),
+       alert_indicator_(
+           AddChildView(std::make_unique<AlertIndicatorButton>(this))),
+       close_button_(AddChildView(std::make_unique<TabCloseButton>(
+@@ -1016,52 +1018,70 @@ views::ProposedLayout TabView::Calculate
+   views::ProposedLayout layouts;
+   layouts.host_size = gfx::Size(width, height);
+ 
++  // Keep the centered collapsed rail and Favorite tile layouts independent of
++  // the shared expanded row columns.
++  const bool is_centered =
++      favorite_presentation_ ||
++      ((pinned_ || collapsed_) && !IsInExpandOnHover(width));
++  if (!is_centered) {
++    const arcium::SidebarRowMetrics metrics =
++        arcium::GetSidebarRowMetrics(this);
++    const bool close_visible = IsChildVisible(close_button_, width);
++    const bool icon_visible = IsChildVisible(icon_, width);
++    const bool alert_visible = IsChildVisible(alert_indicator_, width);
++    const int placed_children = close_visible + icon_visible;
++    const int remaining_width =
++        width - 2 * metrics.horizontal_inset -
++        (close_visible ? metrics.close_slot_width + metrics.close_title_gap
++                       : 0) -
++        (icon_visible ? metrics.icon_slot_width + metrics.icon_title_gap : 0);
++    const bool render_alert =
++        alert_visible &&
++        (metrics.icon_slot_width + metrics.icon_title_gap < remaining_width ||
++         placed_children < 2);
++    const arcium::SidebarRowBounds bounds = arcium::CalculateSidebarRowBounds(
++        gfx::Rect(0, 0, width, height), metrics,
++        icon_visible ? std::make_optional(icon_->GetPreferredSize())
++                     : std::nullopt,
++        title_->GetLineHeight(),
++        close_visible ? std::make_optional(close_button_->GetPreferredSize())
++                      : std::nullopt,
++        render_alert ? std::make_optional(alert_indicator_->GetPreferredSize())
++                     : std::nullopt);
++    layouts.child_layouts.emplace_back(close_button_.get(), close_visible,
++                                       bounds.close_button);
++    layouts.child_layouts.emplace_back(icon_.get(), icon_visible, bounds.icon);
++    layouts.child_layouts.emplace_back(
++        alert_indicator_.get(), alert_visible,
++        render_alert ? bounds.alert_indicator
++                     : gfx::Rect(width / 2, height / 2, 0, 0));
++    layouts.child_layouts.emplace_back(
++        title_.get(), IsChildVisible(title_, width), bounds.title);
++    return layouts;
++  }
++
+   gfx::Rect bounds_remaining = gfx::Rect(0, 0, width, height);
+   const int default_horizontal_inset =
+       arcium::ScaleChromeDip(this, kHorizontalInset);
+   // TabIcon's preferred width includes its attention/discard insets. In the
+   // collapsed Favorite rail, preserve the 24 DIP favicon instead of letting
+   // the ordinary 7 DIP inset leave too little room for the complete view.
+-  const int horizontal_inset = favorite_presentation_
+-                                   ? std::min(
+-                                         default_horizontal_inset,
+-                                         std::max(
+-                                             0, (width -
+-                                                 icon_->GetPreferredSize().width()) /
+-                                                    2))
+-                                   : default_horizontal_inset;
++  const int horizontal_inset =
++      favorite_presentation_
++          ? std::min(
++                default_horizontal_inset,
++                std::max(0, (width - icon_->GetPreferredSize().width()) / 2))
++          : default_horizontal_inset;
+   bounds_remaining.Inset(gfx::Insets::VH(0, horizontal_inset));
+ 
+-  // If the tab is collapsed but animating with a wider width then we shouldn't
+-  // center the contents.
+-  const bool is_centered =
+-      favorite_presentation_ ||
+-      ((pinned_ || collapsed_) && !IsInExpandOnHover(width));
+-
+   int placed_children = 0;
+   for (const auto& child : tab_children_configs_) {
+-    const bool can_render_child =
+-        is_centered ? (placed_children == 0)
+-                    : (arcium::ScaleChromeDip(this, child.min_width) +
+-                               arcium::ScaleChromeDip(this, child.padding) <
+-                           bounds_remaining.width() ||
+-                       placed_children < 2);
++    const bool can_render_child = placed_children == 0;
+     const bool is_child_visible = IsChildVisible(child.view, width);
+     if (is_child_visible && can_render_child) {
+       layouts.child_layouts.emplace_back(
+           child.view.get(), is_child_visible,
+-          GetChildBounds(bounds_remaining, child, is_centered));
+-
+-      if (!is_centered) {
+-        bounds_remaining.Inset(
+-            child.align_leading
+-                ? gfx::Insets().set_left(
+-                      arcium::ScaleChromeDip(this, child.padding) +
+-                      arcium::ScaleChromeDip(this, child.min_width))
+-                : gfx::Insets().set_right(
+-                      arcium::ScaleChromeDip(this, child.padding) +
+-                      arcium::ScaleChromeDip(this, child.min_width)));
+-      }
++          GetChildBounds(bounds_remaining, child, /*center=*/true));
+ 
+       placed_children += 1;
+     } else if (child.decorate_on_collapse) {
+Index: src/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
++++ src/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ 
++#include <algorithm>
+ #include <variant>
+ 
+ #include "chrome/browser/ui/browser.h"
+@@ -14,7 +15,9 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+@@ -139,7 +142,10 @@ views::ProposedLayout UnpinnedTabContain
+   // Apply horizontal padding immediately at start of collapse animation by
+   // including collapsing state.
+   const int horizontal_padding =
+-      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
++      collapse_state == tabs::VerticalTabStripCollapseState::kExpanded
++          ? arcium::GetSidebarRowMetrics(this).container_padding
++          : arcium::GetChromeLayoutConstant(
++                this, LayoutConstant::kVerticalTabStripHorizontalPadding);
+   const std::vector<views::View*> children =
+       collection_node_ ? collection_node_->GetDirectChildren()
+                        : std::vector<views::View*>();
+@@ -167,11 +173,12 @@ views::ProposedLayout UnpinnedTabContain
+                 collapse_state != tabs::VerticalTabStripCollapseState::kExpanded
+             ? 0
+             : horizontal_padding;
+-    views::SizeBounds child_size_bounds =
+-        views::SizeBounds(size_bounds.width().is_bounded()
+-                              ? (size_bounds.width() - (x + horizontal_padding))
+-                              : size_bounds.width(),
+-                          {});
++    views::SizeBounds child_size_bounds = views::SizeBounds(
++        size_bounds.width().is_bounded()
++            ? views::SizeBound(std::max(
++                  0, size_bounds.width().value() - x - horizontal_padding))
++            : size_bounds.width(),
++        {});
+     gfx::Rect bounds = gfx::Rect(child->GetPreferredSize(child_size_bounds));
+     bounds.set_x(x);
+ 
+@@ -182,8 +189,8 @@ views::ProposedLayout UnpinnedTabContain
+     // If width is bounded, child views should respect the width constraints and
+     // take up the available width excluding trailing horizontal padding.
+     if (size_bounds.width().is_bounded()) {
+-      bounds.set_width(size_bounds.width().value() - bounds.x() -
+-                       horizontal_padding);
++      bounds.set_width(std::max(
++          0, size_bounds.width().value() - bounds.x() - horizontal_padding));
+     }
+     layouts.child_layouts.emplace_back(child, child->GetVisible(), bounds);
+     if (!(drag_data && leaving_section)) {
+Index: src/chrome/browser/ui/views/tabs/tab/tab_title.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/tab/tab_title.cc
++++ src/chrome/browser/ui/views/tabs/tab/tab_title.cc
+@@ -11,10 +11,13 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
+ #include "components/prefs/pref_service.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/gfx/render_text.h"
+ 
+-TabTitle::TabTitle(Profile* profile) : base_font_list_(font_list()) {
++TabTitle::TabTitle(Profile* profile, FadeStyle fade_style)
++    : fade_style_(fade_style), base_font_list_(font_list()) {
+   SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
+   SetElideBehavior(gfx::FADE_TAIL);
+   SetHandlesTooltips(false);
+@@ -48,6 +51,15 @@ TabTitle::TabTitle(Profile* profile) : b
+ 
+ TabTitle::~TabTitle() = default;
+ 
++std::unique_ptr<gfx::RenderText> TabTitle::CreateRenderText() const {
++  auto text = views::Label::CreateRenderText();
++  if (fade_style_ == FadeStyle::kSidebar) {
++    text->SetFadeGradientWidth(
++        arcium::GetSidebarRowMetrics(this).favicon_width);
++  }
++  return text;
++}
++
+ void TabTitle::UpdateFont() {
+   PrefService* prefs = pref_change_registrar_.prefs();
+   if (!prefs || !prefs->FindPreference(arcium::kChromeUIScalePref)) {
+@@ -59,7 +71,10 @@ void TabTitle::UpdateFont() {
+                  arcium::kChromeUIScaleMin, arcium::kChromeUIScaleMax);
+   const int base_size = base_font_list_.GetFontSize();
+   const int requested_size = base::ClampRound(base_size * percent / 100.0);
+-  if (font_list().GetFontSize() != requested_size) {
++  // A scale change can alter the fade width without changing rounded font size.
++  // SetFontList also clears the cached display text.
++  if (fade_style_ == FadeStyle::kSidebar ||
++      font_list().GetFontSize() != requested_size) {
+     SetFontList(
+         base_font_list_.DeriveWithSizeDelta(requested_size - base_size));
+   }
+Index: src/chrome/browser/ui/views/tabs/tab/tab_title.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/tab/tab_title.h
++++ src/chrome/browser/ui/views/tabs/tab/tab_title.h
+@@ -18,15 +18,22 @@ class TabTitle : public views::Label, pu
+   METADATA_HEADER(TabTitle, views::Label)
+ 
+  public:
+-  explicit TabTitle(Profile* profile = nullptr);
++  enum class FadeStyle { kFont, kSidebar };
++
++  explicit TabTitle(Profile* profile = nullptr,
++                    FadeStyle fade_style = FadeStyle::kFont);
+   ~TabTitle() override;
+ 
++ protected:
++  std::unique_ptr<gfx::RenderText> CreateRenderText() const override;
++
+  private:
+   void UpdateFont();
+ 
+   // ProfileObserver:
+   void OnProfileWillBeDestroyed(Profile* profile) override;
+ 
++  const FadeStyle fade_style_;
+   const gfx::FontList base_font_list_;
+   PrefChangeRegistrar pref_change_registrar_;
+   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
+Index: src/ui/gfx/render_text.cc
+===================================================================
+--- src.orig/ui/gfx/render_text.cc
++++ src/ui/gfx/render_text.cc
+@@ -108,7 +108,8 @@ sk_sp<cc::PaintShader> CreateFadeShader(
+                                         const Rect& text_rect,
+                                         const Rect& left_part,
+                                         const Rect& right_part,
+-                                        SkColor color) {
++                                        SkColor color,
++                                        bool fade_to_zero) {
+   // The shader should only specify transparency of the fade itself, not the
+   // original transparency, which will be applied by the actual renderer.
+   DCHECK_EQ(SkColorGetA(color), static_cast<uint8_t>(0xff));
+@@ -121,7 +122,7 @@ sk_sp<cc::PaintShader> CreateFadeShader(
+       text_rect.width() / static_cast<float>(font_list.GetExpectedTextWidth(4));
+   const SkAlpha kAlphaAtZeroWidth = 51;
+   const SkAlpha alpha =
+-      (width_fraction < 1)
++      (!fade_to_zero && width_fraction < 1)
+           ? base::ClampRound<SkAlpha>((1 - width_fraction) * kAlphaAtZeroWidth)
+           : 0;
+   const SkColor fade_color = SkColorSetA(color, alpha);
+@@ -682,6 +683,11 @@ void RenderText::SetElideBehavior(ElideB
+   }
+ }
+ 
++void RenderText::SetFadeGradientWidth(std::optional<int> width) {
++  CHECK(!width || *width >= 0);
++  fade_gradient_width_ = width;
++}
++
+ void RenderText::SetWhitespaceElision(std::optional<bool> whitespace_elision) {
+   if (whitespace_elision_ != whitespace_elision) {
+     whitespace_elision_ = whitespace_elision;
+@@ -1944,11 +1950,15 @@ void RenderText::ApplyFadeEffects(intern
+   if (multiline() || elide_behavior_ != FADE_TAIL || GetContentWidth() <= width)
+     return;
+ 
+-  const int gradient_width = CalculateFadeGradientWidth(font_list(), width);
++  const HorizontalAlignment horizontal_alignment = GetCurrentHorizontalAlignment();
++  // Centered text fades at both edges; the ramps must not overlap.
++  const int maximum_width = horizontal_alignment == ALIGN_CENTER ? width / 2 : width;
++  const int gradient_width = fade_gradient_width_
++                                 ? std::min(*fade_gradient_width_, maximum_width)
++                                 : CalculateFadeGradientWidth(font_list(), width);
+   if (gradient_width == 0)
+     return;
+ 
+-  HorizontalAlignment horizontal_alignment = GetCurrentHorizontalAlignment();
+   Rect solid_part = display_rect();
+   Rect left_part;
+   Rect right_part;
+@@ -1976,7 +1986,8 @@ void RenderText::ApplyFadeEffects(intern
+   // TODO(msw): Use the actual text colors corresponding to each faded part.
+   renderer->SetShader(
+       CreateFadeShader(font_list(), text_rect, left_part, right_part,
+-                       SkColorSetA(colors_.breaks().front().second, 0xff)));
++                       SkColorSetA(colors_.breaks().front().second, 0xff),
++                       fade_gradient_width_.has_value()));
+ }
+ 
+ void RenderText::ApplyTextShadows(internal::SkiaTextRenderer* renderer) {
+Index: src/ui/gfx/render_text.h
+===================================================================
+--- src.orig/ui/gfx/render_text.h
++++ src/ui/gfx/render_text.h
+@@ -372,6 +372,13 @@ class COMPONENT_EXPORT(GFX) RenderText {
+   void SetElideBehavior(ElideBehavior elide_behavior);
+   ElideBehavior elide_behavior() const { return elide_behavior_; }
+ 
++  // Overrides the FADE_TAIL ramp width in DIP and makes its endpoint fully
++  // transparent. nullopt retains the font-based fade and narrow-label behavior.
++  void SetFadeGradientWidth(std::optional<int> width);
++  std::optional<int> fade_gradient_width() const {
++    return fade_gradient_width_;
++  }
++
+   // When display text is elided, determines how whitespace is handled.
+   // If std::nullopt is specified, the default elision for the current elide
+   // behavior will be applied.
+@@ -1066,6 +1073,7 @@ class COMPONENT_EXPORT(GFX) RenderText {
+ 
+   // The behavior for eliding, fading, or truncating.
+   ElideBehavior elide_behavior_ = NO_ELIDE;
++  std::optional<int> fade_gradient_width_;
+ 
+   // The behavior for eliding whitespace when eliding or truncating.
+   std::optional<bool> whitespace_elision_;
+Index: src/ui/gfx/render_text_unittest.cc
+===================================================================
+--- src.orig/ui/gfx/render_text_unittest.cc
++++ src/ui/gfx/render_text_unittest.cc
+@@ -37,6 +37,7 @@
+ #include "build/build_config.h"
+ #include "cc/paint/paint_record.h"
+ #include "cc/paint/paint_recorder.h"
++#include "cc/paint/paint_shader.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkCanvas.h"
+@@ -465,6 +466,30 @@ class RenderTextTest : public testing::T
+     return test::RenderTextTestApi::GetRendererPaint(renderer());
+   }
+ 
++  void ExpectFadeShader(int gradient_width, SkAlpha endpoint_alpha) {
++    const Rect rect = GetRenderText()->display_rect();
++    const SkPoint points[] = {SkPoint::Make(rect.x(), rect.y()),
++                              SkPoint::Make(rect.right(), rect.y())};
++    const SkScalar start =
++        static_cast<SkScalar>(rect.width() - gradient_width) / rect.width();
++    std::vector<SkScalar> positions;
++    std::vector<SkColor4f> colors;
++    if (start > 0) {
++      positions.push_back(0);
++      colors.push_back(SkColor4f::FromColor(SK_ColorBLACK));
++    }
++    positions.push_back(start);
++    colors.push_back(SkColor4f::FromColor(SK_ColorBLACK));
++    positions.push_back(1);
++    colors.push_back(
++        SkColor4f::FromColor(SkColorSetA(SK_ColorBLACK, endpoint_alpha)));
++    const auto expected = cc::PaintShader::MakeLinearGradient(
++        points, colors.data(), positions.data(), colors.size(),
++        SkTileMode::kClamp);
++    ASSERT_TRUE(GetRendererPaint().getShader());
++    EXPECT_TRUE(GetRendererPaint().getShader()->EqualsForTesting(*expected));
++  }
++
+   const SkFont& GetRendererFont() {
+     return test::RenderTextTestApi::GetRendererFont(renderer());
+   }
+@@ -692,6 +717,88 @@ class RenderTextTest : public testing::T
+   TestSkiaTextRenderer renderer_;
+ };
+ 
++TEST_F(RenderTextTest, ExplicitFadeWidthEndsAtZero) {
++  for (int width : {100, 16, 7}) {
++    SCOPED_TRACE(width);
++    ResetRenderTextInstance();
++    auto* text = GetRenderText();
++    text->SetText(u"A long title that overflows the available display width");
++    text->SetColor(SK_ColorBLACK);
++    text->SetCursorEnabled(false);
++    text->SetHorizontalAlignment(ALIGN_LEFT);
++    text->SetElideBehavior(FADE_TAIL);
++    text->SetFadeGradientWidth(16);
++    text->SetDisplayRect(Rect(3, 7, width, 20));
++    DrawVisualText();
++    ExpectFadeShader(std::min(16, width), 0);
++  }
++}
++
++TEST_F(RenderTextTest, ExplicitCenteredFadeRampsDoNotOverlap) {
++  auto* text = GetRenderText();
++  text->SetText(u"A long title that overflows the available display width");
++  text->SetColor(SK_ColorBLACK);
++  text->SetCursorEnabled(false);
++  text->SetHorizontalAlignment(ALIGN_CENTER);
++  text->SetElideBehavior(FADE_TAIL);
++  text->SetFadeGradientWidth(16);
++  text->SetDisplayRect(Rect(3, 7, 7, 20));
++  DrawVisualText();
++
++  Rect shader_rect = text->display_rect();
++  shader_rect.Inset(Insets::TLBR(0, test_api()->GetAlignmentOffset(0).x(), 0, 0));
++  const SkPoint points[] = {SkPoint::Make(shader_rect.x(), shader_rect.y()),
++                            SkPoint::Make(shader_rect.right(), shader_rect.y())};
++  const auto position = [&](int x) {
++    return static_cast<SkScalar>(x - shader_rect.x()) / shader_rect.width();
++  };
++  const SkScalar positions[] = {0, position(3), position(6),
++                                position(7), 1};
++  const SkColor4f opaque = SkColor4f::FromColor(SK_ColorBLACK);
++  const SkColor4f transparent = SkColor4f::FromColor(SK_ColorTRANSPARENT);
++  const SkColor4f colors[] = {transparent, transparent, opaque, opaque,
++                              transparent};
++  const auto expected = cc::PaintShader::MakeLinearGradient(
++      points, colors, positions, std::size(colors), SkTileMode::kClamp);
++  ASSERT_TRUE(GetRendererPaint().getShader());
++  EXPECT_TRUE(GetRendererPaint().getShader()->EqualsForTesting(*expected));
++}
++
++TEST_F(RenderTextTest, DefaultFadeRetainsFontWidthAndNarrowAlpha) {
++  for (int width : {100, 7}) {
++    SCOPED_TRACE(width);
++    ResetRenderTextInstance();
++    auto* text = GetRenderText();
++    text->SetText(u"A long title that overflows the available display width");
++    text->SetColor(SK_ColorBLACK);
++    text->SetCursorEnabled(false);
++    text->SetHorizontalAlignment(ALIGN_LEFT);
++    text->SetElideBehavior(FADE_TAIL);
++    text->SetFadeGradientWidth(16);
++    text->SetFadeGradientWidth(std::nullopt);
++    text->SetDisplayRect(Rect(3, 7, width, 20));
++    DrawVisualText();
++    const int gradient_width =
++        std::min(text->font_list().GetExpectedTextWidth(3),
++                 base::ClampRound(width / 3.f));
++    const float fraction =
++        width / static_cast<float>(text->font_list().GetExpectedTextWidth(4));
++    const SkAlpha alpha =
++        fraction < 1 ? base::ClampRound<SkAlpha>((1 - fraction) * 51) : 0;
++    ExpectFadeShader(gradient_width, alpha);
++  }
++}
++
++TEST_F(RenderTextTest, ExplicitFadeLeavesFittingTextOpaque) {
++  auto* text = GetRenderText();
++  text->SetText(u"Short title");
++  text->SetElideBehavior(FADE_TAIL);
++  text->SetFadeGradientWidth(16);
++  text->SetDisplayRect(Rect(0, 0, 500, 20));
++  DrawVisualText();
++  EXPECT_FALSE(GetRendererPaint().getShader());
++}
++
+ TEST_F(RenderTextTest, DefaultStyles) {
+   // Check the default styles applied to new instances and adjusted text.
+   RenderText* render_text = GetRenderText();

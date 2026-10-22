@@ -1,0 +1,47 @@
+# Requires arcium-feature-settings-tests, arcium-browser-test-source-membership and arcium-little-arc.
+# Link existing native browser fixtures into the focused browser runner.
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -11437,6 +11437,7 @@ if (!is_android && toolkit_views) {
+ 
+     sources = [
+       "../browser/ui/views/helium/peek_controller_browsertest.cc",
++      "../browser/ui/views/tabs/common/tab_view_browsertest.cc",
+       "data/webui/side_panel/customize_chrome/customize_chrome_browsertest.cc",
+     ]
+ 
+@@ -11462,11 +11463,11 @@ if (!is_android && toolkit_views) {
+       "//chrome/browser:chrome_content_browser_client",
+       "//chrome/browser:global_features",
+       "//chrome/browser:main_extra_parts",
+-      "//chrome/browser/ui:ui",
++      "//chrome/browser/ui",
+       "//chrome/browser/ui:ui_features",
+       "//chrome/browser/ui/browser_window",
+       "//chrome/browser/ui/tabs:tab_strip",
+-      "//chrome/browser/ui/views:views",
++      "//chrome/browser/ui/views",
+       "//chrome/test/data/webui:resources",
+       "//components/optimization_guide/core:features",
+       "//components/prefs",
+@@ -11475,11 +11476,20 @@ if (!is_android && toolkit_views) {
+       "//content/test:test_support",
+       "//testing/gtest",
+       "//ui/base",
++      "//ui/events:test_support",
+       "//ui/views",
+     ]
+ 
+     data_deps = [ "//chrome:browser_tests_pak" ]
+     if (is_mac) {
++      sources += [ "../browser/app_controller_mac_browsertest.mm" ]
++      deps += [
++        "//chrome/browser/apps/platform_apps:browser_test_support",
++        "//chrome/browser/bookmarks:test_support",
++        "//chrome/browser/shortcuts",
++        "//chrome/browser/ui:test_support",
++        "//chrome/browser/ui/search:test_support_ui",
++      ]
+       data_deps += [
+         "//chrome",
+         "//chrome:chrome_framework",

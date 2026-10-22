@@ -1,0 +1,13 @@
+--- a/chrome/browser/ui/tabs/tab_menu_model.cc
++++ b/chrome/browser/ui/tabs/tab_menu_model.cc
+@@ -452,7 +452,9 @@
+                           IDS_TAB_CXMENU_RESET_PIN_HOME);
+       AddItemWithStringId(TabStripModel::CommandReplacePinHome,
+                           IDS_TAB_CXMENU_REPLACE_PIN_HOME);
+-    } else if (helium::CanMakePin(tab_interface_.get())) {
++    } else {
++      // Keep Pin discoverable on blank or otherwise ineligible tabs, just as
++      // Favorite is. The command's enabled state still checks CanMakePin().
+       AddSeparator(ui::NORMAL_SEPARATOR);
+       AddItemWithStringId(TabStripModel::CommandMakePin,
+                           IDS_TAB_CXMENU_MAKE_PIN);

@@ -1,0 +1,112 @@
+diff --git a/chrome/common/importer/firefox_importer_utils_unittest.cc b/chrome/common/importer/firefox_importer_utils_unittest.cc
+--- a/chrome/common/importer/firefox_importer_utils_unittest.cc
++++ b/chrome/common/importer/firefox_importer_utils_unittest.cc
+@@ -180,9 +180,11 @@
+ #endif
+ 
+ TEST(FirefoxImporterUtilsTest, GetFirefoxProfilePath) {
++  const base::FilePath empty_base_dir;
+   base::DictValue no_profiles;
+-  EXPECT_EQ(0u,
+-            GetFirefoxDetailsFromDictionary(no_profiles, std::string()).size());
++  EXPECT_EQ(0u, GetFirefoxDetailsFromDictionary(no_profiles, std::string(),
++                                                empty_base_dir)
++                    .size());
+ 
+   base::DictValue single_profile;
+   single_profile.SetByDottedPath("Profile0.Path", "first");
+@@ -192,8 +194,8 @@
+   single_profile.SetByDottedPath("Profile0.IsRelative", "0");
+   single_profile.SetByDottedPath("Profile0.Default", "1");
+ 
+-  std::vector<FirefoxDetail> details =
+-      GetFirefoxDetailsFromDictionary(single_profile, std::string());
++  std::vector<FirefoxDetail> details = GetFirefoxDetailsFromDictionary(
++      single_profile, std::string(), empty_base_dir);
+   EXPECT_THAT(details, UnorderedElementsAre(FirefoxDetail{
+                            base::FilePath(FILE_PATH_LITERAL("first")),
+                            std::u16string()}));
+@@ -206,7 +208,8 @@
+   no_default.SetByDottedPath("Profile1.Name", "namey-name");
+   no_default.SetByDottedPath("Profile1.IsRelative", "0");
+   std::vector<FirefoxDetail> no_default_details =
+-      GetFirefoxDetailsFromDictionary(no_default, std::string());
++      GetFirefoxDetailsFromDictionary(no_default, std::string(),
++                                      empty_base_dir);
+   EXPECT_THAT(
+       no_default_details,
+       UnorderedElementsAre(
+@@ -223,7 +226,8 @@
+   default_first.SetByDottedPath("Profile1.Name", "namey-name");
+   default_first.SetByDottedPath("Profile1.IsRelative", "0");
+   std::vector<FirefoxDetail> default_first_details =
+-      GetFirefoxDetailsFromDictionary(default_first, std::string());
++      GetFirefoxDetailsFromDictionary(default_first, std::string(),
++                                      empty_base_dir);
+   EXPECT_THAT(
+       default_first_details,
+       UnorderedElementsAre(
+@@ -240,7 +244,8 @@
+   default_second.SetByDottedPath("Profile1.IsRelative", "0");
+   default_second.SetByDottedPath("Profile1.Default", "1");
+   std::vector<FirefoxDetail> default_second_details =
+-      GetFirefoxDetailsFromDictionary(default_second, std::string());
++      GetFirefoxDetailsFromDictionary(default_second, std::string(),
++                                      empty_base_dir);
+   EXPECT_THAT(
+       default_second_details,
+       UnorderedElementsAre(
+@@ -256,7 +261,8 @@
+   default_single_install.SetByDottedPath("Profile1.Path", "second");
+   default_single_install.SetByDottedPath("Profile1.IsRelative", "0");
+   std::vector<FirefoxDetail> default_single_install_details =
+-      GetFirefoxDetailsFromDictionary(default_single_install, std::string());
++      GetFirefoxDetailsFromDictionary(default_single_install, std::string(),
++                                      empty_base_dir);
+   EXPECT_EQ("second", default_single_install_details[0].path.MaybeAsASCII());
+ 
+   base::DictValue default_single_install_unknown_profile;
+@@ -274,7 +280,7 @@
+                                                          "0");
+   std::vector<FirefoxDetail> default_single_install_unknown_profile_details =
+       GetFirefoxDetailsFromDictionary(default_single_install_unknown_profile,
+-                                      std::string());
++                                      std::string(), empty_base_dir);
+   EXPECT_THAT(default_single_install_unknown_profile_details,
+               UnorderedElementsAre(
+                   FirefoxDetail{base::FilePath(FILE_PATH_LITERAL("first")),
+@@ -298,7 +304,7 @@
+                                                          "0");
+   std::vector<FirefoxDetail> default_multiple_install_details =
+       GetFirefoxDetailsFromDictionary(default_single_install_unknown_profile,
+-                                      std::string());
++                                      std::string(), empty_base_dir);
+   EXPECT_THAT(default_multiple_install_details,
+               UnorderedElementsAre(
+                   FirefoxDetail{base::FilePath(FILE_PATH_LITERAL("first")),
+@@ -319,7 +325,7 @@
+                                                      "0");
+   std::vector<FirefoxDetail> one_of_profiles_is_not_ascii_named_details =
+       GetFirefoxDetailsFromDictionary(one_of_profiles_is_not_ascii_named,
+-                                      std::string());
++                                      std::string(), empty_base_dir);
+   EXPECT_THAT(
+       one_of_profiles_is_not_ascii_named_details,
+       UnorderedElementsAre(
+@@ -327,4 +333,16 @@
+           FirefoxDetail{base::FilePath(FILE_PATH_LITERAL("second."
+                                                          "профиль")),
+                         u"профиль"}));
++
++  base::DictValue relative_profile;
++  relative_profile.SetByDottedPath("Profile0.Path", "Profiles/default");
++  relative_profile.SetByDottedPath("Profile0.IsRelative", "1");
++  const base::FilePath profiles_ini_dir(FILE_PATH_LITERAL("firefox"));
++  std::vector<FirefoxDetail> relative_details = GetFirefoxDetailsFromDictionary(
++      relative_profile, std::string(), profiles_ini_dir);
++  const base::FilePath expected_relative_path =
++      profiles_ini_dir.Append(FILE_PATH_LITERAL("Profiles"))
++          .Append(FILE_PATH_LITERAL("default"));
++  EXPECT_THAT(relative_details, UnorderedElementsAre(FirefoxDetail{
++                                    expected_relative_path, std::u16string()}));
+ }

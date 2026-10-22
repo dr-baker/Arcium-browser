@@ -1,0 +1,66 @@
+--- a/content/test/test_page_broadcast.cc
++++ b/content/test/test_page_broadcast.cc
+@@ -71,6 +71,10 @@ void TestPageBroadcast::SetPageAttributi
+ void TestPageBroadcast::UpdateColorProviders(
+     const blink::ColorProviderColorMaps& color_provider_colors) {}
+ 
++void TestPageBroadcast::UpdateHeliumNoiseTokens(
++    const base::flat_map<blink::HeliumNoiseFeature,
++                         blink::HeliumNoiseToken>&) {}
++
+ void TestPageBroadcast::SetSupportsDraggableRegions(
+     bool supports_draggable_regions) {}
+ 
+--- a/content/test/test_page_broadcast.h
++++ b/content/test/test_page_broadcast.h
+@@ -5,6 +5,7 @@
+ #ifndef CONTENT_TEST_TEST_PAGE_BROADCAST_H_
+ #define CONTENT_TEST_TEST_PAGE_BROADCAST_H_
+ 
++#include "base/containers/flat_map.h"
+ #include "third_party/blink/public/mojom/page/page.mojom.h"
+ 
+ #include "mojo/public/cpp/bindings/associated_receiver.h"
+@@ -52,6 +53,9 @@ class TestPageBroadcast : public blink::
+       network::mojom::AttributionSupport support) override;
+   void UpdateColorProviders(
+       const blink::ColorProviderColorMaps& color_provider_colors) override;
++  void UpdateHeliumNoiseTokens(
++      const base::flat_map<blink::HeliumNoiseFeature,
++                           blink::HeliumNoiseToken>&) override;
+   void SetSupportsDraggableRegions(bool supports_draggable_regions) override;
+ 
+   mojo::AssociatedReceiver<blink::mojom::PageBroadcast> receiver_;
+--- a/third_party/blink/renderer/core/testing/dummy_page_holder.cc
++++ b/third_party/blink/renderer/core/testing/dummy_page_holder.cc
+@@ -103,7 +103,8 @@ DummyPageHolder::DummyPageHolder(
+   page_ = Page::CreateOrdinary(*chrome_client, /*opener=*/nullptr,
+                                *agent_group_scheduler_,
+                                base::UnguessableToken::Create(),
+-                               /*color_provider_colors=*/nullptr);
++                               /*color_provider_colors=*/nullptr,
++                               /*noise_tokens=*/HeliumNoiseTokenMap());
+   Settings& settings = page_->GetSettings();
+   if (setting_overrider)
+     std::move(setting_overrider).Run(settings);
+--- a/content/browser/renderer_host/navigation_controller_impl_unittest.cc
++++ b/content/browser/renderer_host/navigation_controller_impl_unittest.cc
+@@ -62,6 +62,7 @@
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/blink/public/common/frame/frame_policy.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/common/page_state/page_state.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
+@@ -116,6 +117,10 @@ class MockPageBroadcast : public blink::
+               (override));
+   MOCK_METHOD(void, AudioStateChanged, (bool is_audio_playing), (override));
+   MOCK_METHOD(void,
++              UpdateHeliumNoiseTokens,
++              (const blink::HeliumNoiseTokenMap& tokens),
++              (override));
++  MOCK_METHOD(void,
+               ActivatePrerenderedPage,
+               (blink::mojom::PrerenderPageActivationParamsPtr
+                    prerender_page_activation_params,

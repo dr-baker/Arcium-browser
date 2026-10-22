@@ -1,0 +1,22 @@
+--- a/chrome/browser/ui/views/tabs/tab_strip_control_button.cc
++++ b/chrome/browser/ui/views/tabs/tab_strip_control_button.cc
+@@ -193,7 +193,7 @@ void TabStripControlButton::UpdateIcon()
+ }
+ 
+ int TabStripControlButton::GetCornerRadius() const {
+-  return TabStripControlButton::kButtonSize.width() / 2;
++  return 8;
+ }
+ 
+ int TabStripControlButton::GetFlatCornerRadius() const {
+--- a/chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.cc
++++ b/chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.cc
+@@ -269,7 +269,7 @@ ui::ColorId TabStripFlatEdgeButton::GetB
+ 
+ gfx::RoundedCornersF TabStripFlatEdgeButton::GetButtonCornerRadii() const {
+   constexpr float kFlatRadius = 2.0f;
+-  constexpr float kRoundedRadius = 10.0f;
++  constexpr float kRoundedRadius = 8.0f;
+   float flat_radius = kFlatRadius + ((kRoundedRadius - kFlatRadius) *
+                                      (1.0f - flat_edge_factor_));
+ 

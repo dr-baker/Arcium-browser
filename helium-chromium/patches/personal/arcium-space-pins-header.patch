@@ -1,0 +1,459 @@
+Index: src/chrome/browser/ui/BUILD.gn
+===================================================================
+--- src.orig/chrome/browser/ui/BUILD.gn
++++ src/chrome/browser/ui/BUILD.gn
+@@ -4177,6 +4177,8 @@ static_library("ui") {
+       "views/helium/arcium_space_controls.h",
+       "views/helium/arcium_space_editor_view.cc",
+       "views/helium/arcium_space_editor_view.h",
++      "views/helium/arcium_space_header_view.cc",
++      "views/helium/arcium_space_header_view.h",
+       "views/helium/arcium_space_icon_picker.cc",
+       "views/helium/arcium_space_icon_picker.h",
+       "views/frame/custom_corners.cc",
+Index: src/chrome/browser/ui/views/helium/arcium_space_header_view.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/arcium_space_header_view.cc
+@@ -0,0 +1,232 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/views/helium/arcium_space_header_view.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/numerics/safe_conversions.h"
++#include "cc/paint/paint_flags.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/helium/arcium_space_icon.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_row_layout.h"
++#include "ui/accessibility/ax_enums.mojom.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_provider.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/font.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/focus_ring.h"
++#include "ui/views/controls/highlight_path_generator.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/style/typography.h"
++
++namespace {
++
++constexpr int kRowHeight = 30;
++constexpr int kChevronSize = 12;
++constexpr int kCornerRadius = 6;
++
++}  // namespace
++
++ArciumSpaceHeaderView::ArciumSpaceHeaderView(
++    Browser* browser,
++    tabs::VerticalTabStripStateController* state_controller,
++    base::RepeatingCallback<void(bool)> pins_visibility_changed)
++    : views::Button(base::BindRepeating(&ArciumSpaceHeaderView::OnPressed,
++                                        base::Unretained(this))),
++      browser_(browser),
++      pins_visibility_changed_(std::move(pins_visibility_changed)) {
++  name_ = AddChildView(std::make_unique<views::Label>(
++      std::u16string(), views::style::CONTEXT_LABEL,
++      views::style::STYLE_PRIMARY));
++  name_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  name_->SetAutoColorReadabilityEnabled(false);
++  name_->SetEnabledColor(kColorTabForegroundInactiveFrameActive);
++  name_->SetCanProcessEventsWithinSubtree(false);
++  // The sidebar paints through a transparent layer.
++  name_->SetSubpixelRenderingEnabled(false);
++  base_font_list_ =
++      name_->font_list().DeriveWithWeight(gfx::Font::Weight::SEMIBOLD);
++  name_->SetFontList(base_font_list_);
++  views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
++                                                kCornerRadius);
++  views::FocusRing::Install(this);
++
++  service_ =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser_->profile());
++  if (service_) {
++    items_changed_subscription_ =
++        service_->RegisterItemsChanged(base::BindRepeating(
++            &ArciumSpaceHeaderView::OnItemsChanged, base::Unretained(this)));
++  }
++  if (state_controller) {
++    compact_ = state_controller->GetCollapseState() ==
++               tabs::VerticalTabStripCollapseState::kCollapsed;
++    collapse_state_subscription_ =
++        state_controller->RegisterOnCollapseChanged(
++            base::BindRepeating(&ArciumSpaceHeaderView::OnCollapseStateChanged,
++                                base::Unretained(this)));
++  }
++  Update();
++}
++
++ArciumSpaceHeaderView::~ArciumSpaceHeaderView() = default;
++
++gfx::Size ArciumSpaceHeaderView::CalculatePreferredSize(
++    const views::SizeBounds& available_size) const {
++  return gfx::Size(0, std::max(arcium::ScaleChromeDip(this, kRowHeight),
++                               name_->GetPreferredSize().height()));
++}
++
++void ArciumSpaceHeaderView::Layout(PassKey) {
++  const arcium::SidebarRowMetrics metrics = arcium::GetSidebarRowMetrics(this);
++  const int left = metrics.container_padding + metrics.horizontal_inset +
++                   metrics.icon_slot_width + metrics.icon_title_gap;
++  const int right = metrics.container_padding + metrics.horizontal_inset +
++                    arcium::ScaleChromeDip(this, kChevronSize) +
++                    metrics.icon_title_gap;
++  name_->SetBounds(left, 0, std::max(0, width() - left - right), height());
++}
++
++void ArciumSpaceHeaderView::PaintButtonContents(gfx::Canvas* canvas) {
++  const ui::ColorProvider* colors = GetColorProvider();
++  if (!colors) {
++    return;
++  }
++  const arcium::SidebarRowMetrics metrics = arcium::GetSidebarRowMetrics(this);
++  // Without Pins there is nothing to fold: the header is just the Space's
++  // name, with no hover or chevron.
++  const bool hovered = has_pins_ && (GetState() == STATE_HOVERED ||
++                                     GetState() == STATE_PRESSED);
++  if (hovered) {
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(colors->GetColor(ui::kColorSysStateHoverOnSubtle));
++    gfx::Rect background = GetLocalBounds();
++    background.Inset(gfx::Insets::VH(0, metrics.container_padding));
++    canvas->DrawRoundRect(background, kCornerRadius, flags);
++  }
++  const SkColor foreground =
++      colors->GetColor(kColorTabForegroundInactiveFrameActive);
++  helium::PaintSpaceIcon(
++      canvas, icon_,
++      arcium::CenterSidebarRowChild(
++          GetLocalBounds(), metrics.container_padding + metrics.horizontal_inset,
++          metrics.icon_slot_width,
++          gfx::Size(metrics.favicon_width, metrics.favicon_width)),
++      foreground);
++
++  if (!has_pins_) {
++    return;
++  }
++  // The chevron stays faintly visible so the header reads as a control; it
++  // strengthens on hover and while the Pins are folded.
++  const int chevron = arcium::ScaleChromeDip(this, kChevronSize);
++  helium::PaintSpaceIcon(
++      canvas,
++      helium::MakePhosphorIcon(collapsed_ ? "caret-right" : "caret-down"),
++      gfx::Rect(width() - metrics.container_padding -
++                    metrics.horizontal_inset - chevron,
++                (height() - chevron) / 2, chevron, chevron),
++      SkColorSetA(foreground,
++                  hovered || collapsed_ || HasFocus() ? 0xB0 : 0x50));
++}
++
++void ArciumSpaceHeaderView::StateChanged(ButtonState old_state) {
++  views::Button::StateChanged(old_state);
++  SchedulePaint();
++}
++
++void ArciumSpaceHeaderView::OnThemeChanged() {
++  views::Button::OnThemeChanged();
++  // Follow the Chrome UI scale like the Pin rows below.
++  const int base_size = base_font_list_.GetFontSize();
++  name_->SetFontList(base_font_list_.DeriveWithSizeDelta(
++      base::ClampRound(base_size * arcium::GetChromeUIScale(this)) -
++      base_size));
++  PreferredSizeChanged();
++}
++
++void ArciumSpaceHeaderView::OnFocus() {
++  views::Button::OnFocus();
++  SchedulePaint();
++}
++
++void ArciumSpaceHeaderView::OnBlur() {
++  views::Button::OnBlur();
++  SchedulePaint();
++}
++
++void ArciumSpaceHeaderView::OnPressed() {
++  if (!service_) {
++    return;
++  }
++  const std::string space_id(service_->GetSpaceIdForBrowser(browser_));
++  service_->SetSpacePinsCollapsed(space_id, !collapsed_);
++}
++
++void ArciumSpaceHeaderView::OnItemsChanged(
++    const helium::PersistentItemChange& change) {
++  if (service_ &&
++      change.AffectsPins(service_->GetSpaceIdForBrowser(browser_),
++                         browser_->session_id())) {
++    Update();
++  }
++}
++
++void ArciumSpaceHeaderView::OnCollapseStateChanged(
++    tabs::VerticalTabStripCollapseState state) {
++  compact_ = state == tabs::VerticalTabStripCollapseState::kCollapsed;
++  Update();
++}
++
++void ArciumSpaceHeaderView::Update() {
++  helium::HeliumSpace* space =
++      service_ ? service_->GetSpaceById(service_->GetSpaceIdForBrowser(browser_))
++               : nullptr;
++  if (space) {
++    name_->SetText(space->name());
++    icon_ = space->icon();
++    collapsed_ = space->pins_collapsed();
++    has_pins_ = !space->pins().empty();
++  }
++  SetVisible(space && !compact_);
++  SetEnabled(has_pins_);
++  if (has_pins_) {
++    SetTooltipText(collapsed_ ? u"Show Pins" : u"Hide Pins");
++    GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
++    GetViewAccessibility().SetName(std::u16string(name_->GetText()) +
++                                   u" Pins");
++    if (collapsed_) {
++      GetViewAccessibility().SetIsCollapsed();
++    } else {
++      GetViewAccessibility().SetIsExpanded();
++    }
++  } else {
++    SetTooltipText(std::u16string());
++    GetViewAccessibility().SetRole(ax::mojom::Role::kHeading);
++    GetViewAccessibility().SetName(std::u16string(name_->GetText()));
++    GetViewAccessibility().RemoveExpandCollapseState();
++  }
++  SchedulePaint();
++
++  const bool pins_visible = compact_ || !collapsed_;
++  if (pins_visible != pins_visible_) {
++    pins_visible_ = pins_visible;
++    pins_visibility_changed_.Run(pins_visible_);
++  }
++}
++
++BEGIN_METADATA(ArciumSpaceHeaderView)
++END_METADATA
+Index: src/chrome/browser/ui/views/helium/arcium_space_header_view.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/arcium_space_header_view.h
+@@ -0,0 +1,81 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_SPACE_HEADER_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_SPACE_HEADER_VIEW_H_
++
++#include <string>
++
++#include "base/callback_list.h"
++#include "base/functional/callback.h"
++#include "base/memory/raw_ptr.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/gfx/font_list.h"
++#include "ui/views/controls/button/button.h"
++
++class Browser;
++
++namespace helium {
++class HeliumSpaceService;
++class PersistentItemChange;
++}  // namespace helium
++
++namespace tabs {
++class VerticalTabStripStateController;
++enum class VerticalTabStripCollapseState;
++}  // namespace tabs
++
++namespace views {
++class Label;
++}  // namespace views
++
++// The Space's name above its Pins. Clicking it folds the Pins away so only
++// open tabs remain; the choice is saved per Space. Hidden in the compact
++// sidebar, where Pins always show.
++class ArciumSpaceHeaderView : public views::Button {
++  METADATA_HEADER(ArciumSpaceHeaderView, views::Button)
++
++ public:
++  // `pins_visibility_changed` receives whether the Pins should show.
++  ArciumSpaceHeaderView(
++      Browser* browser,
++      tabs::VerticalTabStripStateController* state_controller,
++      base::RepeatingCallback<void(bool)> pins_visibility_changed);
++  ArciumSpaceHeaderView(const ArciumSpaceHeaderView&) = delete;
++  ArciumSpaceHeaderView& operator=(const ArciumSpaceHeaderView&) = delete;
++  ~ArciumSpaceHeaderView() override;
++
++  bool pins_visible() const { return pins_visible_; }
++
++  // views::Button:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override;
++  void Layout(PassKey) override;
++  void PaintButtonContents(gfx::Canvas* canvas) override;
++  void StateChanged(ButtonState old_state) override;
++  void OnThemeChanged() override;
++  void OnFocus() override;
++  void OnBlur() override;
++
++ private:
++  void OnPressed();
++  void OnItemsChanged(const helium::PersistentItemChange& change);
++  void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
++  void Update();
++
++  raw_ptr<Browser> browser_;
++  raw_ptr<helium::HeliumSpaceService> service_ = nullptr;
++  base::RepeatingCallback<void(bool)> pins_visibility_changed_;
++  raw_ptr<views::Label> name_ = nullptr;
++  gfx::FontList base_font_list_;
++  std::string icon_;
++  bool collapsed_ = false;
++  bool has_pins_ = false;
++  bool compact_ = false;
++  bool pins_visible_ = true;
++  base::CallbackListSubscription items_changed_subscription_;
++  base::CallbackListSubscription collapse_state_subscription_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_SPACE_HEADER_VIEW_H_
+Index: src/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
++++ src/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
+@@ -16,7 +16,9 @@
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/helium/arcium_space_header_view.h"
+ #include "chrome/browser/ui/views/tabs/common/pin_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+@@ -58,10 +60,22 @@ class MainTabsContentsView : public view
+     separator_->SetVisible(false);
+   }
+ 
+-  views::View* AddPersistent(std::unique_ptr<views::View> view) {
++  // `browser` adds the Space header that folds the Pins away.
++  views::View* AddPersistent(
++      std::unique_ptr<views::View> view,
++      Browser* browser,
++      tabs::VerticalTabStripStateController* state_controller) {
+     persistent_ = AddChildViewAt(std::move(view), 0);
+     observations_.AddObservation(persistent_);
+-    UpdateSeparator();
++    if (browser && !space_header_) {
++      space_header_ = AddChildViewAt(
++          std::make_unique<ArciumSpaceHeaderView>(
++              browser, state_controller,
++              base::BindRepeating(&MainTabsContentsView::SetPinsVisible,
++                                  base::Unretained(this))),
++          0);
++    }
++    SetPinsVisible(!space_header_ || space_header_->pins_visible());
+     return persistent_;
+   }
+ 
+@@ -76,6 +90,9 @@ class MainTabsContentsView : public view
+     observations_.RemoveObservation(view);
+     if (view == persistent_) {
+       persistent_ = nullptr;
++      if (space_header_) {
++        RemoveChildViewT(space_header_.ExtractAsDangling());
++      }
+     } else if (view == tabs_) {
+       tabs_ = nullptr;
+     }
+@@ -86,6 +103,10 @@ class MainTabsContentsView : public view
+   views::Separator* separator() { return separator_; }
+ 
+   bool IsPointInPersistentRegion(const gfx::Point& point_in_screen) const {
++    // Folded Pins take no drops; the header shows nothing could land there.
++    if (persistent_ && !persistent_->GetVisible()) {
++      return false;
++    }
+     if (drop_preview_active_ && frozen_boundary_y_) {
+       return point_in_screen.y() < *frozen_boundary_y_;
+     }
+@@ -142,8 +163,15 @@ class MainTabsContentsView : public view
+     return std::nullopt;
+   }
+ 
++  void SetPinsVisible(bool visible) {
++    if (persistent_) {
++      persistent_->SetVisible(visible);
++    }
++    UpdateSeparator();
++  }
++
+   static bool HasVisibleRows(const views::View* section) {
+-    if (!section) {
++    if (!section || !section->GetVisible()) {
+       return false;
+     }
+     return std::ranges::any_of(
+@@ -159,6 +187,7 @@ class MainTabsContentsView : public view
+ 
+   raw_ptr<views::View> persistent_ = nullptr;
+   raw_ptr<views::View> tabs_ = nullptr;
++  raw_ptr<ArciumSpaceHeaderView> space_header_ = nullptr;
+   raw_ptr<views::Separator> separator_ = nullptr;
+   bool drop_preview_active_ = false;
+   std::optional<int> frozen_boundary_y_;
+@@ -533,7 +562,10 @@ void TabStripView::ScrollToView(views::V
+   if (persistent_row_replacement_) {
+     return;
+   }
+-  if (!view || !Contains(view)) {
++  // Folded Pins have nothing to scroll to.
++  if (!view || !Contains(view) ||
++      (pins_container_view_ && !pins_container_view_->GetVisible() &&
++       pins_container_view_->Contains(view))) {
+     return;
+   }
+ 
+@@ -702,8 +734,15 @@ views::View* TabStripView::AddScrollView
+     std::unique_ptr<views::View> view) {
+   if (auto* container = views::AsViewClass<PinTabContainerView>(view.get())) {
+     pins_container_view_ = container;
++    TabStripCollectionController* controller =
++        collection_node_ ? collection_node_->GetController() : nullptr;
++    BrowserView* browser_view =
++        controller ? controller->GetBrowserView() : nullptr;
+     return static_cast<MainTabsContentsView*>(main_tabs_contents_.get())
+-        ->AddPersistent(std::move(view));
++        ->AddPersistent(std::move(view),
++                        browser_view ? browser_view->browser() : nullptr,
++                        controller ? controller->GetStateController()
++                                   : nullptr);
+   }
+   if (auto* container =
+           views::AsViewClass<UnpinnedTabContainerView>(view.get())) {
+@@ -766,6 +805,8 @@ void TabStripView::EnsureVisibleInViewpo
+   // view out of the visible bounds will also trigger a scroll naturally.
+   views::View* const activated_view = activated_view_tracker_->view();
+   if (!activated_view || !Contains(activated_view) ||
++      (pins_container_view_ && !pins_container_view_->GetVisible() &&
++       pins_container_view_->Contains(activated_view)) ||
+       (collection_node_ &&
+        collection_node_->GetController()->GetDragHandler().IsDragging())) {
+     EnableOverflowVisuals(scroll_view);

@@ -1,0 +1,104 @@
+--- a/chrome/browser/enterprise/connectors/test/BUILD.gn
++++ b/chrome/browser/enterprise/connectors/test/BUILD.gn
+@@ -3,6 +3,7 @@
+ # found in the LICENSE file.
+ 
+ import("//components/enterprise/buildflags/buildflags.gni")
++import("//components/safe_browsing/buildflags.gni")
+ 
+ source_set("test_support") {
+   testonly = true
+@@ -10,18 +11,17 @@
+ 
+   public = [
+     "deep_scanning_test_utils.h",
+-    "mock_realtime_reporting_client.h",
+   ]
+ 
+-  sources = [
+-    "deep_scanning_test_utils.cc",
+-    "mock_realtime_reporting_client.cc",
+-  ]
++  sources = [ "deep_scanning_test_utils.cc" ]
+ 
+   public_deps = [
+     "//base",
++    "//components/enterprise/buildflags",
+     "//components/enterprise/common/proto:connectors_proto",
++    "//components/enterprise/connectors/core:test_support",
+     "//components/safe_browsing/core/common:safe_browsing_prefs",
++    "//components/safe_browsing:buildflags",
+     "//testing/gmock",
+   ]
+ 
+@@ -72,11 +72,11 @@
+     ]
+   }
+ 
+-  if (enterprise_cloud_content_analysis || is_android) {
+-    deps += [
+-      "//components/enterprise/connectors/core",
+-      "//components/enterprise/connectors/core:test_support",
+-    ]
++  if (enterprise_cloud_content_analysis || is_android ||
++      safe_browsing_mode == 1) {
++    public += [ "mock_realtime_reporting_client.h" ]
++    sources += [ "mock_realtime_reporting_client.cc" ]
++    public_deps += [ "//components/enterprise/connectors/core" ]
+   }
+ 
+   if (enterprise_local_content_analysis) {
+--- a/chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.cc
++++ b/chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.cc
+@@ -30,6 +30,7 @@
+ #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
+ #include "components/policy/core/common/policy_types.h"
+ #include "components/prefs/scoped_user_pref_update.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+ #include "content/public/browser/browser_context.h"
+@@ -1047,6 +1048,8 @@
+   EXPECT_THAT(actual_urls, testing::ElementsAreArray(frame_urls_.value()));
+ }
+ 
++#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) || \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ EventReportValidatorHelper::EventReportValidatorHelper(Profile* profile,
+                                                        bool browser_test)
+     : profile_(profile),
+@@ -1111,6 +1114,7 @@
+   return std::make_unique<enterprise_connectors::RealtimeReportingClient>(
+       context);
+ }
++#endif
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+ void SetProfileDMToken(Profile* profile, const std::string& dm_token) {
+--- a/chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.h
++++ b/chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.h
+@@ -22,6 +22,7 @@
+ #include "components/enterprise/common/proto/synced/browser_events.pb.h"
+ #include "components/enterprise/connectors/core/reporting_test_utils.h"
+ #include "components/enterprise/data_controls/core/browser/verdict.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+ #include "extensions/buildflags/buildflags.h"
+ 
+@@ -310,6 +311,8 @@
+ };
+ 
+ // Helper class to set up tests to use `EventReportValidator`.
++#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) || \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ class EventReportValidatorHelper {
+  public:
+   explicit EventReportValidatorHelper(Profile* profile,
+@@ -333,6 +336,7 @@
+ 
+ std::unique_ptr<KeyedService> BuildRealtimeReportingClient(
+     content::BrowserContext* context);
++#endif
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+ // Helper function to set the profile DM token. It installs a

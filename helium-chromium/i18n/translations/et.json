@@ -1,0 +1,1232 @@
+[
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Helium vabastab mitteaktiivsete vahelehtede mälu. See annab aktiivsetele vahelehtedele ja teistele rakendustele rohkem arvutiressursse ning hoiab Heliumi kiirena. Mitteaktiivsed vahelehed muutuvad automaatselt uuesti aktiivseks, kui nende juurde tagasi lähete."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Helium säästab akut, piirates taustaprotsesse ja visuaalseid efekte, nagu sujuv kerimine ja video kaadrisagedus."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "Helium preloads pages which makes browsing and searching faster.",
+    "message": "Helium laadib lehti eelnevalt, mis muudab sirvimise ja otsimise kiiremaks."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
+    "source": "Sites you add will always stay active and memory won't be freed up from them.",
+    "message": "Lisatud saidid jäävad alati aktiivseks ja nende mälu ei vabastata."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_DISCARD_RING_TREATMENT_ENABLED_DESCRIPTION_WITH_LEARN_LINK",
+    "source": "A dotted circle appears around site icons.",
+    "message": "Saidiikoonide ümber kuvatakse punktiirjoonest ring."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_INTERVENTION_NOTIFICATION_ENABLED_DESCRIPTION",
+    "source": "Get notifications that suggest ways to improve detected performance issues.",
+    "message": "Saate teateid, mis soovitavad viise tuvastatud jõudlusprobleemide lahendamiseks."
+  },
+  {
+    "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
+    "message": "Imporditud brauserist <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
+    "source": "Import profile still in use",
+    "message": "Imporditav profiil on endiselt kasutusel"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TEXT",
+    "source": "To continue importing data, first close the browser you're importing from.",
+    "message": "Andmete importimise jätkamiseks sulgege esmalt brauser, millest importite."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES",
+    "source": "Helium services",
+    "message": "Heliumi teenused"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
+    "source": "Manage what Helium services are allowed in your browser",
+    "message": "Haldake, millised Heliumi teenused on teie brauseris lubatud"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
+    "source": "Updates to Helium services:",
+    "message": "Heliumi teenuste uuendused:"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
+    "source": "These changes are not active until you dismiss this notice.",
+    "message": "Need muudatused ei jõustu enne selle teate sulgemist."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_IGNORE",
+    "source": "Don't notify me again",
+    "message": "Ära teavita mind enam"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Luba ühenduse loomine Heliumi teenustega"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "Kui see on lubatud, saab Helium luua ühenduse anonüümsete veebiteenustega, et pakkuda lisafunktsioone. Kui see on keelatud, ei tööta lisafunktsioonid."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
+    "source": "Use your own instance of Helium services",
+    "message": "Kasuta oma Heliumi teenuste serverit"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "Saate majutada oma Heliumi teenuste serverit ja kasutada seda oma brauseris vaikeserveri asemel. Ainult HTTPS."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
+    "source": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.",
+    "message": "Ärge kasutage seda välja, kui te ei tea täpselt, mida teete. Ärge kunagi kleepige siia teiste inimeste URL-e – nad üritavad teie andmeid varastada. Me ei vastuta kohandatud serveri kasutamisest tekkinud kahjude eest ega saa teid aidata."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
+    "source": "Custom origin URL for Helium services",
+    "message": "Kohandatud lähte-URL Heliumi teenuste jaoks"
+  },
+  {
+    "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
+    "source": "Helium services have been updated. Please review the changes.",
+    "message": "Heliumi teenuseid on uuendatud. Palun vaadake muudatused üle."
+  },
+  {
+    "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
+    "source": "Review Helium services updates",
+    "message": "Vaadake Heliumi teenuste uuendusi"
+  },
+  {
+    "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
+    "source": "Services updated",
+    "message": "Teenused uuendatud"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT",
+    "source": "Helium services are not available until setup is complete to ensure your privacy and consent.",
+    "message": "Heliumi teenused pole saadaval enne seadistamise lõpuleviimist, et tagada teie privaatsus ja nõusolek."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON",
+    "source": "Complete setup",
+    "message": "Vii seadistamine lõpule"
+  },
+  {
+    "name": "IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE_HELIUM",
+    "source": "This list of search engines is shown in random order.",
+    "message": "See otsingumootorite loend kuvatakse juhuslikus järjekorras."
+  },
+  {
+    "name": "IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR",
+    "source": "Appearance and behavior",
+    "message": "Välimus ja käitumine"
+  },
+  {
+    "name": "IDS_SETTINGS_BEHAVIOR",
+    "source": "Behavior",
+    "message": "Käitumine"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with ⌘+Shift+C",
+    "message": "Luba lehe lingi kiire kopeerimine klahvikombinatsiooniga ⌘+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with Ctrl+Shift+C",
+    "message": "Luba lehe lingi kiire kopeerimine klahvikombinatsiooniga Ctrl+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Puhverda laienduste allalaadimisi ja uuendusi"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Kui see on lubatud, puhverdab Helium laienduste allalaadimisi ja uuendusi, et kaitsta teie privaatsust. Kui see on keelatud, ei tööta laienduste allalaadimine ja uuendamine."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "Luba !bangs-loendi allalaadimine"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium laadib alla !bangs-loendi, mis aitab teil Internetis kiiremini liikuda, näiteks !w või !gh. Kui see on keelatud, bangid ei tööta."
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM",
+    "source": "Please check that Helium services are enabled (including spell check downloads) and make sure that the firewall is not blocking downloads from Helium servers.",
+    "message": "Palun kontrollige, et Heliumi teenused oleksid lubatud (kaasa arvatud õigekirjakontrolli failide allalaadimine) ja veenduge, et tulemüür ei blokeeri Heliumi serveritest allalaadimist."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Luba sõnastikufailide allalaadimine õigekirjakontrolliks"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium laadib alla õigekirjakontrolliks vajalikud sõnastikufailid, kui neid vajatakse. Kui see on keelatud, õigekirjakontroll ei tööta."
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",
+    "source": "Version <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>",
+    "message": "Versioon <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Luba uBlock Origini filtriloendite allalaadimine"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO_DESCRIPTION",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium laadib alla uBlock Origini värskendatud filtriloendeid. Kõik päringud loenditele puhverdatakse, et kaitsta teie privaatsust. Kui see on keelatud, laaditakse vaikefiltriloendid kohalikust salvestusruumist ja neid uuendatakse ainult koos Heliumiga. Valikulised filtriloendid päritakse ilma puhverdamiseta."
+  },
+  {
+    "name": "IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON",
+    "source": "Open new tabs next to the active tab",
+    "message": "Ava uued vahelehed aktiivse vahelehe kõrvale"
+  },
+  {
+    "name": "IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER",
+    "source": "Cycle through tabs in most recently used order with Ctrl+Tab",
+    "message": "Liigu vahelehtede vahel viimati kasutatud järjekorras klahvikombinatsiooniga Ctrl+Tab"
+  },
+  {
+    "name": "IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES",
+    "source": "Component updates are disabled. See Helium services in settings.",
+    "message": "Komponentide uuendused on keelatud. Vaadake seadetes Heliumi teenuseid."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE",
+    "source": "Hibernate",
+    "message": "Talveuni"
+  },
+  {
+    "name": "IDS_SETTINGS_PERMISSIONS_DESCRIPTION_NORMAL",
+    "source": "Manage site permissions and content settings (cookies, pop-ups, and more)",
+    "message": "Hallake saidi õigusi ja sisu seadeid (küpsised, hüpikaknad jm)"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_DESCRIPTION_NORMAL",
+    "source": "Connection security, DNS settings, certificate management, and other security settings",
+    "message": "Ühenduse turvalisus, DNS-seaded, sertifikaatide haldamine ja muud turbeseaded"
+  },
+  {
+    "name": "IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT_HELIUM",
+    "source": "Enabling \"Do Not Track\" means that Helium will include a request not to be tracked with your browsing traffic. Whether this request is honored depends on whether a website responds to it and on how it is interpreted. For example, some websites may respond by showing you ads that aren't personalized using your previous browsing data. Many websites may still track you regardless of the request.",
+    "message": "„Do Not Track\" lubamine tähendab, et Helium lisab teie sirvimisliiklusele päringu, et teid ei jälgitaks. Selle päringu täitmine sõltub sellest, kas ja kuidas veebisait sellele reageerib. Näiteks võivad mõned veebisaidid vastata reklaamidega, mis pole isikupärastatud teie varasemate sirvimisandmete põhjal. Paljud veebisaidid võivad teid sellest hoolimata jälgida."
+  },
+  {
+    "name": "IDS_SETTINGS_ALLOWED_THIRD_PARTY_COOKIES_DESCRIPTION_HELIUM",
+    "source": "Affects the sites listed here. Inserting “[*.]” before a domain name creates an exception for the entire domain. For example, adding “[*.]example.com” means that third-party cookies can also be active for second.example.com, because it’s part of example.com.",
+    "message": "Kehtib siin loetletud saitidele. Lisades domeeni nime ette „[*.]\", luuakse erand kogu domeeni jaoks. Näiteks „[*.]example.com\" lisamise korral saavad kolmanda osapoole küpsised olla aktiivsed ka aadressil second.example.com, kuna see on osa domeenist example.com."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC_HELIUM",
+    "source": "When you type in the address bar, Helium sends what you type to your default search engine to get suggestions. This is off in Incognito.",
+    "message": "Aadressiribale tippides saadab Helium teie sisestatu vaikimisi otsingumootorile, et saada soovitusi. Inkognito režiimis on see välja lülitatud."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_HELIUM",
+    "source": "Suggestions from the search engine",
+    "message": "Otsingumootori soovitused"
+  },
+  {
+    "name": "IDS_SETTINGS_AUTO_PIN_NEW_TAB_GROUPS_HELIUM",
+    "source": "Automatically pin new tab groups to the bookmarks bar",
+    "message": "Kinnita uued vahelehegruppid automaatselt järjehoidjaribale"
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE",
+    "source": "Add search engine",
+    "message": "Lisa otsingumootor"
+  },
+  {
+    "name": "IDS_ADD_AS_DEFAULT",
+    "source": "Add as default",
+    "message": "Lisa vaikimisi"
+  },
+  {
+    "name": "IDS_POLICY_SOURCE_HOP",
+    "source": "Helium defaults",
+    "message": "Heliumi vaikesätted"
+  },
+  {
+    "name": "IDS_ACCNAME_APP_MENU",
+    "source": "Main Menu",
+    "message": "Peamenüü"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_HELIUM_SERVICES_DISABLED",
+    "source": "Extension downloads are disabled. Enable this feature in Helium services settings and try again.",
+    "message": "Laienduste allalaadimine on keelatud. Lubage see funktsioon Heliumi teenuste seadetes ja proovige uuesti."
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_EXTENSION_DL_DISABLED",
+    "source": "Extension downloads are disabled",
+    "message": "Laienduste allalaadimine on keelatud"
+  },
+  {
+    "name": "IDS_NTP_CUSTOMIZE_CHROME_CHANGE_WALLPAPER_LABEL",
+    "source": "Change wallpaper",
+    "message": "Muuda taustapilti"
+  },
+  {
+    "name": "IDS_NEW_TAB_OTR_SUBTITLE_HELIUM",
+    "source": "Helium will not save anything about your browsing in Incognito, but downloads and bookmarks will stick around. Your browsing won't leave any traces on this device, and other users won't be able to see your activity.",
+    "message": "Helium ei salvesta inkognito režiimis midagi teie sirvimise kohta, kuid allalaadimised ja järjehoidjad säilivad. Teie sirvimine ei jäta sellesse seadmesse jälgi ja teised kasutajad ei näe teie tegevust."
+  },
+  {
+    "name": "IDS_EXTENSIONS_INSTALL_LOCATION_HELIUM",
+    "source": "Helium component",
+    "message": "Heliumi komponent"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT",
+    "source": "Browser layout",
+    "message": "Brauseri paigutus"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klassikaline"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Dünaamiline"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Kompaktne"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Vertikaalne"
+  },
+  {
+    "name": "IDS_SETTINGS_TAB_STRIP_RIGHT_ALIGN",
+    "source": "Show vertical tabs on right side",
+    "message": "Kuva vertikaalsed vahelehed paremal küljel"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser Layout",
+    "message": "Brauseri paigutus"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "Klassikaline"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "Dünaamiline"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "Kompaktne"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "Vertikaalne"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on Right Side",
+    "message": "Vahelehed paremal küljel"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser layout",
+    "message": "Brauseri paigutus"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on right side",
+    "message": "Vahelehed paremal küljel"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use ⌘+S to toggle vertical tabs in Vertical layout",
+    "message": "Kasuta vertikaalse paigutuse vahelehtede lülitamiseks klahvikombinatsiooni ⌘+S"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use Ctrl+S to toggle vertical tabs in Vertical layout",
+    "message": "Kasuta vertikaalse paigutuse vahelehtede lülitamiseks klahvikombinatsiooni Ctrl+S"
+  },
+  {
+    "name": "IDS_SETTINGS_CENTERED_LOCATION_BAR",
+    "source": "Center the address bar",
+    "message": "Keskenda aadressiriba"
+  },
+  {
+    "name": "IDS_SETTINGS_MINIMAL_LOCATION_BAR",
+    "source": "Minimal address bar",
+    "message": "Minimaalne aadressiriba"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "Helium cannot be set as default, because no <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.",
+    "message": "Heliumit ei saa vaikebrauseriks määrata, kuna faili <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> ei leitud ühestki järgmisest asukohast: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications."
+  },
+  {
+    "name": "IDS_SETTINGS_CHOOSE_CUSTOM_AVATAR_FILE",
+    "source": "Choose file",
+    "message": "Vali fail"
+  },
+  {
+    "name": "IDS_SETTINGS_CLEAR_CUSTOM_AVATAR_DIALOG_TITLE",
+    "source": "Clear custom avatar?",
+    "message": "Kas eemaldada kohandatud avatar?"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_FILE_TOO_LARGE",
+    "source": "Selected file is too large. Please select a file smaller than 30MB.",
+    "message": "Valitud fail on liiga suur. Valige fail, mis on väiksem kui 30 MB."
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_ERROR",
+    "source": "Image could not be loaded",
+    "message": "Pildi laadimine ebaõnnestus"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_LABEL",
+    "source": "Custom avatar",
+    "message": "Kohandatud avatar"
+  },
+  {
+    "name": "IDS_SETTINGS_ROUNDED_FRAME",
+    "source": "Show a rounded frame around web contents",
+    "message": "Kuva veebisisu ümber ümardatud raam"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_SIDEBAR",
+    "source": "Always show the sidebar",
+    "message": "Kuva külgriba alati"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_TOP_TOOLBAR",
+    "source": "Always show the top bar",
+    "message": "Kuva ülariba alati"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close tabs above",
+    "message": "Sulge ülal olevad vahekaardid"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close Tabs Above",
+    "message": "Sulge ülal olevad vahekaardid"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_TITLE",
+    "source": "Full Disk Access required",
+    "message": "Vajalik on täielik juurdepääs kettale"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
+    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Helium vajab Safari järjehoidjate importimiseks täielikku juurdepääsu kettale."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
+    "source": "Learn how to grant Full Disk Access from your System Preferences.",
+    "message": "Vaata, kuidas anda täielik juurdepääs kettale süsteemieelistustes."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_OPEN_SETTINGS",
+    "source": "Open System Preferences",
+    "message": "Ava süsteemieelistused"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
+    "source": "Invalid origin",
+    "message": "Sobimatu lähtekoht"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_NEXT_TAB",
+    "source": "Next tab",
+    "message": "Järgmine vahekaart"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_PREVIOUS_TAB",
+    "source": "Previous tab",
+    "message": "Eelmine vahekaart"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_LOCATION",
+    "source": "Focus address bar",
+    "message": "Vii fookus aadressiribale"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_NEXT",
+    "source": "Find next",
+    "message": "Leia järgmine"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_PREVIOUS",
+    "source": "Find previous",
+    "message": "Leia eelmine"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_BACK",
+    "source": "Back",
+    "message": "Tagasi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FORWARD",
+    "source": "Forward",
+    "message": "Edasi"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_HOME",
+    "source": "Home",
+    "message": "Avaleht"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB",
+    "source": "New split tab",
+    "message": "Uus jagatud vahekaart"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_LAST_TAB",
+    "source": "Last tab",
+    "message": "Viimane vahekaart"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_TAB",
+    "source": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>",
+    "message": "Vahekaart <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_NEXT",
+    "source": "Move tab right",
+    "message": "Liiguta vahekaart paremale"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_PREVIOUS",
+    "source": "Move tab left",
+    "message": "Liiguta vahekaart vasakule"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_TAB_GROUP",
+    "source": "Next tab group",
+    "message": "Järgmine vahekaardirühm"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_TAB_GROUP",
+    "source": "Previous tab group",
+    "message": "Eelmine vahekaardirühm"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_TAB_GROUP",
+    "source": "Close tab group",
+    "message": "Sulge vahekaardirühm"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_BOOKMARKS",
+    "source": "Focus bookmarks bar",
+    "message": "Vii fookus järjehoidjaribale"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS",
+    "source": "Toggle vertical tabs",
+    "message": "Lülita vertikaalsed vahekaardid"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP",
+    "source": "Close find bar or stop loading",
+    "message": "Sulge otsinguriba või peata laadimine"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_SEARCH",
+    "source": "Focus search",
+    "message": "Vii fookus otsingule"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_PANE",
+    "source": "Focus next pane",
+    "message": "Vii fookus järgmisele paanile"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_PANE",
+    "source": "Focus previous pane",
+    "message": "Vii fookus eelmisele paanile"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_WEB_CONTENTS_PANE",
+    "source": "Focus page content",
+    "message": "Vii fookus lehe sisule"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_MENU_BAR",
+    "source": "Focus menu bar",
+    "message": "Vii fookus menüüribale"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_TOOLBAR",
+    "source": "Focus toolbar",
+    "message": "Vii fookus tööriistaribale"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_INACTIVE_POPUP",
+    "source": "Focus inactive popup",
+    "message": "Vii fookus mitteaktiivsele hüpikaknale"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_AVATAR_MENU",
+    "source": "Profile menu",
+    "message": "Profiilimenüü"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_APP_MENU",
+    "source": "App menu",
+    "message": "Rakenduse menüü"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_ZEN_MODE_TOP_CHROME_PIN",
+    "source": "Pin top toolbar",
+    "message": "Kinnita ülemine tööriistariba"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_DEV_TOOLS",
+    "source": "Toggle developer tools",
+    "message": "Lülita arendaja tööriistad"
+  },
+  {
+    "name": "IDS_APP_PLUS_KEY",
+    "source": "Plus",
+    "message": "Pluss"
+  },
+  {
+    "name": "IDS_APP_NUMPAD_KEY",
+    "source": "Numpad <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>",
+    "message": "Numbriklahvistiku <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_TITLE",
+    "source": "Keyboard shortcuts",
+    "message": "Klaviatuuri otseteed"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SEARCH_LABEL",
+    "source": "Search shortcuts",
+    "message": "Otsi otseteid"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_REMOVE_A11Y_LABEL",
+    "source": "Remove <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> from <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>",
+    "message": "Eemalda <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> käsult <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_ALL",
+    "source": "Reset all to defaults",
+    "message": "Lähtesta kõik vaikeväärtustele"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_ADD_DIALOG_TITLE",
+    "source": "Add shortcut",
+    "message": "Lisa otsetee"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_DIALOG_DESCRIPTION",
+    "source": "All keyboard shortcuts will be reset to their default values. Any custom shortcuts you've set will be lost.",
+    "message": "Kõik klaviatuuri otseteed lähtestatakse vaikeväärtustele. Kõik määratud kohandatud otseteed lähevad kaotsi."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_PRESS_SHORTCUT",
+    "source": "Press a combination of keys to create a new shortcut",
+    "message": "Uue otsetee loomiseks vajuta klahvikombinatsiooni"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_NEED_KEY",
+    "source": "Include a key that is not a modifier.",
+    "message": "Lisa klahv, mis ei ole muuteklahv."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_WILL_OVERRIDE",
+    "source": "Saving will remove this shortcut from <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>.",
+    "message": "Salvestamisel eemaldatakse see otsetee käsult <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SYSTEM_CONFLICT",
+    "source": "This shortcut is managed by <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> and cannot be changed.",
+    "message": "Seda otseteed haldab <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> ja seda ei saa muuta."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_INVALID",
+    "source": "This shortcut cannot be saved.",
+    "message": "Seda otseteed ei saa salvestada."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_NOTICE",
+    "source": "Some keyboard shortcuts are protected and can't be changed here. To change them, go to:",
+    "message": "Mõned klaviatuuri otseteed on kaitstud ja neid ei saa siin muuta. Nende muutmiseks ava:"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_LINK",
+    "source": "System Settings &gt; Keyboard &gt; Keyboard Shortcuts &gt; App Shortcuts",
+    "message": "Süsteemisätted &gt; Klaviatuur &gt; Klaviatuuri otseteed &gt; Rakenduse otseteed"
+  },
+  {
+    "name": "IDS_ZEN_MODE_NEW_TAB_CREATED_TOAST_BODY",
+    "source": "New tab opened",
+    "message": "Avati uus vahekaart"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic browser updates",
+    "message": "Luba brauseri automaatsed uuendused"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium otsib automaatselt uuendusi ja installib need. See hõlmab brauseri ja komponentide uuendusi. Soovitame selle seade lubatuna hoida, et saaksite uusimad funktsioonid ja turvavärskendused."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic component updates",
+    "message": "Luba komponentide automaatsed uuendused"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium otsib automaatselt komponentide uuendusi ja installib need. Soovitame selle seade lubatuna hoida. Linuxis haldab brauseri uuendusi teie distributsiooni paketihaldur. Kontrollige Heliumi paketi uuendusi vähemalt kord nädalas."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate other tabs",
+    "message": "Pane teised vahekaardid talveunne"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate Other Tabs",
+    "message": "Pane teised vahekaardid talveunne"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URL",
+    "source": "Copy URL",
+    "message": "Kopeeri URL"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URLS",
+    "source": "Copy URLs",
+    "message": "Kopeeri URL-id"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_TITLE",
+    "source": "Background action confirmation toasts",
+    "message": "Taustatoimingute kinnitusteated"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_DESCRIPTION",
+    "source": "Shows a toast notification when you copy content, such as links and images, or open a new background tab in Frameless mode",
+    "message": "Kuvab teavituse, kui kopeerite sisu, näiteks linke ja pilte, või avate raamita režiimis uue taustavahekaardi"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE",
+    "source": "Frameless mode",
+    "message": "Raamita režiim"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE_DESCRIPTION",
+    "source": "Automatically hide browser UI until you hover the window edge",
+    "message": "Peidab brauseri kasutajaliidese automaatselt, kuni liigute hiirega akna servale"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_NEXT",
+    "source": "Next",
+    "message": "Järgmine"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES",
+    "source": "Yes",
+    "message": "Jah"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_HISTORY",
+    "source": "History",
+    "message": "Ajalugu"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALLED",
+    "source": "Installed",
+    "message": "Installitud"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALL",
+    "source": "Install",
+    "message": "Installi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_BACK",
+    "source": "Back",
+    "message": "Tagasi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO",
+    "source": "No",
+    "message": "Ei"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_PRIVACY",
+    "source": "Privacy",
+    "message": "Privaatsus"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_EXTENSIONS",
+    "source": "Extensions",
+    "message": "Laiendused"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_CONFIGURE",
+    "source": "Configure",
+    "message": "Seadista"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_IMPORT_GUIDE",
+    "source": "Import",
+    "message": "Impordi"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_BOOKMARKS",
+    "source": "Bookmarks",
+    "message": "Järjehoidjad"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SEARCHWEBWITH",
+    "source": "&amp;Search with <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>",
+    "message": "&amp;Otsi teenusega <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force paste",
+    "message": "Kleebi jõuga"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force Paste",
+    "message": "Kleebi jõuga"
+  },
+  {
+    "name": "IDS_SETTINGS_SHIFT_RIGHT_CLICK_CONTEXT_MENU",
+    "source": "Force context menu with Shift+Right Click",
+    "message": "Kuva kontekstimenüü alati kombinatsiooniga Shift+paremklõps"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_TITLE",
+    "source": "Crash reporting",
+    "message": "Krahhiaruandlus"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DESCRIPTION",
+    "source": "Choose whether Helium can ask to send crash reports or send them automatically. Disabling reports will delete all pending reports.",
+    "message": "Valige, kas Helium võib küsida krahhiaruannete saatmist või saata need automaatselt. Aruandluse keelamine kustutab kõik ootel olevad aruanded."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED",
+    "source": "Disabled",
+    "message": "Keelatud"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_ASK",
+    "source": "Ask after a crash",
+    "message": "Küsi pärast krahhi"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC",
+    "source": "Send automatically",
+    "message": "Saada automaatselt"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_TITLE",
+    "source": "{COUNT, plural, =1 {Would you like to send a crash report?} other {Would you like to send # crash reports?}}",
+    "message": "{COUNT, plural, =1 {Kas soovite saata krahhiaruande?} one {Kas soovite saata # krahhiaruande?} other {Kas soovite saata # krahhiaruannet?}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_DESCRIPTION",
+    "source": "Helium closed unexpectedly. A crash report could help us fix the issue you ran into and prevent it from happening again.",
+    "message": "Helium sulgus ootamatult. Krahhiaruanne aitaks meil parandada tekkinud probleemi ja vältida selle kordumist."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_PRIVACY",
+    "source": "A crash report may incidentally include some sensitive data present in Helium's memory at the time of crash.",
+    "message": "Krahhiaruanne võib juhuslikult sisaldada tundlikke andmeid, mis olid krahhi hetkel Heliumi mälus."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_OPTIONAL",
+    "source": "Nothing has been sent yet. Sending a crash report is optional.",
+    "message": "Midagi pole veel saadetud. Krahhiaruande saatmine on vabatahtlik."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send Report} other {Send # Reports}}",
+    "message": "{COUNT, plural, =1 {Saada aruanne} one {Saada # aruanne} other {Saada # aruannet}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send report} other {Send # reports}}",
+    "message": "{COUNT, plural, =1 {Saada aruanne} one {Saada # aruanne} other {Saada # aruannet}}"
+  },
+  {
+    "name": "IDS_CRASH_DISABLED_MESSAGE",
+    "source": "Crash reporting is disabled in Helium settings or by policy.",
+    "message": "Krahhiaruandlus on Heliumi seadetes või poliitikaga keelatud."
+  },
+  {
+    "name": "IDS_CRASH_BUG_LINK_LABEL",
+    "source": "Create an issue with details",
+    "message": "Loo üksikasjadega probleem"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS",
+    "source": "Use native frame materials (experimental)",
+    "message": "Kasuta natiivseid raami materjale (eksperimentaalne)"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION",
+    "source": "Applies native materials to the browser frame surfaces. May cause UI clarity issues.",
+    "message": "Rakendab brauseri raami pindadele natiivsed materjalid. Võib põhjustada kasutajaliidese selguse probleeme."
+  },
+  {
+    "name": "IDS_SETTINGS_SHOW_ZOOM_INDICATOR",
+    "source": "Show the zoom indicator in the address bar",
+    "message": "Kuva suumi näidik aadressiribal"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
+    "source": "Translate “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”",
+    "message": "Tõlgi „<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PAGE_TITLE",
+    "source": "Helium Setup",
+    "message": "Heliumi seadistamine"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_USE_DEFAULTS",
+    "source": "Use defaults",
+    "message": "Kasuta vaikesätteid"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_LETS_GO",
+    "source": "Let's go!",
+    "message": "Läki!"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TITLE",
+    "source": "Helium Partner",
+    "message": "Heliumi partner"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TOOLTIP",
+    "source": "Paying for this service will support the development of Helium.",
+    "message": "Selle teenuse eest maksmine toetab Heliumi arendamist."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_GREETING",
+    "source": "Meet Helium",
+    "message": "Tutvuge Heliumiga"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_FINISH_TITLE",
+    "source": "Ready to browse?",
+    "message": "Valmis sirvima?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_TITLE",
+    "source": "Helium services",
+    "message": "Heliumi teenused"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SUBTITLE",
+    "source": "Services are not active until you consent to using them. Changes will be applied after you go to the next page.",
+    "message": "Teenused ei ole aktiivsed enne, kui annate nende kasutamiseks nõusoleku. Muudatused rakenduvad pärast järgmisele lehele liikumist."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_TITLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Luba ühenduse loomine Heliumi teenustega"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_DESC",
+    "source": "Helium services provide additional functionality, such as: extension downloads, native !bangs, filter list updates, and browser updates. When disabled, none of these features will work, but Helium will not make any web requests.",
+    "message": "Heliumi teenused pakuvad lisafunktsioone, näiteks: laienduste allalaadimine, natiivsed !bang-käsud, filtriloendite värskendused ja brauseri värskendused. Kui see on keelatud, ei tööta ükski neist funktsioonidest, kuid Helium ei tee ühtegi veebipäringut."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_TITLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "Luba !bang-käskude loendi allalaadimine"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_DESC",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium tõmbab bang-käskude loendi, mis aitavad teil internetis kiiremini sirvida, näiteks !w või !gh. Kui see on keelatud, ei tööta bang-käsud."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_TITLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "Suuna laienduste allalaadimised ja värskendused läbi puhverserveri"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_DESC",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "Kui see on lubatud, suunab Helium teie privaatsuse kaitseks laienduste allalaadimised ja värskendused läbi puhverserveri. Kui see on keelatud, ei tööta laienduste allalaadimine ega värskendamine."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_TITLE",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "Luba uBlock Origini filtriloendite allalaadimine"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_DESC",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium tõmbab uBlock Origini jaoks värsked filtriloendid. Kõik loenditega seotud päringud suunatakse teie privaatsuse kaitseks läbi puhverserveri. Kui see on keelatud, laaditakse vaikefiltriloendid kohalikust salvestusruumist ning neid värskendatakse ainult koos Heliumiga. Valikulisi filtriloendeid päritakse ilma puhverserverita."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE",
+    "source": "Allow automatic browser updates",
+    "message": "Luba automaatsed brauseri värskendused"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium kontrollib värskendusi automaatselt ja installib need. See hõlmab brauseri ja komponentide värskendusi. Soovitame hoida see säte lubatuna, et saaksite uusimad funktsioonid ja turvavärskendused."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE_LINUX",
+    "source": "Allow automatic component updates",
+    "message": "Luba automaatsed komponentide värskendused"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC_LINUX",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium kontrollib komponentide värskendusi automaatselt ja installib need. Soovitame hoida see säte lubatuna. Linuxis haldab brauseri värskendusi teie distributsiooni paketihaldur. Kontrollige Heliumi paketi värskendusi vähemalt kord nädalas."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_TITLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "Luba õigekirjakontrolli sõnastikufailide allalaadimine"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_DESC",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium tõmbab vajaduse korral õigekirjakontrolliks kasutatavad sõnastikufailid. Kui see on keelatud, ei tööta õigekirjakontroll."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_TITLE",
+    "source": "Use your own instance of Helium services",
+    "message": "Kasuta oma Heliumi teenuste eksemplari"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_DESC",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the pre-hosted server. If you have one, you can set it in Helium settings.",
+    "message": "Saate majutada oma Heliumi teenuste eksemplari ja kasutada seda brauseris eelmajutatud serveri asemel. Kui teil on selline olemas, saate selle määrata Heliumi seadetes."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_PRIVATE",
+    "source": "A privacy-first search engine which doesn't profile or track you.",
+    "message": "Privaatsust esikohale seadev otsingumootor, mis ei profileeri ega jälgi teid."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_SMALL",
+    "source": "Transparent, but not privacy-focused. Offers better privacy than mainstream search engines.",
+    "message": "Läbipaistev, kuid mitte privaatsusele keskendunud. Pakub paremat privaatsust kui peavoolu otsingumootorid."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_MAINSTREAM",
+    "source": "A mainstream search engine which collects extensive personal data.",
+    "message": "Peavoolu otsingumootor, mis kogub ulatuslikke isikuandmeid."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_CUSTOM",
+    "source": "A custom search engine. Its privacy wasn't verified by Helium.",
+    "message": "Kohandatud otsingumootor. Helium ei ole selle privaatsust kontrollinud."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BING",
+    "source": "Collects extensive personal data. Privacy controls are buried and limited. Subjectively overwhelming UI.",
+    "message": "Kogub ulatuslikke isikuandmeid. Privaatsusseaded on peidetud ja piiratud. Subjektiivselt ülekoormatud kasutajaliides."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_GOOGLE",
+    "source": "It's Google. It dominates the search market, collects extensive personal data, and profiles you.",
+    "message": "See on Google. Ta domineerib otsinguturul, kogub ulatuslikke isikuandmeid ja profileerib teid."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_TITLE",
+    "source": "Ready to switch to Helium?",
+    "message": "Kas olete valmis Heliumile üle minema?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES_DESC",
+    "source": "Make Helium my default browser.",
+    "message": "Määra Helium minu vaikebrauseriks."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO_DESC",
+    "source": "Just trying Helium for now.",
+    "message": "Praegu ainult proovin Heliumi."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_TITLE",
+    "source": "Take your stuff with you",
+    "message": "Võtke oma asjad kaasa"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_SUBTITLE",
+    "source": "Transfer your most important bookmarks, history, and extensions from other browsers.",
+    "message": "Kandke üle oma tähtsaimad järjehoidjad, ajalugu ja laiendused teistest brauseritest."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_TITLE",
+    "source": "Password manager",
+    "message": "Paroolihaldur"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_SETUP_GUIDE",
+    "source": "Setup",
+    "message": "Seadistus"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_ERROR",
+    "source": "Error:",
+    "message": "Viga:"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_MANAGERS_DASHLANE",
+    "source": "Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.",
+    "message": "Populaarne, tasuline ja suletud lähtekoodiga paroolihaldur. Salvestab andmed Euroopas. Tuntud agressiivse pealemüügitaktika poolest."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE",
+    "source": "Fingerprinting protection",
+    "message": "Sõrmejälje võtmise kaitse"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_LINK_DESCRIPTION",
+    "source": "Manage how Helium protects you against fingerprinting",
+    "message": "Hallake, kuidas Helium teid sõrmejälje võtmise eest kaitseb"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_TOGGLE_DESCRIPTION",
+    "source": "Make it harder for sites to fingerprint your browser and device",
+    "message": "Muuda saitidel teie brauseri ja seadme sõrmejälje võtmine keerulisemaks"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you. Each site sees consistent randomized information during your browsing session to reduce the chances of detection.",
+    "message": "Kui sõrmejälje võtmise kaitse on sisse lülitatud, lisab Helium teatud brauserifunktsioonidele müra, et saitidel oleks raskem teid jälgida ja profileerida. Iga sait näeb teie sirvimisseansi ajal ühtset juhuslikustatud teavet, et vähendada tuvastamise tõenäosust."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DISCLAIMER",
+    "source": "Fingerprinting cannot be fully prevented, but Helium's analysis defenses make it harder to recover the original fingerprint.",
+    "message": "Sõrmejälje võtmist ei ole võimalik täielikult ära hoida, kuid Heliumi analüüsikaitse muudab algse sõrmejälje taastamise keerulisemaks."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION",
+    "source": "When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting \"[*.]\" before a domain name applies it to the entire domain.",
+    "message": "Kui üldine sõrmejälje võtmise kaitse on sisse lülitatud, kehtib allpool loetletud saitidele kohandatud säte. Kui lisate domeeninime ette „[*.]”, rakendub see kogu domeenile."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_EXCEPTIONS_TITLE",
+    "source": "Sites without fingerprinting protection",
+    "message": "Saidid ilma sõrmejälje võtmise kaitseta"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_ALLOW_OVERRIDES_TITLE",
+    "source": "Overrides to allow fingerprinting protection",
+    "message": "Erandid sõrmejälje võtmise kaitse lubamiseks"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_HEADER",
+    "source": "Fingerprinting protection",
+    "message": "Sõrmejälje võtmise kaitse"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP",
+    "source": "Manage fingerprinting protection for this site",
+    "message": "Halda selle saidi sõrmejälje võtmise kaitset"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you.",
+    "message": "Kui sõrmejälje võtmise kaitse on sisse lülitatud, lisab Helium teatud brauserifunktsioonidele müra, et saitidel oleks raskem teid jälgida ja profileerida."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_BREAKAGE",
+    "source": "Turning off the protection will reduce your privacy, but may fix site features that require fingerprinting.",
+    "message": "Kaitse väljalülitamine vähendab teie privaatsust, kuid võib parandada saidi funktsioone, mis vajavad sõrmejälje võtmist."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_GLOBALLY_DISABLED",
+    "source": "Fingerprinting protection is turned off in Helium settings.",
+    "message": "Sõrmejälje võtmise kaitse on Heliumi sätetes välja lülitatud."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_SETTINGS_BUTTON",
+    "source": "Manage fingerprinting protection",
+    "message": "Halda sõrmejälje võtmise kaitset"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_TERMS",
+    "source": "By continuing, you agree to the <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privacy policy<ph name=\"END_LINK_PRIVACY\">$2</ph> and <ph name=\"BEGIN_LINK_TERMS\">$3</ph>terms of use<ph name=\"END_LINK_TERMS\">$4</ph>.",
+    "message": "Jätkates nõustute <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privaatsuspoliitika<ph name=\"END_LINK_PRIVACY\">$2</ph> ja <ph name=\"BEGIN_LINK_TERMS\">$3</ph>kasutustingimustega<ph name=\"END_LINK_TERMS\">$4</ph>."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_DUCKDUCKGO",
+    "source": "Privacy-focused. Relies on Bing for results. Promises not to track or profile you.",
+    "message": "Privaatsusele keskendunud. Kasutab tulemuste saamiseks Bingi. Lubab teid mitte jälgida ega profileerida."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_KAGI",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Has custom ranking. Requires a paid account. No ads, tracking, or profiling.",
+    "message": "Privaatsusele keskendunud. Ei kasuta Google'it ega Bingi. Kohandatud tulemuste järjestus. Nõuab tasulist kontot. Ei mingeid reklaame, jälgimist ega profileerimist."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_QWANT",
+    "source": "Based in Europe. Relies on Bing for results. Sends tracking data to Microsoft.",
+    "message": "Asub Euroopas. Kasutab tulemuste saamiseks Bingi. Saadab jälgimisandmeid Microsoftile."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_ECOSIA",
+    "source": "May plant trees for clicking ads. Relies on Google and Bing for results. Sends tracking data to Google and Microsoft.",
+    "message": "Võib reklaamidele klõpsamise eest puid istutada. Kasutab tulemuste saamiseks Google'it ja Bingi. Saadab jälgimisandmeid Google'ile ja Microsoftile."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_STARTPAGE",
+    "source": "Privacy-focused. Relies on Google and Bing for results. Promises not to track or profile you.",
+    "message": "Privaatsusele keskendunud. Kasutab tulemuste saamiseks Google'it ja Bingi. Lubab teid mitte jälgida ega profileerida."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BRAVE",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Promises not to track or profile you. May show promotions related to Brave services.",
+    "message": "Privaatsusele keskendunud. Ei kasuta Google'it ega Bingi. Lubab teid mitte jälgida ega profileerida. Võib kuvada Brave'i teenustega seotud pakkumisi."
+  }
+]

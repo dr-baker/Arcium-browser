@@ -1,0 +1,167 @@
+--- a/chrome/browser/accessibility/BUILD.gn
++++ b/chrome/browser/accessibility/BUILD.gn
+@@ -3,6 +3,7 @@
+ # found in the LICENSE file.
+ 
+ import("//extensions/buildflags/buildflags.gni")
++import("//services/screen_ai/buildflags/features.gni")
+ 
+ source_set("accessibility") {
+   public = [
+@@ -206,6 +207,12 @@
+       "interstitial_accessibility_browsertest.cc",
+       "page_colors_controller_browsertest.cc",
+     ]
++    if (!enable_screen_ai_service) {
++      sources -= [
++        "ax_main_node_annotator_controller_browsertest.cc",
++      ]
++    }
++
+ 
+     if (enable_extensions) {
+       sources += [ "embedded_a11y_extension_loader_browsertest.cc" ]
+@@ -222,6 +229,7 @@
+       "//content/test:browsertest_support",
+       "//content/test:test_support",
+       "//services/image_annotation/public/cpp",
++      "//services/screen_ai/buildflags",
+     ]
+ 
+     if (is_win) {
+--- a/chrome/renderer/accessibility/read_anything/read_anything_app_model_browsertest.cc
++++ b/chrome/renderer/accessibility/read_anything/read_anything_app_model_browsertest.cc
+@@ -19,6 +19,7 @@
+ #include "base/time/time.h"
+ #include "chrome/test/base/chrome_render_view_test.h"
+ #include "read_anything_test_utils.h"
++#include "services/screen_ai/buildflags/buildflags.h"
+ #include "services/strings/grit/services_strings.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "ui/accessibility/accessibility_features.h"
+@@ -380,6 +381,7 @@
+   EXPECT_THAT(GetNotIgnoredIds({{2, 3, 4}}), UnorderedElementsAre(3, 4));
+ }
+ 
++#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+ TEST_F(ReadAnythingAppModelTest,
+        InsertIdIfNotIgnored_InaccessiblePDFPageNodes) {
+   model().set_is_pdf(true);
+@@ -417,6 +419,7 @@
+   ApplyAccessibilityUpdates(tree_id_, {std::move(update)});
+   EXPECT_THAT(GetNotIgnoredIds({{2, 3, 4, 5}}), UnorderedElementsAre(4));
+ }
++#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+ 
+ TEST_F(ReadAnythingAppModelTest, AddAndRemoveTrees) {
+   // Start with 1 tree (the tree created in SetUp).
+--- a/chrome/renderer/accessibility/read_anything/read_anything_node_utils.cc
++++ b/chrome/renderer/accessibility/read_anything/read_anything_node_utils.cc
+@@ -7,6 +7,7 @@
+ #include <cinttypes>
+ 
+ #include "base/strings/stringprintf.h"
++#include "services/screen_ai/buildflags/buildflags.h"
+ #include "ui/accessibility/ax_enum_util.h"
+ #include "ui/accessibility/ax_role_properties.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -48,6 +49,7 @@
+   // text node but keep the `kContentInfo` so a line break can be inserted in
+   // between pages during `a11y::GetHtmlTagForPDF()`.
+   const ax::mojom::Role role = ax_node->GetRole();
++#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+   if (is_pdf) {
+     // The text content of the aforementioned `kBanner` or `kContentInfo` node
+     // is the same as the text content of its child static text node.
+@@ -63,6 +65,7 @@
+       return true;
+     }
+   }
++#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+ 
+   // Ignore interactive elements, except for text fields and aria-related
+   // support fields.
+@@ -132,10 +135,12 @@
+     // Add a line break after each page of an inaccessible PDF for readability
+     // since there is no other formatting included in the OCR output.
+     case ax::mojom::Role::kContentInfo:
++#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+       if (ax_node->GetTextContentUTF8() ==
+           l10n_util::GetStringUTF8(IDS_PDF_OCR_RESULT_END)) {
+         return "br";
+       }
++#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+       [[fallthrough]];
+     default:
+       return html_tag.empty() ? "span" : html_tag;
+--- a/chrome/renderer/accessibility/read_anything/read_anything_node_utils_unittest.cc
++++ b/chrome/renderer/accessibility/read_anything/read_anything_node_utils_unittest.cc
+@@ -9,6 +9,7 @@
+ 
+ #include "read_anything_node_utils.h"
+ #include "read_anything_test_utils.h"
++#include "services/screen_ai/buildflags/buildflags.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "ui/accessibility/ax_node.h"
+@@ -508,6 +509,7 @@
+   EXPECT_EQ(a11y::GetHtmlTagForPDF(&node, "span"), "");
+ }
+ 
++#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+ TEST_F(ReadAnythingNodeUtilsTest, GetHtmlTagForPdf_ContentInfoReturnsBr) {
+   const std::u16string ending_text =
+       l10n_util::GetStringUTF16(IDS_PDF_OCR_RESULT_END);
+@@ -519,6 +521,7 @@
+   node.SetData(std::move(data));
+   EXPECT_EQ(a11y::GetHtmlTagForPDF(&node, "span"), "br");
+ }
++#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+ 
+ TEST_F(ReadAnythingNodeUtilsTest, GetHtmlTagForPdf_UsesDefaultHtmlTag) {
+   ui::AXTree tree;
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -3069,6 +3069,7 @@
+       "//ui/webui:buildflags",
+       "//ui/webui:test_support",
+       "//ui/webui/resources/cr_components/history_clusters:mojo_bindings",
++      "//services/screen_ai/buildflags",
+       "//v8",
+     ]
+ 
+@@ -3528,6 +3529,13 @@
+       "interaction/webcontents_interaction_test_util_browsertest.cc",
+       "v8/wasm_trap_handler_browsertest.cc",
+     ]
++    if (!enable_screen_ai_service) {
++      sources -= [
++        "../renderer/accessibility/ax_tree_distiller_browsertest.cc",
++        "../renderer/accessibility/read_anything/read_anything_app_controller_browsertest.cc",
++      ]
++    }
++
+     fuzztests = [ "SafeXmlParserFixture.ParseXML" ]
+     fuzztest_additional_args = [
+       "--single-process-tests",
+@@ -5816,6 +5824,7 @@
+     ":test_interfaces",
+     ":test_support",
+     ":test_support_unit",
++    "//services/screen_ai/buildflags",
+     "//base:base_stack_sampling_profiler_test_util",
+     "//base/test:test_support",
+     "//chrome:dependencies",
+@@ -7420,6 +7429,12 @@
+         "../browser/ui/webui/settings/accessibility_main_handler_unittest.cc",
+       ]
+ 
++      if (!enable_screen_ai_service) {
++        sources -= [
++          "../browser/ui/webui/settings/accessibility_main_handler_unittest.cc",
++        ]
++      }
++
+       deps += [
+         "//chrome/browser/ui/webui/updater",
+         "//chrome/browser/ui/webui/updater:mojo_bindings",

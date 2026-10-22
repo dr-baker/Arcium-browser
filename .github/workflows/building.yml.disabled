@@ -1,0 +1,149 @@
+name: Building macOS binaries of Helium
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: write
+
+on:
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+
+jobs:
+  retrieve-resources:
+    name: Retrieve resources required for building
+    runs-on: ${{ inputs.os }}
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/prepare-environment
+      - name: Download and unpack required resources
+        run: ./github_fetch_resources.sh ${{ inputs.arch }} | tee -a github_actions_retrieve_resources.log
+      - name: List resources
+        run: ls -la
+      - name: Archive resources
+        run: ./github_pack_resources.sh | tee -a github_actions_retrieve_resources.log
+      - name: Upload resources
+        uses: actions/upload-artifact@v4
+        with:
+          name: helium_macos_resources_${{ inputs.arch }}
+          path: upload_build_resources/
+
+  build_job_01:
+    needs: retrieve-resources
+    uses: ./.github/workflows/build-init.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_02:
+    needs: build_job_01
+    if: ${{needs.build_job_01.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_03:
+    needs: build_job_02
+    if: ${{needs.build_job_02.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_04:
+    needs: build_job_03
+    if: ${{needs.build_job_03.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_05:
+    needs: build_job_04
+    if: ${{needs.build_job_04.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_06:
+    needs: build_job_05
+    if: ${{needs.build_job_05.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_07:
+    needs: build_job_06
+    if: ${{needs.build_job_06.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_08:
+    needs: build_job_07
+    if: ${{needs.build_job_07.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_09:
+    needs: build_job_08
+    if: ${{needs.build_job_08.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}
+
+  build_job_10:
+    needs: build_job_09
+    if: ${{needs.build_job_09.outputs.status == 'running'}}
+    uses: ./.github/workflows/build-step.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      arch: ${{ inputs.arch }}
+      os: ${{ inputs.os }}

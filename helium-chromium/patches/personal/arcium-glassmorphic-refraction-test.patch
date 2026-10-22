@@ -1,0 +1,234 @@
+Index: src/components/viz/service/display/renderer_pixeltest.cc
+===================================================================
+--- src.orig/components/viz/service/display/renderer_pixeltest.cc
++++ src/components/viz/service/display/renderer_pixeltest.cc
+@@ -7,12 +7,15 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <cstdlib>
+ #include <memory>
+ #include <optional>
++#include <string>
+ #include <tuple>
+ 
+ #include "base/command_line.h"
+ #include "base/compiler_specific.h"
++#include "base/files/file_path.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/memory/aligned_memory.h"
+@@ -25,11 +28,14 @@
+ #include "build/build_config.h"
+ #include "cc/base/math_util.h"
+ #include "cc/paint/paint_flags.h"
++#include "cc/paint/paint_filter.h"
++#include "cc/paint/paint_shader.h"
+ #include "cc/paint/skia_paint_canvas.h"
+ #include "cc/test/fake_raster_source.h"
+ #include "cc/test/fake_recording_source.h"
+ #include "cc/test/pixel_comparator.h"
+ #include "cc/test/pixel_test.h"
++#include "cc/test/pixel_test_utils.h"
+ #include "cc/test/render_pass_test_utils.h"
+ #include "cc/test/resource_provider_test_utils.h"
+ #include "cc/test/test_types.h"
+@@ -91,6 +97,94 @@
+ // GetGpuRendererTypes() can return an empty list, e.g. on Fuchsia ARM64.
+ GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(GPURendererPixelTest);
+ 
++constexpr char kRefractionArtifactOutputSwitch[] =
++    "arcium-refraction-artifacts";
++
++class CaptureOnlyPixelComparator final : public cc::PixelComparator {
++ public:
++  bool Compare(const SkBitmap&, const SkBitmap&) const override { return true; }
++};
++
++const char* RendererTypeName(RendererType type) {
++  switch (type) {
++    case RendererType::kSkiaGL:
++      return "skia-gl";
++    case RendererType::kSkiaVk:
++      return "skia-vulkan";
++    case RendererType::kSkiaGraphiteDawn:
++      return "skia-graphite-dawn";
++    case RendererType::kSoftware:
++      return "software";
++  }
++}
++
++sk_sp<cc::PaintFilter> MakeSolidDisplacementMap(float scale,
++                                                 const gfx::Rect& bounds) {
++  const SkRect crop_rect = gfx::RectToSkRect(bounds);
++  auto displacement = sk_make_sp<cc::ShaderPaintFilter>(
++      cc::PaintShader::MakeColor(SkColor4f{0.75f, 0.625f, 0.5f, 1.0f}),
++      /*alpha=*/1.0f, cc::PaintFlags::FilterQuality::kNone,
++      cc::ShaderPaintFilter::Dither::kNo, &crop_rect);
++  return sk_make_sp<cc::DisplacementMapEffectPaintFilter>(
++      SkColorChannel::kR, SkColorChannel::kG, scale, std::move(displacement),
++      /*color=*/nullptr, &crop_rect);
++}
++
++struct PixelDifference {
++  int count = 0;
++  int max_channel_delta = 0;
++  gfx::Rect bounds;
++};
++
++PixelDifference CalculatePixelDifference(const SkBitmap& before,
++                                         const SkBitmap& after) {
++  DCHECK_EQ(before.width(), after.width());
++  DCHECK_EQ(before.height(), after.height());
++  PixelDifference difference;
++  for (int y = 0; y < before.height(); ++y) {
++    for (int x = 0; x < before.width(); ++x) {
++      const SkColor before_color = before.getColor(x, y);
++      const SkColor after_color = after.getColor(x, y);
++      if (before_color == after_color) {
++        continue;
++      }
++      ++difference.count;
++      difference.bounds.Union(gfx::Rect(x, y, 1, 1));
++      difference.max_channel_delta = std::max(
++          {difference.max_channel_delta,
++           std::abs(static_cast<int>(SkColorGetR(before_color)) -
++                    static_cast<int>(SkColorGetR(after_color))),
++           std::abs(static_cast<int>(SkColorGetG(before_color)) -
++                    static_cast<int>(SkColorGetG(after_color))),
++           std::abs(static_cast<int>(SkColorGetB(before_color)) -
++                    static_cast<int>(SkColorGetB(after_color))),
++           std::abs(static_cast<int>(SkColorGetA(before_color)) -
++                    static_cast<int>(SkColorGetA(after_color)))});
++    }
++  }
++  return difference;
++}
++
++bool BitmapsMatchExactly(const SkBitmap& before, const SkBitmap& after) {
++  return CalculatePixelDifference(before, after).count == 0;
++}
++
++void WriteRefractionArtifact(const SkBitmap& bitmap,
++                             RendererType renderer_type,
++                             const char* state) {
++  const base::FilePath output_dir =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          kRefractionArtifactOutputSwitch);
++  if (output_dir.empty()) {
++    return;
++  }
++
++  const std::string filename = base::StringPrintf(
++      "renderer-refraction-%s-%s.png", RendererTypeName(renderer_type),
++      state);
++  EXPECT_TRUE(cc::WritePNGFile(bitmap, output_dir.AppendASCII(filename), false));
++}
++
+ TEST_P(RendererPixelTest, SimpleGreenRect) {
+   gfx::Rect rect(this->device_viewport_size_);
+ 
+@@ -2243,6 +2337,19 @@
+     pass_list_.push_back(std::move(root_pass));
+   }
+ 
++  SkBitmap CaptureCurrentScene() {
++    std::vector<SkColor> ignored_reference(
++        device_viewport_size_.GetArea(), SK_ColorTRANSPARENT);
++    CaptureOnlyPixelComparator comparator;
++    const bool rendered =
++        RunPixelTest(&pass_list_, &ignored_reference, comparator);
++    EXPECT_TRUE(rendered);
++    if (!rendered || !result_bitmap_) {
++      return SkBitmap();
++    }
++    return *result_bitmap_;
++  }
++
+   AggregatedRenderPassList pass_list_;
+   cc::FilterOperations backdrop_filters_;
+   std::optional<SkPath> backdrop_filter_bounds_;
+@@ -2298,6 +2405,83 @@
+                            cc::FuzzyPixelOffByOneComparator()));
+ }
+ 
++TEST_P(RendererPixelTestWithBackdropFilter, ReferenceDisplacementMapBackdrop) {
++  // Keep the rounded mask on all three captures so the only intended change is
++  // the serialized Reference/DisplacementMap filter itself.
++  include_backdrop_mask_ = true;
++
++  auto rebuild_scene = [&]() {
++    pass_list_.clear();
++    SetUpRenderPassList();
++  };
++
++  // The root pass paints a deterministic green/red/blue bar pattern with
++  // one-pixel gaps. This makes a small displacement visible without relying
++  // on external images or a browser-page readback.
++  backdrop_filters_ = cc::FilterOperations();
++  rebuild_scene();
++  const SkBitmap untouched = CaptureCurrentScene();
++  WriteRefractionArtifact(untouched, renderer_type(), "untouched");
++
++  backdrop_filters_ = cc::FilterOperations();
++  backdrop_filters_.Append(cc::FilterOperation::CreateReferenceFilter(
++      MakeSolidDisplacementMap(/*scale=*/0.0f, filter_pass_layer_rect_)));
++  rebuild_scene();
++  const SkBitmap identity = CaptureCurrentScene();
++  WriteRefractionArtifact(identity, renderer_type(), "identity");
++  EXPECT_TRUE(BitmapsMatchExactly(untouched, identity));
++
++  backdrop_filters_ = cc::FilterOperations();
++  backdrop_filters_.Append(cc::FilterOperation::CreateReferenceFilter(
++      MakeSolidDisplacementMap(/*scale=*/12.0f, filter_pass_layer_rect_)));
++  rebuild_scene();
++  const SkBitmap displaced = CaptureCurrentScene();
++  WriteRefractionArtifact(displaced, renderer_type(), "displaced");
++
++  ASSERT_EQ(displaced.width(), untouched.width());
++  ASSERT_EQ(displaced.height(), untouched.height());
++  const PixelDifference difference =
++      CalculatePixelDifference(untouched, displaced);
++  ASSERT_GT(difference.count, 0);
++  EXPECT_GT(difference.max_channel_delta, 8);
++  EXPECT_TRUE(filter_pass_layer_rect_.Contains(difference.bounds))
++      << "displacement escaped crop bounds: " << difference.bounds.ToString();
++
++  int outside_crop_difference_count = 0;
++  int black_pixel_count = 0;
++  int transparent_pixel_count = 0;
++  for (int y = 0; y < displaced.height(); ++y) {
++    for (int x = 0; x < displaced.width(); ++x) {
++      if (!filter_pass_layer_rect_.Contains(x, y) &&
++          untouched.getColor(x, y) != displaced.getColor(x, y)) {
++        ++outside_crop_difference_count;
++      }
++      const SkColor color = displaced.getColor(x, y);
++      if (color == SK_ColorBLACK) {
++        ++black_pixel_count;
++      }
++      if (SkColorGetA(color) == 0) {
++        ++transparent_pixel_count;
++      }
++    }
++  }
++  EXPECT_EQ(outside_crop_difference_count, 0);
++  EXPECT_EQ(black_pixel_count, 0);
++  EXPECT_EQ(transparent_pixel_count, 0);
++
++  const gfx::Point center = filter_pass_layer_rect_.CenterPoint();
++  const SkColor center_color = displaced.getColor(center.x(), center.y());
++  EXPECT_GT(SkColorGetA(center_color), 200);
++  EXPECT_NE(center_color, SK_ColorBLACK);
++
++  // The top-left sample is outside the rounded backdrop mask even though it
++  // lies inside the rectangular crop. It must remain the untouched backdrop.
++  const gfx::Point masked_corner(filter_pass_layer_rect_.x() + 1,
++                                 filter_pass_layer_rect_.y() + 1);
++  EXPECT_EQ(untouched.getColor(masked_corner.x(), masked_corner.y()),
++            displaced.getColor(masked_corner.x(), masked_corner.y()));
++}
++
+ // Software renderer does not support anti-aliased edges.
+ TEST_P(GPURendererPixelTest, AntiAliasing) {
+   gfx::Rect rect(this->device_viewport_size_);

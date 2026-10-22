@@ -1,0 +1,713 @@
+# Requires the Customize Chrome product policy and arcium-feature-settings-tests.
+# Exercise retained controls with awaited, typed, network-free browser fixtures.
+--- a/chrome/test/data/webui/side_panel/customize_chrome/app_test.ts
++++ b/chrome/test/data/webui/side_panel/customize_chrome/app_test.ts
+@@ -235,24 +235,23 @@ suite('AppTest', () => {
+         });
+       });
+ 
+-      test('toggles with tab type', async () => {
+-        assertTrue(
+-            !!customizeChromeApp.shadowRoot.querySelector('#tools'),
+-            'Visible by default on first-party NTP');
++      test('tools stay available after attached tab callbacks', async () => {
++        const tools = customizeChromeApp.shadowRoot.querySelector('#tools');
++        assertTrue(!!tools, 'Tools are available with all three flags enabled');
++        assertTrue(!!tools.querySelector('customize-chrome-tools'));
+ 
+-        // Switch to non-first-party.
++        // Arcium does not change Customize Chrome for the attached tab type.
+         callbackRouter.attachedTabStateUpdated(NewTabPageType.kThirdPartyWebUI);
++        await callbackRouter.$.flushForTesting();
+         await microtasksFinished();
+-        assertFalse(
+-            !!customizeChromeApp.shadowRoot.querySelector('#tools'),
+-            'Hidden on non-first-party NTP');
++        assertEquals(
++            tools, customizeChromeApp.shadowRoot.querySelector('#tools'));
+ 
+-        // Switch back to first-party.
+         callbackRouter.attachedTabStateUpdated(NewTabPageType.kFirstPartyWebUI);
++        await callbackRouter.$.flushForTesting();
+         await microtasksFinished();
+-        assertTrue(
+-            !!customizeChromeApp.shadowRoot.querySelector('#tools'),
+-            'Visible again on first-party NTP');
++        assertEquals(
++            tools, customizeChromeApp.shadowRoot.querySelector('#tools'));
+       });
+     });
+ 
+@@ -280,25 +279,32 @@ suite('AppTest', () => {
+     });
+   });
+ 
+-  test('source tab type should update the cards', async () => {
+-    const idsControlledByIsSourceTabFirstPartyNtp = [
+-      '#shortcuts',
+-      '#modules',
+-      '#categoriesPage',
+-      '#themesPage',
+-      '#wallpaperSearchPage',
+-    ];
+-
+-    const idsNotControlledByIsSourceTabFirstPartyNtp = [
+-      '#container',
+-      '#overviewPage',
+-      '#appearance',
+-      '#appearanceElement',
+-      '#toolbarButton',
+-      '#extensions',
+-      '#buttonContainer',
+-    ];
+-
++  test('configured cards ignore attached tab state callbacks', async () => {
++    // Card availability follows configured features in Arcium. The attached
++    // tab callback must neither remove supported cards nor add disabled ones.
++    const expectedCards = new Map<string, boolean>([
++      ['#container', true],
++      ['#overviewPage', true],
++      ['#appearance', true],
++      ['#appearanceElement', true],
++      ['#toolbarButton', true],
++      ['#shortcuts', true],
++      ['#modules', loadTimeData.getBoolean('modulesEnabled')],
++      ['#categoriesPage', true],
++      ['#themesPage', true],
++      [
++        '#wallpaperSearchPage',
++        loadTimeData.getBoolean('wallpaperSearchEnabled'),
++      ],
++      ['#extensions', loadTimeData.getBoolean('extensionsCardEnabled')],
++      ['#buttonContainer', loadTimeData.getBoolean('extensionsCardEnabled')],
++      [
++        '#tools',
++        loadTimeData.getBoolean('ntpNextFeaturesEnabled') &&
++            loadTimeData.getBoolean('ntpNextDisablementEnabled') &&
++            loadTimeData.getBoolean('aimPolicyEnabled'),
++      ],
++    ]);
+     const newTabPageTypes = [
+       NewTabPageType.kFirstPartyWebUI,
+       NewTabPageType.kThirdPartyWebUI,
+@@ -309,20 +315,16 @@ suite('AppTest', () => {
+       NewTabPageType.kNone,
+     ];
+ 
+-    const checkIdsVisibility = (sourceTabType: NewTabPageType) => {
+-      idsControlledByIsSourceTabFirstPartyNtp.forEach(
+-          id => assertEquals(
+-              sourceTabType === NewTabPageType.kFirstPartyWebUI,
+-              !!customizeChromeApp.shadowRoot.querySelector(id)));
+-      idsNotControlledByIsSourceTabFirstPartyNtp.forEach(
+-          id => assertTrue(!!customizeChromeApp.shadowRoot.querySelector(id)));
+-    };
+-
+-    await newTabPageTypes.forEach(async t => {
+-      callbackRouter.attachedTabStateUpdated(t);
++    for (const tabType of newTabPageTypes) {
++      callbackRouter.attachedTabStateUpdated(tabType);
++      await callbackRouter.$.flushForTesting();
+       await microtasksFinished();
+-      checkIdsVisibility(t);
+-    });
++      for (const [id, expected] of expectedCards) {
++        assertEquals(
++            expected, !!customizeChromeApp.shadowRoot.querySelector(id),
++            `${id} after attached tab type ${tabType}`);
++      }
++    }
+   });
+ 
+   suite('PageTransitions', () => {
+@@ -335,39 +337,73 @@ suite('AppTest', () => {
+           (mock: CustomizeToolbarHandlerRemote) =>
+               CustomizeToolbarApiProxy.setInstance(
+                   mock, new CustomizeToolbarClientCallbackRouter()));
++      const actionsResponse:
++          Awaited<ReturnType<CustomizeToolbarHandlerInterface['listActions']>> =
++              {actions: []};
++      const categoriesResponse: Awaited<
++          ReturnType<CustomizeToolbarHandlerInterface['listCategories']>> = {
++        categories: [],
++      };
+       toolbarCustomizationHandler.setResultFor(
+-          'listActions', Promise.resolve([]));
++          'listActions', Promise.resolve(actionsResponse));
+       toolbarCustomizationHandler.setResultFor(
+-          'listCategories', Promise.resolve([]));
++          'listCategories', Promise.resolve(categoriesResponse));
+       toolbarCustomizationHandler.setResultFor(
+           'getIsCustomized', Promise.resolve({customized: false}));
+     });
+ 
+     test(
+-        'page transitions back to overview if not supported by non first party',
++        'toolbar navigation and theme editability survive tab callbacks',
+         async () => {
+-          // start on the overview page
+           assertTrue(
+               customizeChromeApp.$.overviewPage.classList.contains('selected'));
+           assertEquals(document.body, document.activeElement);
+ 
+-          // Send event for edit theme being clicked.
+-          customizeChromeApp.$.appearanceElement.dispatchEvent(
+-              new Event('edit-theme-click'));
++          // The retained theme button requests an upload, and toolbar
++          // navigation remains available independently of the attached tab
++          // type.
++          customizeChromeApp.$.appearanceElement.$.editThemeButton.click();
++          await handler.whenCalled('chooseLocalCustomBackground');
++          assertEquals(1, handler.getCallCount('chooseLocalCustomBackground'));
++          const toolbarButton =
++              customizeChromeApp.shadowRoot.querySelector<HTMLElement>(
++                  '#toolbarButton');
++          assertTrue(!!toolbarButton);
++          toolbarButton.click();
+           await microtasksFinished();
+-
+-          // Current page should now be categories.
+-          assertTrue(customizeChromeApp.$.categoriesPage.classList.contains(
+-              'selected'));
+-          assertEquals(customizeChromeApp, document.activeElement);
++          const toolbarPage =
++              customizeChromeApp.shadowRoot.querySelector('#toolbarPage');
++          assertTrue(!!toolbarPage);
++          assertTrue(toolbarPage.classList.contains('selected'));
+ 
+           callbackRouter.attachedTabStateUpdated(NewTabPageType.kExtension);
++          await callbackRouter.$.flushForTesting();
++          await microtasksFinished();
++          assertTrue(toolbarPage.classList.contains('selected'));
++
++          // Explicit editability still removes theme editing controls.
+           callbackRouter.setThemeEditable(false);
++          await callbackRouter.$.flushForTesting();
+           await microtasksFinished();
++          assertEquals(
++              null,
++              customizeChromeApp.shadowRoot.querySelector('#categoriesPage'));
++          assertTrue(
++              customizeChromeApp.$.appearanceElement.$.editThemeButton.hidden);
++          assertTrue(toolbarPage.classList.contains('selected'));
+ 
++          // The retained scroll request returns to overview, and restoring
++          // editability restores the upload control.
++          callbackRouter.scrollToSection(CustomizeChromeSection.kAppearance);
++          callbackRouter.setThemeEditable(true);
++          await callbackRouter.$.flushForTesting();
++          await microtasksFinished();
+           assertTrue(
+               customizeChromeApp.$.overviewPage.classList.contains('selected'));
+-          assertEquals(document.body, document.activeElement);
++          assertFalse(
++              customizeChromeApp.$.appearanceElement.$.editThemeButton.hidden);
++          customizeChromeApp.$.appearanceElement.$.editThemeButton.click();
++          assertEquals(2, handler.getCallCount('chooseLocalCustomBackground'));
+         });
+ 
+     test(
+@@ -425,8 +461,8 @@ suite('AppTest', () => {
+       [
+         NewTabPageType.kExtension,
+         {canBeShown: false, enabledByPolicy: false},
+-        true,
+-        'visible when extension notice is showing',
++        false,
++        'hidden when only an ignored extension tab notice is available',
+       ],
+       [
+         NewTabPageType.kExtension,
+@@ -447,6 +483,25 @@ suite('AppTest', () => {
+             assertEquals(
+                 expected,
+                 !!customizeChromeApp.shadowRoot.querySelector('#footer'));
++
++            if (tabType === NewTabPageType.kExtension &&
++                !managementState.canBeShown) {
++              // Prove the retained management signal still shows the footer.
++              callbackRouter.setFooterSettings(
++                  true, true, {canBeShown: true, enabledByPolicy: false});
++              await callbackRouter.$.flushForTesting();
++              await microtasksFinished();
++              const footer =
++                  customizeChromeApp.shadowRoot.querySelector('#footer');
++              assertTrue(!!footer);
++              assertTrue(!!footer.querySelector('customize-chrome-footer'));
++
++              callbackRouter.setFooterSettings(true, true, managementState);
++              await callbackRouter.$.flushForTesting();
++              await microtasksFinished();
++              assertEquals(
++                  null, customizeChromeApp.shadowRoot.querySelector('#footer'));
++            }
+           });
+         });
+ 
+--- a/chrome/test/data/webui/side_panel/customize_chrome/theme_snapshot_test.ts
++++ b/chrome/test/data/webui/side_panel/customize_chrome/theme_snapshot_test.ts
+@@ -43,7 +43,7 @@ suite('ThemeSnapshotTest', () => {
+ 
+   test('setting theme updates theme snapshot', async () => {
+     // Arrange.
+-    createThemeSnapshotElement();
++    await createThemeSnapshotElement();
+     const theme = createTheme();
+     theme.backgroundImage = createBackgroundImage('chrome://theme/foo');
+     theme.backgroundImage.title = 'foo';
+@@ -61,29 +61,33 @@ suite('ThemeSnapshotTest', () => {
+     assertEquals(
+         CustomizeThemeType.CUSTOM_THEME, page.getAttribute('theme-type'));
+     assertEquals(
+-        $$<HTMLImageElement>(
+-            themeSnapshotElement, '.snapshot-container #customThemeImage')!
+-            .getAttribute('aria-labelledby'),
+-        'customThemeTitle');
++        null,
++        themeSnapshotElement.shadowRoot.querySelector(
++            '#customThemeImage, #customThemeImageBackground'));
+     assertEquals(
+         'foo',
+         $$(themeSnapshotElement,
+            '.snapshot-container #customThemeTitle')!.textContent.trim());
++    // A second backend update must change the retained title.
++    theme.backgroundImage.title = 'updated title';
++    callbackRouterRemote.setTheme(theme);
++    await callbackRouterRemote.$.flushForTesting();
++    await microtasksFinished();
+     assertEquals(
+-        'chrome://theme/foo',
+-        $$<HTMLImageElement>(
+-            themeSnapshotElement, '.snapshot-container img')!.src);
++        'updated title',
++        $$(themeSnapshotElement, '#customThemeTitle')!.textContent.trim());
+   });
+ 
+   test('default chrome updates theme snapshot', async () => {
+     // Arrange.
+-    createThemeSnapshotElement();
++    await createThemeSnapshotElement();
+     const theme = createTheme();
+     theme.backgroundColor = {value: 4279522202};
+ 
+     // Act.
+     callbackRouterRemote.setTheme(theme);
+     await callbackRouterRemote.$.flushForTesting();
++    await microtasksFinished();
+ 
+     // Assert.
+     assertEquals(1, handler.getCallCount('updateTheme'));
+@@ -92,11 +96,7 @@ suite('ThemeSnapshotTest', () => {
+     assertTrue(!!page);
+     assertEquals(
+         CustomizeThemeType.CLASSIC_CHROME, page.getAttribute('theme-type'));
+-    assertEquals(
+-        $$<HTMLImageElement>(
+-            themeSnapshotElement,
+-            '#classicChromeBackground svg')!.getAttribute('aria-labelledby'),
+-        'classicChromeThemeTitle');
++    assertEquals(null, $$(themeSnapshotElement, '#classicChromeBackground'));
+     assertEquals(
+         'Default Chrome',
+         $$(themeSnapshotElement,
+@@ -131,55 +131,74 @@ suite('ThemeSnapshotTest', () => {
+            '.snapshot-container #uploadedThemeTitle')!.textContent.trim());
+   });
+ 
+-  test('classic chrome snapshot shows correct image', async () => {
+-    // Arrange.
+-    createThemeSnapshotElement();
+-    const theme = createTheme();
+-
+-    // Act.
+-    callbackRouterRemote.setTheme(theme);
+-    await callbackRouterRemote.$.flushForTesting();
++  test(
++      'switching from custom to classic theme replaces the title', async () => {
++        await createThemeSnapshotElement();
++        const customTheme = createTheme();
++        customTheme.backgroundImage =
++            createBackgroundImage('chrome://theme/foo');
++        customTheme.backgroundImage.title = 'foo';
++        callbackRouterRemote.setTheme(customTheme);
++        await callbackRouterRemote.$.flushForTesting();
++        await microtasksFinished();
++        assertEquals(
++            'foo',
++            $$(themeSnapshotElement, '#customThemeTitle')!.textContent.trim());
+ 
+-    // Assert.
+-    assertEquals(1, handler.getCallCount('updateTheme'));
+-    const page =
+-        themeSnapshotElement.shadowRoot.querySelector('.snapshot-container');
+-    assertTrue(!!page);
+-    assertEquals(
+-        CustomizeThemeType.CLASSIC_CHROME, page.getAttribute('theme-type'));
+-    assertEquals(
+-        $$<SVGUseElement>(
+-            themeSnapshotElement,
+-            '#classicChromeBackground svg use')!.href.baseVal,
+-        'icons/mini_new_tab_page.svg#miniNewTabPage');
+-  });
++        callbackRouterRemote.setTheme(createTheme());
++        await callbackRouterRemote.$.flushForTesting();
++        await microtasksFinished();
++        assertEquals(1, handler.getCallCount('updateTheme'));
++        const pages = themeSnapshotElement.shadowRoot.querySelectorAll(
++            '.snapshot-container');
++        assertEquals(1, pages.length);
++        assertEquals(
++            CustomizeThemeType.CLASSIC_CHROME,
++            pages[0]!.getAttribute('theme-type'));
++        assertEquals(
++            'Default Chrome',
++            $$(themeSnapshotElement,
++               '#classicChromeThemeTitle')!.textContent.trim());
++        assertEquals(null, $$(themeSnapshotElement, '#customThemeTitle'));
++      });
+ 
+   test(
+-      'clicking classic chrome snapshot creates edit-theme-click event',
++      'classic title is inert while uploaded preview still edits theme',
+       async () => {
+-        // Arrange.
+-        createThemeSnapshotElement();
+-        const theme = createTheme();
+-        callbackRouterRemote.setTheme(theme);
++        await createThemeSnapshotElement();
++        callbackRouterRemote.setTheme(createTheme());
+         await callbackRouterRemote.$.flushForTesting();
+         await microtasksFinished();
+ 
+-        let clicked = false;
++        let editEvents = 0;
+         themeSnapshotElement.addEventListener(
+-            'edit-theme-click', () => clicked = true);
+-        // Act
+-        $$<HTMLElement>(
+-            themeSnapshotElement,
+-            '.snapshot-container #classicChromeBackground')!.click();
+-        // Assert
+-        assertTrue(clicked);
++            'edit-theme-click', () => ++editEvents);
++        const title =
++            $$<HTMLElement>(themeSnapshotElement, '#classicChromeThemeTitle');
++        assertTrue(!!title);
++        assertEquals('Default Chrome', title.textContent.trim());
++        title.click();
++        assertEquals(0, editEvents);
++
++        // The listener and retained upload preview must still be operative.
++        const uploadedTheme = createTheme();
++        uploadedTheme.backgroundImage =
++            createBackgroundImage('chrome://theme/foo');
++        uploadedTheme.backgroundImage.isUploadedImage = true;
++        callbackRouterRemote.setTheme(uploadedTheme);
++        await callbackRouterRemote.$.flushForTesting();
++        await microtasksFinished();
++        const preview = $$<HTMLElement>(
++            themeSnapshotElement, '#uploadedThemeImageBackground');
++        assertTrue(!!preview);
++        preview.click();
++        assertEquals(1, editEvents);
+       });
+ 
+   test(
+-      'clicking custom theme snapshot creates edit-theme-click event',
++      'custom title is inert while uploaded preview respects management',
+       async () => {
+-        // Arrange.
+-        createThemeSnapshotElement();
++        await createThemeSnapshotElement();
+         const theme = createTheme();
+         theme.backgroundImage = createBackgroundImage('chrome://theme/foo');
+         theme.backgroundImage.title = 'foo';
+@@ -187,15 +206,39 @@ suite('ThemeSnapshotTest', () => {
+         await callbackRouterRemote.$.flushForTesting();
+         await microtasksFinished();
+ 
+-        let clicked = false;
++        let editEvents = 0;
+         themeSnapshotElement.addEventListener(
+-            'edit-theme-click', () => clicked = true);
+-        // Act
+-        $$<HTMLElement>(
+-            themeSnapshotElement,
+-            '.snapshot-container #customThemeImageBackground')!.click();
+-        // Assert
+-        assertTrue(clicked);
++            'edit-theme-click', () => ++editEvents);
++        const title =
++            $$<HTMLElement>(themeSnapshotElement, '#customThemeTitle');
++        assertTrue(!!title);
++        assertEquals('foo', title.textContent.trim());
++        title.click();
++        assertEquals(0, editEvents);
++
++        // Management blocks the retained upload action, then clearing policy
++        // restores it. This also proves that the event listener is active.
++        theme.backgroundImage.isUploadedImage = true;
++        theme.backgroundManagedByPolicy = true;
++        callbackRouterRemote.setTheme(theme);
++        await callbackRouterRemote.$.flushForTesting();
++        await microtasksFinished();
++        const preview = $$<HTMLElement>(
++            themeSnapshotElement, '#uploadedThemeImageBackground');
++        assertTrue(!!preview);
++        preview.click();
++        assertEquals(0, editEvents);
++
++        theme.backgroundManagedByPolicy = false;
++        callbackRouterRemote.setTheme(theme);
++        await callbackRouterRemote.$.flushForTesting();
++        await microtasksFinished();
++        const editablePreview = $$<HTMLElement>(
++            themeSnapshotElement, '#uploadedThemeImageBackground');
++        assertTrue(!!editablePreview);
++        assertTrue(editablePreview.isConnected);
++        editablePreview.click();
++        assertEquals(1, editEvents);
+       });
+ 
+   test(
+--- a/chrome/test/data/webui/side_panel/customize_chrome/toolbar_test.ts
++++ b/chrome/test/data/webui/side_panel/customize_chrome/toolbar_test.ts
+@@ -10,12 +10,16 @@ import {CustomizeToolbarClientCallbackRo
+ import {CustomizeToolbarApiProxy} from 'chrome://customize-chrome-side-panel.top-chrome/customize_toolbar/customize_toolbar_api_proxy.js';
+ import type {ToolbarElement} from 'chrome://customize-chrome-side-panel.top-chrome/customize_toolbar/toolbar.js';
+ import {WindowProxy} from 'chrome://customize-chrome-side-panel.top-chrome/window_proxy.js';
+-import {assertEquals, assertFalse, assertGE, assertTrue} from 'chrome://webui-test/chai_assert.js';
++import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+ import type {TestMock} from 'chrome://webui-test/test_mock.js';
+ import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
+ 
+ import {installMock} from './test_support.js';
+ 
++const TEST_ICON_URL = 'data:image/svg+xml;base64,' +
++    'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIx' +
++    'IiBoZWlnaHQ9IjEiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=';
++
+ suite('CustomizerToolbarTest', () => {
+   let handler: TestMock<CustomizeToolbarHandlerInterface>;
+   let customizeToolbarCallbackRouterRemote: CustomizeToolbarClientRemote;
+@@ -41,7 +45,7 @@ suite('CustomizerToolbarTest', () => {
+             pinned: true,
+             hasEnterpriseControlledPinnedState: false,
+             category: CategoryId.kNavigation,
+-            iconUrl: 'https://example.com/foo_1.png',
++            iconUrl: TEST_ICON_URL,
+           },
+           {
+             id: ActionId.kShowPasswordManager,
+@@ -49,7 +53,7 @@ suite('CustomizerToolbarTest', () => {
+             pinned: false,
+             hasEnterpriseControlledPinnedState: false,
+             category: CategoryId.kYourChrome,
+-            iconUrl: 'https://example.com/foo_1.png',
++            iconUrl: TEST_ICON_URL,
+           },
+         ],
+         [
+@@ -95,44 +99,40 @@ suite('CustomizerToolbarTest', () => {
+     assertEquals(1, handler.getCallCount('listCategories'));
+   });
+ 
+-  test('actions and categories are structured correctly', async () => {
++  test('action controls retain category order without headings', async () => {
+     createToolbarElementWithBasicData();
+     await microtasksFinished();
+ 
+-    const categories =
+-        toolbarElement.shadowRoot.querySelectorAll('.category-title');
+-    assertEquals(2, categories.length);
+-
++    assertEquals(
++        0,
++        toolbarElement.shadowRoot.querySelectorAll('.category-title').length);
+     const actions =
+         toolbarElement.shadowRoot.querySelectorAll('.toggle-container');
+     assertEquals(2, actions.length);
+-
+-    const navigationCategory = categories[0];
+-    assertTrue(!!navigationCategory);
+-    assertEquals('Navigation', navigationCategory.textContent.trim());
+-    const homeAction = actions[0];
+-    assertTrue(!!homeAction);
++    const homeAction = actions[0]!;
++    const passwordManagerAction = actions[1]!;
+     assertEquals(
+         'Home', homeAction.querySelector('.toggle-title')!.textContent.trim());
+-
+-    const yourChromeCategory = categories[1];
+-    assertTrue(!!yourChromeCategory);
+-    assertEquals('Your Chrome', yourChromeCategory.textContent.trim());
+-    const showPasswordManagerAction = actions[1];
+-    assertTrue(!!showPasswordManagerAction);
+     assertEquals(
+         'Show Password Manager',
+-        showPasswordManagerAction.querySelector(
+-                                     '.toggle-title')!.textContent.trim());
++        passwordManagerAction.querySelector(
++                                 '.toggle-title')!.textContent.trim());
++    const homeToggle = homeAction.querySelector('cr-toggle');
++    const passwordManagerToggle =
++        passwordManagerAction.querySelector('cr-toggle');
++    assertTrue(!!homeToggle);
++    assertTrue(!!passwordManagerToggle);
++    assertTrue(homeToggle.checked);
++    assertFalse(passwordManagerToggle.checked);
++    assertEquals('Home', homeToggle.getAttribute('aria-label'));
++    assertEquals(
++        'Show Password Manager',
++        passwordManagerToggle.getAttribute('aria-label'));
+ 
++    // The card keeps the action groups in backend category order.
+     const children = Array.from(toolbarElement.$.pinningSelectionCard.children);
+-    assertGE(
+-        children.indexOf(homeAction), children.indexOf(navigationCategory));
+-    assertGE(
+-        children.indexOf(yourChromeCategory), children.indexOf(homeAction));
+-    assertGE(
+-        children.indexOf(showPasswordManagerAction),
+-        children.indexOf(yourChromeCategory));
++    assertTrue(
++        children.indexOf(homeAction) < children.indexOf(passwordManagerAction));
+   });
+ 
+   test('action has icon', async () => {
+@@ -143,7 +143,7 @@ suite('CustomizerToolbarTest', () => {
+         toolbarElement.shadowRoot.querySelector('.toggle-container');
+     assertTrue(!!homeAction);
+     const iconUrl = homeAction.querySelector('img')!.src;
+-    assertEquals('https://example.com/foo_1.png', iconUrl);
++    assertEquals(TEST_ICON_URL, iconUrl);
+   });
+ 
+   test('pinning via toggle notifies backend', async () => {
+--- a/chrome/test/data/webui/side_panel/customize_chrome/categories_test.ts
++++ b/chrome/test/data/webui/side_panel/customize_chrome/categories_test.ts
+@@ -7,7 +7,7 @@ import 'chrome://customize-chrome-side-p
+ import type {CategoriesElement} from 'chrome://customize-chrome-side-panel.top-chrome/categories.js';
+ import {CHANGE_CHROME_THEME_CLASSIC_ELEMENT_ID, CHROME_THEME_COLLECTION_ELEMENT_ID} from 'chrome://customize-chrome-side-panel.top-chrome/categories.js';
+ import {CustomizeChromeAction, NtpImageType} from 'chrome://customize-chrome-side-panel.top-chrome/common.js';
+-import type {BackgroundCollection, CustomizeChromePageRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
++import type {BackgroundCollection, CustomizeChromePageHandlerInterface, CustomizeChromePageRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
+ import {CustomizeChromePageCallbackRouter, CustomizeChromePageHandlerRemote} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome.mojom-webui.js';
+ import {CustomizeChromeApiProxy} from 'chrome://customize-chrome-side-panel.top-chrome/customize_chrome_api_proxy.js';
+ import {WindowProxy} from 'chrome://customize-chrome-side-panel.top-chrome/window_proxy.js';
+@@ -22,6 +22,9 @@ import {eventToPromise, isVisible, micro
+ 
+ import {$$, createBackgroundImage, createTheme, installMock} from './test_support.js';
+ 
++type GetReplacementPreview =
++    CustomizeChromePageHandlerInterface['getReplacementCollectionPreviewImage'];
++
+ interface CollectionOptions {
+   numCollections: number;
+   shouldReplaceBrokenImages?: boolean;
+@@ -54,13 +57,14 @@ suite('CategoriesTest', () => {
+     }));
+     if (loadTimeData.getBoolean('imageErrorDetectionEnabled')) {
+       handler.setResultMapperFor(
+-          'getReplacementCollectionPreviewImage', (collectionId: string) => {
++          'getReplacementCollectionPreviewImage',
++          (collectionId: string): ReturnType<GetReplacementPreview> => {
+             if (shouldReplaceBrokenImages) {
+               return Promise.resolve({
+                 previewImageUrl: `https://replaced-${collectionId}.jpg`,
+               });
+             } else {
+-              return Promise.resolve(null);
++              return Promise.resolve({previewImageUrl: null});
+             }
+           });
+     }
+@@ -489,8 +493,17 @@ suite('CategoriesTest', () => {
+ 
+     test('choosing upload sets metric', async () => {
+       await setInitialSettings({numCollections: 0});
++      const uploadResponse: Awaited<ReturnType<
++          CustomizeChromePageHandlerInterface['chooseLocalCustomBackground']>> =
++          {
++            success: false,
++          };
++      handler.setResultFor(
++          'chooseLocalCustomBackground', Promise.resolve(uploadResponse));
+ 
+       categoriesElement.$.uploadImageTile.click();
++      await handler.whenCalled('chooseLocalCustomBackground');
++      await microtasksFinished();
+ 
+       assertEquals(
+           1, metrics.count('NewTabPage.CustomizeChromeSidePanelAction'));
+--- a/chrome/test/data/webui/side_panel/customize_chrome/themes_test.ts
++++ b/chrome/test/data/webui/side_panel/customize_chrome/themes_test.ts
+@@ -11,7 +11,7 @@ import {CustomizeChromeApiProxy} from 'c
+ import type {ThemesElement} from 'chrome://customize-chrome-side-panel.top-chrome/themes.js';
+ import {CHROME_THEME_BACK_ELEMENT_ID, CHROME_THEME_ELEMENT_ID} from 'chrome://customize-chrome-side-panel.top-chrome/themes.js';
+ import {WindowProxy} from 'chrome://customize-chrome-side-panel.top-chrome/window_proxy.js';
+-import type {CrAutoImgElement} from 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
++import {CrAutoImgElement} from 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
+ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+ import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+@@ -53,6 +53,7 @@ suite('ThemesTest', () => {
+   let callbackRouterRemote: CustomizeChromePageRemote;
+   let handler: TestMock<CustomizeChromePageHandlerRemote>;
+   let metrics: MetricsTracker;
++  let originalSrcDescriptor: PropertyDescriptor|undefined;
+ 
+   async function setCollection(collectionName: string, numImages: number) {
+     handler.setResultFor('getBackgroundImages', Promise.resolve({
+@@ -63,6 +64,32 @@ suite('ThemesTest', () => {
+     await microtasksFinished();
+   }
+ 
++  suiteSetup(() => {
++    originalSrcDescriptor = Object.getOwnPropertyDescriptor(
++        CrAutoImgElement.prototype, 'src');
++    const nativeSrcDescriptor =
++        Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src')!;
++    // Keep fake URLs in auto-src without letting detached images report metrics
++    // in a later test.
++    Object.defineProperty(CrAutoImgElement.prototype, 'src', {
++      configurable: true,
++      get: originalSrcDescriptor?.get ?? nativeSrcDescriptor.get,
++      set(_src: string) {
++        // Tests dispatch load and error events to complete their own images.
++      },
++    });
++  });
++
++  suiteTeardown(() => {
++    document.body.innerHTML = window.trustedTypes!.emptyHTML;
++    if (originalSrcDescriptor) {
++      Object.defineProperty(
++          CrAutoImgElement.prototype, 'src', originalSrcDescriptor);
++    } else {
++      Reflect.deleteProperty(CrAutoImgElement.prototype, 'src');
++    }
++  });
++
+   setup(() => {
+     document.body.innerHTML = window.trustedTypes!.emptyHTML;
+     windowProxy = installMock(WindowProxy);
+@@ -394,12 +421,12 @@ suite('ThemesTest', () => {
+         const img = $$(themesElement, '.theme img');
+         assertTrue(!!img);
+ 
+-        const metricCount = metrics.count(
+-            'NewTabPage.BackgroundService.Images.Headers.ErrorDetected');
+-        if (metricCount !== numImages) {
+-          await eventToPromise('error', img);
+-          await microtasksFinished();
+-        }
++        assertEquals(
++            0,
++            metrics.count(
++                'NewTabPage.BackgroundService.Images.Headers.ErrorDetected'));
++        img.dispatchEvent(new Event('error'));
++        await microtasksFinished();
+ 
+         assertEquals(
+             numImages,

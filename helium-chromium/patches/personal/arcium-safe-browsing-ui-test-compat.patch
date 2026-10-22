@@ -1,0 +1,205 @@
+--- a/chrome/browser/safe_browsing/BUILD.gn
++++ b/chrome/browser/safe_browsing/BUILD.gn
+@@ -742,18 +742,19 @@
+     deps += [ "android:test_support" ]
+   }
+   if (is_win || is_mac || is_linux || is_chromeos) {
+-    sources += [
+-      "safe_browsing_pref_change_handler_unittest.cc",
+-      "security_settings_bundle_pref_change_handler_unittest.cc",
+-      "security_settings_bundle_toast_helper_unittest.cc",
+-    ]
+-
+-    deps += [
+-      "//chrome/browser/sync",
+-      "//chrome/browser/ui/tabs:test_support",
+-      "//chrome/browser/ui/toasts",
+-      "//testing/gmock",
+-    ]
++    if (safe_browsing_mode != 0) {
++      sources += [
++        "safe_browsing_pref_change_handler_unittest.cc",
++        "security_settings_bundle_pref_change_handler_unittest.cc",
++        "security_settings_bundle_toast_helper_unittest.cc",
++      ]
++      deps += [
++        "//chrome/browser/sync",
++        "//chrome/browser/ui/tabs:test_support",
++        "//chrome/browser/ui/toasts",
++        "//testing/gmock",
++      ]
++    }
+   }
+ }
+ 
+--- a/chrome/browser/safe_browsing/advanced_protection_status_manager_unittest.cc
++++ b/chrome/browser/safe_browsing/advanced_protection_status_manager_unittest.cc
+@@ -8,7 +8,6 @@
+ #include "base/test/task_environment.h"
+ #include "build/build_config.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/safe_browsing/core/common/safebrowsing_switches.h"
+ #include "components/signin/public/identity_manager/account_info.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+@@ -34,10 +33,6 @@
+ 
+ class AdvancedProtectionStatusManagerTest : public testing::Test {
+  public:
+-  AdvancedProtectionStatusManagerTest() {
+-    RegisterProfilePrefs(pref_service_.registry());
+-  }
+-
+   void SetUp() override {
+ #if BUILDFLAG(IS_ANDROID)
+     SetAdvancedProtectionStateForTesting(
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_view_browsertest.cc
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_view_browsertest.cc
+@@ -71,6 +71,7 @@
+ #include "components/permissions/permission_decision_auto_blocker.h"
+ #include "components/permissions/permissions_client.h"
+ #include "components/privacy_sandbox/privacy_sandbox_features.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/content/browser/password_protection/password_protection_test_util.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/safe_browsing/core/common/proto/csd.pb.h"
+@@ -475,6 +476,7 @@
+             OpenSiteSettingsForUrl(browser(), GURL(url::kAboutBlankURL)));
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Test opening page info bubble that matches
+ // SB_THREAT_TYPE_ENTERPRISE_PASSWORD_REUSE threat type.
+ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+@@ -553,7 +555,9 @@
+   EXPECT_EQ(security_state::MALICIOUS_CONTENT_STATUS_NONE,
+             visible_security_state->malicious_content_status);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Test opening page info bubble that matches
+ // SB_THREAT_TYPE_SAVED_PASSWORD_REUSE threat type.
+ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+@@ -630,6 +634,7 @@
+   EXPECT_EQ(security_state::MALICIOUS_CONTENT_STATUS_NONE,
+             visible_security_state->malicious_content_status);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
+                        ClosesOnUserNavigateToSamePage) {
+@@ -1192,6 +1197,7 @@
+     return browser()->tab_strip_model()->GetActiveWebContents();
+   }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void TriggerSafeBrowsingWarning() {
+     safe_browsing::ChromePasswordProtectionService* service =
+         safe_browsing::ChromePasswordProtectionService::
+@@ -1209,6 +1215,7 @@
+         safe_browsing::LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED,
+         "unused_token", reused_password_account_type);
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+  protected:
+   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
+@@ -1369,6 +1376,7 @@
+   base::RunLoop().RunUntilIdle();
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
+                        AboutThisSiteNotSecureAsync) {
+   auto url = https_server_.GetURL("a.test", "/title1.html");
+@@ -1400,6 +1408,7 @@
+       views::Widget::ClosedReason::kEscKeyPressed);
+   base::RunLoop().RunUntilIdle();
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that no info is shown and "kNotShownOptimizationGuideNotAllowed" is
+ // logged when hints fetching is disabled.
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_view_dialog_browsertest.cc
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_view_dialog_browsertest.cc
+@@ -46,6 +46,7 @@
+ #include "components/permissions/permissions_client.h"
+ #include "components/privacy_sandbox/canonical_topic.h"
+ #include "components/privacy_sandbox/privacy_sandbox_features.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/content/browser/password_protection/password_protection_test_util.h"
+ #include "components/safe_browsing/core/browser/password_protection/metrics_util.h"
+ #include "components/safe_browsing/core/common/features.h"
+@@ -197,10 +198,12 @@
+     constexpr char kMalware[] = "Malware";
+     constexpr char kDeceptive[] = "Deceptive";
+     constexpr char kUnwantedSoftware[] = "UnwantedSoftware";
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     constexpr char kSignInSyncPasswordReuse[] = "SignInSyncPasswordReuse";
+     constexpr char kSignInNonSyncPasswordReuse[] = "SignInNonSyncPasswordReuse";
+     constexpr char kEnterprisePasswordReuse[] = "EnterprisePasswordReuse";
+     constexpr char kSavedPasswordReuse[] = "SavedPasswordReuse";
++#endif
+     constexpr char kMalwareAndBadCert[] = "MalwareAndBadCert";
+     constexpr char kMixedContentForm[] = "MixedContentForm";
+     constexpr char kMixedContent[] = "MixedContent";
+@@ -241,7 +244,9 @@
+     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+     OpenPageInfoBubble(browser());
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     safe_browsing::ReusedPasswordAccountType reused_password_account_type;
++#endif
+     PageInfoUI::IdentityInfo identity;
+     if (name == kInsecure) {
+       identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_NO_CERT;
+@@ -270,6 +275,7 @@
+     } else if (name == kUnwantedSoftware) {
+       identity.safe_browsing_status =
+           PageInfo::SAFE_BROWSING_STATUS_UNWANTED_SOFTWARE;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     } else if (name == kSignInSyncPasswordReuse) {
+       reused_password_account_type.set_account_type(
+           safe_browsing::ReusedPasswordAccountType::GSUITE);
+@@ -294,6 +300,7 @@
+       identity.safe_browsing_status =
+           PageInfo::SAFE_BROWSING_STATUS_SAVED_PASSWORD_REUSE;
+       identity.show_change_password_buttons = true;
++#endif
+     } else if (name == kMalwareAndBadCert) {
+       identity.identity_status = PageInfo::SITE_IDENTITY_STATUS_ERROR;
+       identity.certificate = net::ImportCertFromFile(
+@@ -368,6 +375,7 @@
+                                     std::move(chosen_object_list));
+     }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     if (name == kSignInSyncPasswordReuse ||
+         name == kSignInNonSyncPasswordReuse ||
+         name == kEnterprisePasswordReuse || name == kSavedPasswordReuse) {
+@@ -379,6 +387,7 @@
+       identity.safe_browsing_details = service->GetWarningDetailText(
+           service->reused_password_account_type_for_last_shown_warning());
+     }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+     if (name == kSecureSubpage || name == kEvSecureSubpage) {
+       PageInfoBubbleView* bubble_view = static_cast<PageInfoBubbleView*>(
+@@ -536,6 +545,7 @@
+   ShowAndVerifyUi();
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Shows the Page Info bubble Safe Browsing warning after detecting the user has
+ // re-used an existing password on a site, e.g. due to phishing.
+ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
+@@ -566,6 +576,7 @@
+                        InvokeUi_EnterprisePasswordReuse) {
+   ShowAndVerifyUi();
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class PageInfoBubbleViewAboutThisSiteDialogBrowserTest
+     : public DialogBrowserTest {

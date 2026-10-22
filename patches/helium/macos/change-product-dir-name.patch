@@ -1,0 +1,17 @@
+--- a/chrome/common/chrome_paths_mac.mm
++++ b/chrome/common/chrome_paths_mac.mm
+@@ -32,13 +32,7 @@ char* ProductDirNameForBundle(NSBundle*
+     product_dir_name = [product_dir_name_ns fileSystemRepresentation];
+ 
+     if (!product_dir_name) {
+-#if BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+-      product_dir_name = "Google/Chrome for Testing";
+-#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
+-      product_dir_name = "Google/Chrome";
+-#else
+-      product_dir_name = "Chromium";
+-#endif
++      product_dir_name = "net.imput.helium";
+     }
+ 
+     // Leaked, but the only caller initializes a static with this result, so it

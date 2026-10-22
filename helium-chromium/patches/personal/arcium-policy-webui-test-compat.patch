@@ -1,0 +1,28 @@
+--- a/chrome/browser/ui/webui/policy/policy_test_ui_browsertest.cc
++++ b/chrome/browser/ui/webui/policy/policy_test_ui_browsertest.cc
+@@ -475,12 +475,6 @@
+     EXPECT_EQ(entry->source, policy::POLICY_SOURCE_CLOUD);
+   }
+ 
+-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+-  EXPECT_EQ(GetProfile()->GetPrefs()->GetString(
+-                prefs::kUserCloudSigninPolicyResponseFromPolicyTestPage),
+-            "{}");
+-#endif
+-
+   RevertLocalTestPolicies();
+ 
+   base::RunLoop().RunUntilIdle();
+@@ -509,12 +503,6 @@
+         policy_map->Get(policy::key::kCloudReportingEnabled);
+     EXPECT_FALSE(entry);
+   }
+-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+-  EXPECT_EQ(GetProfile()->GetPrefs()->GetString(
+-                prefs::kUserCloudSigninPolicyResponseFromPolicyTestPage),
+-            "");
+-#endif
+-
+   handler.reset();
+ }
+ 

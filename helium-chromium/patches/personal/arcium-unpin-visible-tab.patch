@@ -1,0 +1,48 @@
+--- src.orig/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
++++ src/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+@@ -102,8 +102,8 @@
+       &TabCollectionAnimatingLayoutManager::AnimateAndDestroyChildView,
+       base::Unretained(&layout_manager_.get())));
+   collection_node->set_attach_child_to_node(base::BindRepeating(
+-      &TabCollectionAnimatingLayoutManager::AnimateAndReparentView,
+-      base::Unretained(&layout_manager_.get())));
++      &UnpinnedTabContainerView::AttachTabView,
++      base::Unretained(this)));
+ 
+   node_destroyed_subscription_ = collection_node_->RegisterWillDestroyCallback(
+       base::BindOnce(&UnpinnedTabContainerView::ResetCollectionNode,
+@@ -111,6 +111,23 @@
+ }
+ 
+ UnpinnedTabContainerView::~UnpinnedTabContainerView() = default;
++
++void UnpinnedTabContainerView::AttachTabView(
++    std::unique_ptr<views::View> child,
++    const gfx::Rect& previous_bounds_in_screen) {
++  // Persistent Pins use a projected row and hide the native tab view. When
++  // that view returns to ordinary tabs, this container owns its visibility.
++  // A hidden source has no visible origin from which to animate.
++  const gfx::Rect visible_origin =
++      child->GetVisible() ? previous_bounds_in_screen : gfx::Rect();
++  if (auto* tab_view = views::AsViewClass<TabView>(child.get())) {
++    child->SetVisible(!tab_view->data().is_temporary);
++  } else {
++    child->SetVisible(true);
++  }
++  layout_manager_->AnimateAndReparentView(std::move(child), visible_origin);
++}
++
+ 
+ views::ProposedLayout UnpinnedTabContainerView::CalculateProposedLayout(
+     const views::SizeBounds& size_bounds) const {
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
+@@ -80,6 +80,8 @@
+                                const gfx::Rect& proposed_group_bounds,
+                                const gfx::Point& point_in_screen) const;
+ 
++  void AttachTabView(std::unique_ptr<views::View> child,
++                     const gfx::Rect& previous_bounds_in_screen);
+   void ResetCollectionNode();
+ 
+   raw_ptr<TabCollectionNode> collection_node_;

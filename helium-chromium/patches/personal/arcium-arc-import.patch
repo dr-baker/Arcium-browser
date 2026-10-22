@@ -1,0 +1,1830 @@
+Index: src/chrome/browser/importer/BUILD.gn
+===================================================================
+--- src.orig/chrome/browser/importer/BUILD.gn
++++ src/chrome/browser/importer/BUILD.gn
+@@ -6,6 +6,7 @@ assert(is_win || is_mac || is_linux || i
+ 
+ source_set("importer") {
+   sources = [
++    "arcium_arc_import.h",
+     "brave_external_process_importer_client.h",
+     "brave_external_process_importer_host.h",
+     "brave_in_process_importer_bridge.h",
+@@ -41,6 +42,7 @@ source_set("impl") {
+   public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+ 
+   sources = [
++    "arcium_arc_import.cc",
+     "brave_external_process_importer_client.cc",
+     "brave_external_process_importer_host.cc",
+     "brave_in_process_importer_bridge.cc",
+@@ -84,14 +86,20 @@ source_set("browser_tests") {
+   testonly = true
+   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+   sources = [
++    "arcium_arc_import_browsertest.cc",
+     "importer_unittest_utils.cc",
+     "importer_unittest_utils.h",
+   ]
+ 
+   deps = [
++    ":impl",
+     "//base",
++    "//chrome/browser/ui",
+     "//chrome/common/importer",
++    "//chrome/test:test_support",
++    "//components/tab_groups",
+     "//components/user_data_importer/common",
++    "//content/test:test_support",
+     "//testing/gtest",
+   ]
+ 
+Index: src/chrome/browser/importer/arcium_arc_import.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/importer/arcium_arc_import.cc
+@@ -0,0 +1,264 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/importer/arcium_arc_import.h"
++
++#include <map>
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/containers/span.h"
++#include "base/json/json_reader.h"
++#include "base/strings/strcat.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/arcium/tab_provenance.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_tabrestore.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/sessions/core/serialized_navigation_entry.h"
++#include "components/sessions/core/session_types.h"
++#include "components/tab_groups/tab_group_color.h"
++#include "components/tab_groups/tab_group_visual_data.h"
++#include "content/public/browser/web_contents.h"
++#include "url/gurl.h"
++
++namespace arcium {
++
++namespace {
++
++constexpr char kArcSource[] = "arc";
++
++struct ImportedTab {
++  std::string source_id;
++  std::string title;
++  GURL url;
++  std::string group_title;
++  bool group_collapsed = false;
++};
++
++struct ImportedSpace {
++  std::string id;
++  std::string name;
++  std::vector<ImportedTab> tabs;
++};
++
++struct Snapshot {
++  std::string source_profile;
++  std::vector<ImportedTab> favorites;
++  std::vector<ImportedSpace> spaces;
++};
++
++bool AppendNodes(const base::ListValue& nodes,
++                 const std::string& parent_path,
++                 std::vector<ImportedTab>* tabs) {
++  for (const base::Value& value : nodes) {
++    const base::DictValue* node = value.GetIfDict();
++    const std::string* type = node ? node->FindString("type") : nullptr;
++    const std::string* source_id =
++        node ? node->FindString("source_id") : nullptr;
++    const std::string* title = node ? node->FindString("title") : nullptr;
++    if (!type || !source_id || source_id->empty() || !title) {
++      return false;
++    }
++    if (*type == "tab") {
++      const std::string* url_value = node->FindString("url");
++      const GURL url(url_value ? *url_value : std::string());
++      if (!url.is_valid() || url.SchemeIs("arc")) {
++        return false;
++      }
++      tabs->push_back({
++          .source_id = *source_id,
++          .title = *title,
++          .url = url,
++          .group_title = parent_path,
++      });
++      continue;
++    }
++    if (*type != "folder") {
++      return false;
++    }
++    const base::ListValue* children = node->FindList("children");
++    const std::optional<bool> collapsed = node->FindBool("collapsed");
++    if (!children || !collapsed) {
++      return false;
++    }
++    const std::string folder_title = title->empty() ? "Folder" : *title;
++    const std::string path =
++        parent_path.empty() ? folder_title
++                            : base::StrCat({parent_path, " / ", folder_title});
++    const size_t first_child = tabs->size();
++    if (!AppendNodes(*children, path, tabs)) {
++      return false;
++    }
++    for (size_t i = first_child; i < tabs->size(); ++i) {
++      if ((*tabs)[i].group_title == path) {
++        (*tabs)[i].group_collapsed = *collapsed;
++      }
++    }
++  }
++  return true;
++}
++
++std::optional<Snapshot> ParseSnapshot(std::string_view snapshot_json) {
++  std::optional<base::Value> value =
++      base::JSONReader::Read(snapshot_json, base::JSON_PARSE_RFC);
++  const base::DictValue* root = value ? value->GetIfDict() : nullptr;
++  const std::optional<int> version =
++      root ? root->FindInt("version") : std::nullopt;
++  const std::string* source_profile =
++      root ? root->FindString("source_profile") : nullptr;
++  const base::ListValue* favorites =
++      root ? root->FindList("favorites") : nullptr;
++  const base::ListValue* spaces = root ? root->FindList("spaces") : nullptr;
++  if (version != 1 || !source_profile || source_profile->empty() ||
++      !favorites || !spaces) {
++    return std::nullopt;
++  }
++
++  Snapshot snapshot{.source_profile = *source_profile};
++  if (!AppendNodes(*favorites, "Favorites", &snapshot.favorites)) {
++    return std::nullopt;
++  }
++  for (const base::Value& value : *spaces) {
++    const base::DictValue* space = value.GetIfDict();
++    const std::string* id = space ? space->FindString("id") : nullptr;
++    const std::string* name = space ? space->FindString("name") : nullptr;
++    const std::string* profile =
++        space ? space->FindString("source_profile") : nullptr;
++    const base::ListValue* pins = space ? space->FindList("pins") : nullptr;
++    if (!id || id->empty() || !name || !profile ||
++        *profile != snapshot.source_profile || !pins) {
++      return std::nullopt;
++    }
++    ImportedSpace imported_space{.id = *id, .name = *name};
++    if (!AppendNodes(*pins, std::string(), &imported_space.tabs)) {
++      return std::nullopt;
++    }
++    snapshot.spaces.push_back(std::move(imported_space));
++  }
++  return snapshot;
++}
++
++Browser* GetOrCreateBrowser(helium::HeliumSpace* space,
++                            helium::HeliumSpaceService* service) {
++  if (BrowserWindowInterface* window = space->GetPrimaryBrowser()) {
++    return window->GetBrowserForMigrationOnly();
++  }
++  if (Browser::GetCreationStatusForProfile(space->profile()) !=
++          Browser::CreationStatus::kOk ||
++      space->profile()->ShutdownStarted()) {
++    return nullptr;
++  }
++  Browser::CreateParams params(Browser::TYPE_NORMAL, space->profile(), false);
++  params.should_trigger_session_restore = false;
++  Browser* browser = Browser::Create(params);
++  service->SetSpaceForBrowser(browser, space->id());
++  return browser;
++}
++
++void AddTabs(Browser* browser,
++             const std::string& source_profile,
++             const std::vector<ImportedTab>& tabs) {
++  std::map<std::string, std::vector<int>> group_indices;
++  std::map<std::string, bool> group_collapsed;
++  for (const ImportedTab& tab : tabs) {
++    sessions::SerializedNavigationEntry navigation;
++    navigation.set_index(0);
++    navigation.set_virtual_url(tab.url);
++    navigation.set_title(base::UTF8ToUTF16(tab.title));
++    content::WebContents* contents = chrome::AddRestoredTab(
++        browser, base::span_from_ref(navigation),
++        browser->tab_strip_model()->count(), 0, std::string(), std::nullopt,
++        false, false, base::TimeTicks(), base::Time(), nullptr,
++        sessions::SerializedUserAgentOverride(), {}, true, false);
++    TabProvenance::Set(contents, kArcSource, source_profile, tab.source_id);
++    if (!tab.group_title.empty()) {
++      group_indices[tab.group_title].push_back(
++          browser->tab_strip_model()->GetIndexOfWebContents(contents));
++      group_collapsed[tab.group_title] = tab.group_collapsed;
++    }
++  }
++  for (const auto& [title, indices] : group_indices) {
++    const tab_groups::TabGroupId group =
++        browser->tab_strip_model()->AddToNewGroup(indices);
++    browser->tab_strip_model()->ChangeTabGroupVisuals(
++        group, tab_groups::TabGroupVisualData(
++                   base::UTF8ToUTF16(title), tab_groups::TabGroupColorId::kGrey,
++                   group_collapsed[title]));
++  }
++}
++
++std::vector<content::WebContents*> ImportedContents(
++    Browser* browser,
++    const std::string& source_profile) {
++  std::vector<content::WebContents*> result;
++  for (int index = 0; index < browser->tab_strip_model()->count(); ++index) {
++    content::WebContents* contents =
++        browser->tab_strip_model()->GetWebContentsAt(index);
++    const TabProvenance* provenance = TabProvenance::FromWebContents(contents);
++    if (provenance && provenance->source() == kArcSource &&
++        provenance->collection_id() == source_profile) {
++      result.push_back(contents);
++    }
++  }
++  return result;
++}
++
++}  // namespace
++
++bool ImportArcSidebarSnapshot(Profile* profile,
++                              std::string_view snapshot_json) {
++  std::optional<Snapshot> snapshot = ParseSnapshot(snapshot_json);
++  helium::HeliumSpaceService* service =
++      profile ? helium::HeliumSpaceServiceFactory::GetForProfile(profile)
++              : nullptr;
++  if (!snapshot || !service) {
++    return false;
++  }
++
++  std::map<std::string, std::vector<ImportedTab>> tabs_by_space;
++  for (const ImportedSpace& imported : snapshot->spaces) {
++    tabs_by_space[imported.id] = imported.tabs;
++    service->GetOrCreateSpace(imported.id, base::UTF8ToUTF16(imported.name));
++  }
++  const std::string favorites_space_id = snapshot->spaces.empty()
++                                             ? service->GetDefaultSpace()->id()
++                                             : snapshot->spaces.front().id;
++  auto& favorites_destination = tabs_by_space[favorites_space_id];
++  favorites_destination.insert(favorites_destination.begin(),
++                               snapshot->favorites.begin(),
++                               snapshot->favorites.end());
++
++  for (helium::HeliumSpace* space : service->GetSpaces()) {
++    BrowserWindowInterface* existing_window = space->GetPrimaryBrowser();
++    Browser* browser = existing_window
++                           ? existing_window->GetBrowserForMigrationOnly()
++                           : nullptr;
++    std::vector<content::WebContents*> old_tabs =
++        browser ? ImportedContents(browser, snapshot->source_profile)
++                : std::vector<content::WebContents*>();
++    const auto replacement = tabs_by_space.find(space->id());
++    if (replacement != tabs_by_space.end() && !replacement->second.empty()) {
++      browser = browser ? browser : GetOrCreateBrowser(space, service);
++      if (!browser) {
++        return false;
++      }
++      AddTabs(browser, snapshot->source_profile, replacement->second);
++    }
++    if (browser && !old_tabs.empty()) {
++      browser->tab_strip_model()->CloseWebContentses(old_tabs, CLOSE_NONE,
++                                                     nullptr);
++    }
++  }
++  return true;
++}
++
++}  // namespace arcium
+Index: src/chrome/browser/importer/arcium_arc_import.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/importer/arcium_arc_import.h
+@@ -0,0 +1,20 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_IMPORTER_ARCIUM_ARC_IMPORT_H_
++#define CHROME_BROWSER_IMPORTER_ARCIUM_ARC_IMPORT_H_
++
++#include <string_view>
++
++class Profile;
++
++namespace arcium {
++
++// Validates and reconciles an Arc sidebar snapshot as unloaded normal tabs
++// and native tab groups. Returns false without mutation for malformed input.
++bool ImportArcSidebarSnapshot(Profile* profile, std::string_view snapshot_json);
++
++}  // namespace arcium
++
++#endif  // CHROME_BROWSER_IMPORTER_ARCIUM_ARC_IMPORT_H_
+Index: src/chrome/browser/importer/external_process_importer_client.cc
+===================================================================
+--- src.orig/chrome/browser/importer/external_process_importer_client.cc
++++ src/chrome/browser/importer/external_process_importer_client.cc
+@@ -186,6 +186,13 @@ void ExternalProcessImporterClient::OnBo
+     bridge_->AddBookmarks(bookmarks_, bookmarks_first_folder_name_);
+ }
+ 
++void ExternalProcessImporterClient::OnArcSidebarSnapshotReady(
++    const std::string& snapshot_json) {
++  if (!cancelled_) {
++    bridge_->AddArcSidebarSnapshot(snapshot_json);
++  }
++}
++
+ void ExternalProcessImporterClient::OnFaviconsImportStart(
+     uint32_t total_favicons_count) {
+   if (cancelled_)
+Index: src/chrome/browser/importer/external_process_importer_client.h
+===================================================================
+--- src.orig/chrome/browser/importer/external_process_importer_client.h
++++ src/chrome/browser/importer/external_process_importer_client.h
+@@ -68,6 +68,7 @@ class ExternalProcessImporterClient
+   void OnBookmarksImportGroup(
+       const std::vector<user_data_importer::ImportedBookmarkEntry>&
+           bookmarks_group) override;
++  void OnArcSidebarSnapshotReady(const std::string& snapshot_json) override;
+   void OnFaviconsImportStart(uint32_t total_favicons_count) override;
+   void OnFaviconsImportGroup(
+       const favicon_base::FaviconUsageDataList& favicons_group) override;
+Index: src/chrome/browser/importer/in_process_importer_bridge.cc
+===================================================================
+--- src.orig/chrome/browser/importer/in_process_importer_bridge.cc
++++ src/chrome/browser/importer/in_process_importer_bridge.cc
+@@ -115,6 +115,11 @@ void InProcessImporterBridge::AddBookmar
+   writer_->AddBookmarks(bookmarks, first_folder_name);
+ }
+ 
++void InProcessImporterBridge::AddArcSidebarSnapshot(
++    const std::string& snapshot_json) {
++  writer_->AddArcSidebarSnapshot(snapshot_json);
++}
++
+ void InProcessImporterBridge::AddHomePage(const GURL& home_page) {
+   writer_->AddHomepage(home_page);
+ }
+Index: src/chrome/browser/importer/in_process_importer_bridge.h
+===================================================================
+--- src.orig/chrome/browser/importer/in_process_importer_bridge.h
++++ src/chrome/browser/importer/in_process_importer_bridge.h
+@@ -33,6 +33,7 @@ class InProcessImporterBridge : public I
+   void AddBookmarks(
+       const std::vector<user_data_importer::ImportedBookmarkEntry>& bookmarks,
+       const std::u16string& first_folder_name) override;
++  void AddArcSidebarSnapshot(const std::string& snapshot_json) override;
+ 
+   void AddHomePage(const GURL& home_page) override;
+ 
+Index: src/chrome/browser/importer/profile_writer.cc
+===================================================================
+--- src.orig/chrome/browser/importer/profile_writer.cc
++++ src/chrome/browser/importer/profile_writer.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/importer/profile_writer.h"
+ 
++#include "chrome/browser/importer/arcium_arc_import.h"
++
+ #include <stddef.h>
+ 
+ #include <algorithm>
+@@ -226,6 +228,11 @@ void ProfileWriter::AddBookmarks(
+     ShowBookmarkBar(profile_);
+ }
+ 
++void ProfileWriter::AddArcSidebarSnapshot(
++    const std::string& snapshot_json) {
++  arcium::ImportArcSidebarSnapshot(profile_, snapshot_json);
++}
++
+ void ProfileWriter::AddFavicons(
+     const favicon_base::FaviconUsageDataList& favicons) {
+   FaviconServiceFactory::GetForProfile(profile_,
+Index: src/chrome/browser/importer/profile_writer.h
+===================================================================
+--- src.orig/chrome/browser/importer/profile_writer.h
++++ src/chrome/browser/importer/profile_writer.h
+@@ -74,6 +74,7 @@ class ProfileWriter : public base::RefCo
+   virtual void AddBookmarks(
+       const std::vector<user_data_importer::ImportedBookmarkEntry>& bookmarks,
+       const std::u16string& top_level_folder_name);
++  virtual void AddArcSidebarSnapshot(const std::string& snapshot_json);
+ 
+   virtual void AddFavicons(const favicon_base::FaviconUsageDataList& favicons);
+ 
+Index: src/chrome/common/importer/importer_bridge.cc
+===================================================================
+--- src.orig/chrome/common/importer/importer_bridge.cc
++++ src/chrome/common/importer/importer_bridge.cc
+@@ -7,3 +7,5 @@
+ ImporterBridge::ImporterBridge() = default;
+ 
+ ImporterBridge::~ImporterBridge() = default;
++
++void ImporterBridge::AddArcSidebarSnapshot(const std::string& snapshot_json) {}
+Index: src/chrome/common/importer/importer_bridge.h
+===================================================================
+--- src.orig/chrome/common/importer/importer_bridge.h
++++ src/chrome/common/importer/importer_bridge.h
+@@ -32,6 +32,8 @@ class ImporterBridge : public base::RefC
+       const std::vector<user_data_importer::ImportedBookmarkEntry>& bookmarks,
+       const std::u16string& first_folder_name) = 0;
+ 
++  virtual void AddArcSidebarSnapshot(const std::string& snapshot_json);
++
+   virtual void AddHomePage(const GURL& home_page) = 0;
+ 
+   virtual void SetFavicons(
+Index: src/chrome/common/importer/profile_import.mojom
+===================================================================
+--- src.orig/chrome/common/importer/profile_import.mojom
++++ src/chrome/common/importer/profile_import.mojom
+@@ -73,6 +73,7 @@ interface ProfileImportObserver {
+       mojo_base.mojom.String16 first_folder_name,
+       uint32 total_bookmarks_count);
+   OnBookmarksImportGroup(array<ImportedBookmarkEntry> bookmarks_group);
++  OnArcSidebarSnapshotReady(string snapshot_json);
+   OnFaviconsImportStart(uint32 total_favicons_count);
+   OnFaviconsImportGroup(FaviconUsageDataList favicons_group);
+   OnPasswordFormImportReady(ImportedPasswordForm form);
+Index: src/chrome/utility/BUILD.gn
+===================================================================
+--- src.orig/chrome/utility/BUILD.gn
++++ src/chrome/utility/BUILD.gn
+@@ -92,14 +92,16 @@ static_library("utility") {
+ 
+   if (!is_android) {
+     sources += [
++      "importer/arc_sidebar_importer.cc",
++      "importer/arc_sidebar_importer.h",
++      "importer/arc_sidebar_snapshot.cc",
++      "importer/arc_sidebar_snapshot.h",
+       "importer/bookmarks_file_importer.cc",
+       "importer/bookmarks_file_importer.h",
+       "importer/brave_external_process_importer_bridge.cc",
+       "importer/brave_external_process_importer_bridge.h",
+       "importer/brave_profile_import_impl.cc",
+       "importer/brave_profile_import_impl.h",
+-      "importer/arc_sidebar_importer.cc",
+-      "importer/arc_sidebar_importer.h",
+       "importer/chrome_importer.cc",
+       "importer/chrome_importer.h",
+       "importer/external_process_importer_bridge.cc",
+@@ -268,10 +270,27 @@ static_library("utility") {
+ }
+ 
+ if (!is_android) {
++  executable("arc_sidebar_snapshot_tests") {
++    testonly = true
++    sources = [
++      "importer/arc_sidebar_snapshot.cc",
++      "importer/arc_sidebar_snapshot_unittest.cc",
++    ]
++    deps = [
++      "//base",
++      "//testing/gtest",
++      "//testing/gtest:gtest_main",
++      "//url",
++    ]
++  }
++
+   source_set("unit_tests") {
+     testonly = true
+ 
+-    sources = [ "importer/bookmarks_file_importer_unittest.cc" ]
++    sources = [
++      "importer/arc_sidebar_snapshot_unittest.cc",
++      "importer/bookmarks_file_importer_unittest.cc",
++    ]
+     if (!is_chromeos) {
+       sources += [ "importer/firefox_importer_unittest.cc" ]
+     }
+Index: src/chrome/utility/importer/arc_sidebar_importer.cc
+===================================================================
+--- src.orig/chrome/utility/importer/arc_sidebar_importer.cc
++++ src/chrome/utility/importer/arc_sidebar_importer.cc
+@@ -4,206 +4,16 @@
+ 
+ #include "chrome/utility/importer/arc_sidebar_importer.h"
+ 
+-#include <map>
++#include <array>
+ #include <optional>
+ #include <string>
+-#include <unordered_set>
+-#include <vector>
+ 
+ #include "base/files/file_util.h"
+ #include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
+ #include "base/logging.h"
+-#include "base/strings/utf_string_conversions.h"
+-#include "base/time/time.h"
+-#include "base/values.h"
+ #include "chrome/common/importer/importer_bridge.h"
+-#include "chrome/grit/generated_resources.h"
+-#include "components/user_data_importer/common/imported_bookmark_entry.h"
+-#include "components/user_data_importer/common/importer_data_types.h"
+-#include "ui/base/l10n/l10n_util.h"
+-#include "url/gurl.h"
+-
+-namespace {
+-
+-// macOS CFAbsoluteTime epoch: 2001-01-01 00:00:00 UTC
+-// Unix epoch offset: 978307200 seconds between 1970-01-01 and 2001-01-01.
+-constexpr double kCFAbsoluteTimeToUnixOffset = 978307200.0;
+-
+-base::Time CFAbsoluteTimeToBaseTime(double cf_time) {
+-  return base::Time::FromSecondsSinceUnixEpoch(cf_time +
+-                                               kCFAbsoluteTimeToUnixOffset);
+-}
+-
+-// Represents a parsed sidebar item from StorableSidebar.json.
+-struct ArcSidebarItem {
+-  std::string id;
+-  std::string title;
+-  std::string saved_url;
+-  std::string saved_title;
+-  double created_at = 0;
+-  std::vector<std::string> children_ids;
+-  bool is_container = false;
+-};
+-
+-// Parse the flat item list from the sidebar JSON into a map of id -> item.
+-// The items array alternates between id strings and item objects:
+-//   ["id1", {item1}, "id2", {item2}, ...]
+-std::map<std::string, ArcSidebarItem> ParseItems(
+-    const base::ListValue& items_list) {
+-  std::map<std::string, ArcSidebarItem> items;
+-
+-  for (size_t i = 0; i + 1 < items_list.size(); i += 2) {
+-    const auto* id_str = items_list[i].GetIfString();
+-    const auto* dict = items_list[i + 1].GetIfDict();
+-    if (!id_str || !dict) {
+-      continue;
+-    }
+-
+-    ArcSidebarItem item;
+-    item.id = *id_str;
+-
+-    if (const auto* title = dict->FindString("title")) {
+-      item.title = *title;
+-    }
+-
+-    if (auto created = dict->FindDouble("createdAt")) {
+-      item.created_at = *created;
+-    }
+-
+-    if (const auto* children = dict->FindList("childrenIds")) {
+-      for (const auto& child : *children) {
+-        if (const auto* child_str = child.GetIfString()) {
+-          item.children_ids.push_back(*child_str);
+-        }
+-      }
+-    }
+-
+-    // Check if this is a tab (has URL) or a container.
+-    const auto* data = dict->FindDict("data");
+-    const auto* tab = data ? data->FindDict("tab") : nullptr;
+-    const auto* container = data ? data->FindDict("itemContainer") : nullptr;
+-
+-    if (tab) {
+-      if (const auto* url = tab->FindString("savedURL")) {
+-        item.saved_url = *url;
+-      }
+-
+-      if (const auto* title = tab->FindString("savedTitle")) {
+-        item.saved_title = *title;
+-      }
+-    } else if (container) {
+-      item.is_container = true;
+-    }
+-
+-    items[item.id] = std::move(item);
+-  }
+-  return items;
+-}
+-
+-void WalkItem(const std::string& item_id,
+-              const std::map<std::string, ArcSidebarItem>& items,
+-              const std::vector<std::u16string>& path,
+-              bool in_toolbar,
+-              std::vector<user_data_importer::ImportedBookmarkEntry>* bookmarks,
+-              std::unordered_set<std::string>& visited) {
+-  if (!visited.insert(item_id).second) {
+-    return;
+-  }
+-
+-  auto it = items.find(item_id);
+-  if (it == items.end()) {
+-    return;
+-  }
+-
+-  const ArcSidebarItem& item = it->second;
+-  if (item.saved_url.starts_with("arc://")) {
+-    return;
+-  }
+-
+-  bool is_folder = item.saved_url.empty() && !item.children_ids.empty() &&
+-                   !item.is_container;
+-
+-  if (!item.saved_url.empty()) {
+-    user_data_importer::ImportedBookmarkEntry entry;
+-    entry.in_toolbar = in_toolbar;
+-    entry.is_folder = false;
+-    entry.url = GURL(item.saved_url);
+-    entry.path = path;
+-    entry.title =
+-        base::UTF8ToUTF16(!item.title.empty() ? item.title : item.saved_title);
+-    if (item.created_at > 0) {
+-      entry.creation_time = CFAbsoluteTimeToBaseTime(item.created_at);
+-    }
+-    bookmarks->push_back(std::move(entry));
+-  } else if (is_folder) {
+-    std::string folder_name = item.title;
+-    if (folder_name.empty()) {
+-      folder_name = item.saved_title;
+-    }
+-    if (folder_name.empty()) {
+-      folder_name = "Folder";
+-    }
+-
+-    std::vector<std::u16string> child_path = path;
+-    child_path.push_back(base::UTF8ToUTF16(folder_name));
+-    for (const auto& child_id : item.children_ids) {
+-      WalkItem(child_id, items, child_path, in_toolbar, bookmarks, visited);
+-    }
+-    return;
+-  }
+-
+-  // For containers, just recurse into children.
+-  if (item.is_container) {
+-    for (const auto& child_id : item.children_ids) {
+-      WalkItem(child_id, items, path, in_toolbar, bookmarks, visited);
+-    }
+-  }
+-}
+-
+-struct SpaceInfo {
+-  std::string id;
+-  std::string pinned_container_id;
+-};
+-
+-// Parse the spaces list from the sidebar data container.
+-// Spaces alternate: ["spaceId", {spaceObj}, ...] and each space has
+-// containerIDs: ["pinned", "<id>", "unpinned", "<id>"].
+-std::vector<SpaceInfo> ParseSpaces(const base::ListValue* spaces_list) {
+-  std::vector<SpaceInfo> spaces;
+-  if (!spaces_list) {
+-    return spaces;
+-  }
+-
+-  for (size_t i = 0; i + 1 < spaces_list->size(); i += 2) {
+-    const auto* space_id = (*spaces_list)[i].GetIfString();
+-    const auto* space_dict = (*spaces_list)[i + 1].GetIfDict();
+-    if (!space_id || !space_dict) {
+-      continue;
+-    }
+-
+-    SpaceInfo space;
+-    space.id = *space_id;
+-
+-    const auto* container_ids = space_dict->FindList("containerIDs");
+-    if (container_ids) {
+-      for (size_t j = 0; j + 1 < container_ids->size(); j += 2) {
+-        const auto* label = (*container_ids)[j].GetIfString();
+-        const auto* cid = (*container_ids)[j + 1].GetIfString();
+-        if (!label || !cid) {
+-          continue;
+-        }
+-        if (*label == "pinned") {
+-          space.pinned_container_id = *cid;
+-        }
+-      }
+-    }
+-
+-    spaces.push_back(std::move(space));
+-  }
+-  return spaces;
+-}
+-
+-}  // namespace
++#include "chrome/utility/importer/arc_sidebar_snapshot.h"
+ 
+ ArcSidebarImporter::ArcSidebarImporter() = default;
+ 
+@@ -218,13 +28,11 @@ base::FilePath ArcSidebarImporter::GetSt
+       source_path_.DirName().Append(kStorableSidebarFilename),
+       source_path_.Append(kStorableSidebarFilename),
+   };
+-
+   for (const auto& path : sidebar_paths) {
+     if (base::PathExists(path)) {
+       return path;
+     }
+   }
+-
+   return {};
+ }
+ 
+@@ -232,117 +40,44 @@ std::optional<base::DictValue> ArcSideba
+     base::FilePath path) const {
+   std::string sidebar_content;
+   if (!base::ReadFileToString(path, &sidebar_content)) {
+-    LOG(WARNING) << "failed to read arc data";
++    LOG(WARNING) << "failed to read Arc sidebar data";
+     return std::nullopt;
+   }
+-
+   std::optional<base::DictValue> root = base::JSONReader::ReadDict(
+       sidebar_content, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+-  if (!root) {
+-    LOG(WARNING) << "failed to parse arc data";
++  if (!root || !root->FindDict("sidebar")) {
++    LOG(WARNING) << "failed to parse Arc sidebar data";
+     return std::nullopt;
+   }
+-
+-  if (!root->FindDict("sidebar")) {
+-    return std::nullopt;
+-  }
+-
+   return root;
+ }
+ 
+ void ArcSidebarImporter::ImportBookmarksImpl() {
+-  base::FilePath path = GetStorableSidebarPath();
++  const base::FilePath path = GetStorableSidebarPath();
+   if (path.empty()) {
+     return;
+   }
+-
+-  auto root = LoadSidebarData(path);
+-  if (!root) {
++  std::optional<base::DictValue> root = LoadSidebarData(path);
++  if (!root || cancelled()) {
+     return;
+   }
+-
+-  const auto* sidebar = root->FindDict("sidebar");
+-  const auto* containers = sidebar->FindList("containers");
+-  if (!containers || containers->size() < 2) {
++  std::optional<arcium::ArcSidebarSnapshot> snapshot =
++      arcium::ParseArcSidebarSnapshot(*root,
++                                      source_path_.BaseName().AsUTF8Unsafe());
++  if (!snapshot) {
+     return;
+   }
+-
+-  const auto* data_container = (*containers)[1].GetIfDict();
+-  if (!data_container) {
++  std::string snapshot_json;
++  if (!base::JSONWriter::Write(snapshot->ToDict(), &snapshot_json)) {
++    LOG(WARNING) << "failed to serialize Arc sidebar snapshot";
+     return;
+   }
+-
+-  const auto* items_list = data_container->FindList("items");
+-  if (!items_list) {
+-    return;
+-  }
+-
+-  auto items = ParseItems(*items_list);
+-  if (items.empty()) {
+-    return;
+-  }
+-
+-  auto spaces = ParseSpaces(data_container->FindList("spaces"));
+-  std::unordered_set<std::string> visited_ids;
+-  std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks;
+-  const auto* top_apps_ids = data_container->FindList("topAppsContainerIDs");
+-  if (top_apps_ids) {
+-    for (size_t i = 0; i + 1 < top_apps_ids->size(); i += 2) {
+-      const auto* id = (*top_apps_ids)[i + 1].GetIfString();
+-      if (!id) {
+-        continue;
+-      }
+-      auto it = items.find(*id);
+-      if (it != items.end()) {
+-        std::vector<std::u16string> path_parts;
+-        for (const auto& child_id : it->second.children_ids) {
+-          WalkItem(child_id, items, path_parts, /*in_toolbar=*/true, &bookmarks,
+-                   visited_ids);
+-        }
+-      }
+-      break;
+-    }
+-  }
+-
+-  bool multiple_spaces = spaces.size() > 1;
+-
+-  for (const auto& space : spaces) {
+-    if (space.pinned_container_id.empty()) {
+-      continue;
+-    }
+-
+-    auto it = items.find(space.pinned_container_id);
+-    if (it == items.end() || it->second.children_ids.empty()) {
+-      continue;
+-    }
+-
+-    std::vector<std::u16string> path_parts;
+-    if (multiple_spaces) {
+-      std::string space_name = space.id;
+-      if (space_name.contains("defaultPersonalSpaceID")) {
+-        space_name = "Personal";
+-      }
+-      path_parts.push_back(base::UTF8ToUTF16(space_name));
+-    }
+-
+-    for (const auto& child_id : it->second.children_ids) {
+-      WalkItem(child_id, items, path_parts, /*in_toolbar=*/false, &bookmarks,
+-               visited_ids);
+-    }
+-  }
+-
+-  if (!bookmarks.empty() && !cancelled()) {
+-    bridge_->AddBookmarks(
+-        bookmarks, l10n_util::GetStringFUTF16(IDS_IMPORTED_FROM_BOOKMARK_FOLDER,
+-                                              importer_name_));
+-  }
++  bridge_->AddArcSidebarSnapshot(snapshot_json);
+ }
+ 
+ void ArcSidebarImporter::ImportBookmarks() {
+-  // Only call the base class if the Chromium Bookmarks file exists — Arc
+-  // typically doesn't have one, and ScopedCopyFile DCHECKs on missing files.
+-  base::FilePath bookmarks_path = source_path_.Append(
+-      base::FilePath::StringType(FILE_PATH_LITERAL("Bookmarks")));
++  const base::FilePath bookmarks_path =
++      source_path_.Append(FILE_PATH_LITERAL("Bookmarks"));
+   if (base::PathExists(bookmarks_path)) {
+     ChromeImporter::ImportBookmarks();
+   }
+Index: src/chrome/utility/importer/arc_sidebar_snapshot.cc
+===================================================================
+--- /dev/null
++++ src/chrome/utility/importer/arc_sidebar_snapshot.cc
+@@ -0,0 +1,377 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/utility/importer/arc_sidebar_snapshot.h"
++
++#include <map>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <unordered_set>
++#include <utility>
++#include <vector>
++
++#include "base/values.h"
++#include "url/gurl.h"
++
++namespace arcium {
++
++namespace {
++
++enum class RawItemKind {
++  kUnknown,
++  kTab,
++  kFolder,
++  kContainer,
++  kSplitView,
++};
++
++struct RawItem {
++  std::string id;
++  std::string title;
++  std::string saved_title;
++  std::string saved_url;
++  bool collapsed = false;
++  std::vector<std::string> children_ids;
++  RawItemKind kind = RawItemKind::kUnknown;
++};
++
++enum class WalkMode {
++  kFavorites,
++  kPins,
++};
++
++std::optional<bool> FindCollapsed(const base::DictValue& item,
++                                  const base::DictValue* kind_data) {
++  if (std::optional<bool> collapsed = item.FindBool("collapsed")) {
++    return collapsed;
++  }
++  if (std::optional<bool> collapsed = item.FindBool("isCollapsed")) {
++    return collapsed;
++  }
++  if (kind_data) {
++    if (std::optional<bool> collapsed = kind_data->FindBool("collapsed")) {
++      return collapsed;
++    }
++    if (std::optional<bool> collapsed = kind_data->FindBool("isCollapsed")) {
++      return collapsed;
++    }
++  }
++  return std::nullopt;
++}
++
++std::map<std::string, RawItem> ParseItems(const base::ListValue& item_values) {
++  std::map<std::string, RawItem> items;
++  for (size_t i = 0; i + 1 < item_values.size(); i += 2) {
++    const std::string* id = item_values[i].GetIfString();
++    const base::DictValue* value = item_values[i + 1].GetIfDict();
++    if (!id || id->empty() || !value) {
++      continue;
++    }
++
++    RawItem item;
++    item.id = *id;
++    if (const std::string* title = value->FindString("title")) {
++      item.title = *title;
++    }
++    if (const base::ListValue* child_values = value->FindList("childrenIds")) {
++      item.children_ids.reserve(child_values->size());
++      for (const base::Value& child_value : *child_values) {
++        if (const std::string* child_id = child_value.GetIfString()) {
++          item.children_ids.push_back(*child_id);
++        }
++      }
++    }
++
++    const base::DictValue* data = value->FindDict("data");
++    const base::DictValue* kind_data = nullptr;
++    if (data) {
++      if (const base::DictValue* tab = data->FindDict("tab")) {
++        item.kind = RawItemKind::kTab;
++        kind_data = tab;
++        if (const std::string* url = tab->FindString("savedURL")) {
++          item.saved_url = *url;
++        }
++        if (const std::string* title = tab->FindString("savedTitle")) {
++          item.saved_title = *title;
++        }
++      } else if (const base::DictValue* list = data->FindDict("list")) {
++        item.kind = RawItemKind::kFolder;
++        kind_data = list;
++      } else if (const base::DictValue* tab_group =
++                     data->FindDict("tabGroup")) {
++        item.kind = RawItemKind::kFolder;
++        kind_data = tab_group;
++        if (const std::string* title = tab_group->FindString("title")) {
++          item.title = *title;
++        }
++      } else if (const base::DictValue* container =
++                     data->FindDict("itemContainer")) {
++        item.kind = RawItemKind::kContainer;
++        kind_data = container;
++      } else if (const base::DictValue* split_view =
++                     data->FindDict("splitView")) {
++        item.kind = RawItemKind::kSplitView;
++        kind_data = split_view;
++      }
++    }
++    item.collapsed = FindCollapsed(*value, kind_data).value_or(false);
++    items.insert_or_assign(item.id, std::move(item));
++  }
++  return items;
++}
++
++std::string ParseProfileDirectory(const base::DictValue* profile) {
++  if (!profile) {
++    return {};
++  }
++  if (profile->FindBool("default").value_or(false)) {
++    return "Default";
++  }
++
++  const base::DictValue* custom = profile->FindDict("custom");
++  if (!custom) {
++    return {};
++  }
++  const base::DictValue* payload = custom->FindDict("_0");
++  if (!payload) {
++    payload = custom;
++  }
++  const std::string* directory = payload->FindString("directoryBasename");
++  return directory ? *directory : std::string();
++}
++
++const base::DictValue* FindSidebarData(const base::DictValue& root) {
++  const base::DictValue* sidebar = root.FindDict("sidebar");
++  const base::ListValue* containers =
++      sidebar ? sidebar->FindList("containers") : nullptr;
++  if (!containers) {
++    return nullptr;
++  }
++
++  for (const base::Value& container_value : *containers) {
++    const base::DictValue* container = container_value.GetIfDict();
++    if (container && container->FindList("items")) {
++      return container;
++    }
++  }
++  return nullptr;
++}
++
++std::string DisplayTitle(const RawItem& item) {
++  return item.title.empty() ? item.saved_title : item.title;
++}
++
++void AppendNodes(const std::string& item_id,
++                 WalkMode mode,
++                 const std::map<std::string, RawItem>& items,
++                 std::unordered_set<std::string>* ancestors,
++                 std::vector<ArcSidebarNode>* output) {
++  const auto item_it = items.find(item_id);
++  if (item_it == items.end() || !ancestors->insert(item_id).second) {
++    return;
++  }
++
++  const RawItem& item = item_it->second;
++  switch (item.kind) {
++    case RawItemKind::kTab: {
++      const GURL url(item.saved_url);
++      if (url.is_valid() && !url.SchemeIs("arc")) {
++        output->push_back(ArcSidebarNode{
++            .type = ArcSidebarNode::Type::kTab,
++            .source_id = item.id,
++            .title = DisplayTitle(item),
++            .url = url.spec(),
++        });
++      }
++      break;
++    }
++    case RawItemKind::kFolder: {
++      if (mode == WalkMode::kFavorites) {
++        // Favorites are profile-wide tabs in Helium. If a synced Arc snapshot
++        // contains a structural wrapper here, retain its tab order without
++        // emitting a folder that the normalized model cannot represent.
++        for (const std::string& child_id : item.children_ids) {
++          AppendNodes(child_id, mode, items, ancestors, output);
++        }
++        break;
++      }
++
++      ArcSidebarNode folder{
++          .type = ArcSidebarNode::Type::kFolder,
++          .source_id = item.id,
++          .title = DisplayTitle(item),
++          .collapsed = item.collapsed,
++      };
++      for (const std::string& child_id : item.children_ids) {
++        AppendNodes(child_id, mode, items, ancestors, &folder.children);
++      }
++      output->push_back(std::move(folder));
++      break;
++    }
++    case RawItemKind::kUnknown:
++    case RawItemKind::kContainer:
++    case RawItemKind::kSplitView:
++      // Arc split views have presentation metadata but Helium's normalized
++      // model has no split node. Flatten their children at the split's exact
++      // position so tabs and folders retain relative sidebar order.
++      for (const std::string& child_id : item.children_ids) {
++        AppendNodes(child_id, mode, items, ancestors, output);
++      }
++      break;
++  }
++
++  ancestors->erase(item_id);
++}
++
++std::string FindPinnedContainerId(const base::DictValue& space) {
++  const base::ListValue* container_ids = space.FindList("containerIDs");
++  if (!container_ids) {
++    return {};
++  }
++  for (size_t i = 0; i + 1 < container_ids->size(); i += 2) {
++    const std::string* kind = (*container_ids)[i].GetIfString();
++    const std::string* id = (*container_ids)[i + 1].GetIfString();
++    if (kind && id && *kind == "pinned") {
++      return *id;
++    }
++  }
++  return {};
++}
++
++void ParseFavorites(const base::DictValue& sidebar_data,
++                    std::string_view source_profile_directory,
++                    const std::map<std::string, RawItem>& items,
++                    std::vector<ArcSidebarNode>* favorites) {
++  const base::ListValue* top_apps =
++      sidebar_data.FindList("topAppsContainerIDs");
++  if (!top_apps) {
++    return;
++  }
++
++  for (size_t i = 0; i + 1 < top_apps->size(); i += 2) {
++    const base::DictValue* profile = (*top_apps)[i].GetIfDict();
++    const std::string* container_id = (*top_apps)[i + 1].GetIfString();
++    if (!container_id ||
++        ParseProfileDirectory(profile) != source_profile_directory) {
++      continue;
++    }
++    std::unordered_set<std::string> ancestors;
++    AppendNodes(*container_id, WalkMode::kFavorites, items, &ancestors,
++                favorites);
++  }
++}
++
++void ParseSpaces(const base::DictValue& sidebar_data,
++                 std::string_view source_profile_directory,
++                 const std::map<std::string, RawItem>& items,
++                 std::vector<ArcSidebarSpace>* spaces) {
++  const base::ListValue* space_values = sidebar_data.FindList("spaces");
++  if (!space_values) {
++    return;
++  }
++
++  for (size_t i = 0; i + 1 < space_values->size(); i += 2) {
++    const std::string* space_id = (*space_values)[i].GetIfString();
++    const base::DictValue* space_value = (*space_values)[i + 1].GetIfDict();
++    if (!space_id || space_id->empty() || !space_value ||
++        ParseProfileDirectory(space_value->FindDict("profile")) !=
++            source_profile_directory) {
++      continue;
++    }
++
++    ArcSidebarSpace space{
++        .id = *space_id,
++        .source_profile = std::string(source_profile_directory),
++    };
++    if (const std::string* name = space_value->FindString("title")) {
++      space.name = *name;
++    }
++
++    const std::string pinned_container_id = FindPinnedContainerId(*space_value);
++    if (!pinned_container_id.empty()) {
++      std::unordered_set<std::string> ancestors;
++      AppendNodes(pinned_container_id, WalkMode::kPins, items, &ancestors,
++                  &space.pins);
++    }
++    spaces->push_back(std::move(space));
++  }
++}
++
++base::ListValue NodesToList(const std::vector<ArcSidebarNode>& nodes) {
++  base::ListValue values;
++  values.reserve(nodes.size());
++  for (const ArcSidebarNode& node : nodes) {
++    values.Append(node.ToDict());
++  }
++  return values;
++}
++
++}  // namespace
++
++base::DictValue ArcSidebarNode::ToDict() const {
++  base::DictValue value;
++  value.Set("type", type == Type::kTab ? "tab" : "folder");
++  value.Set("source_id", source_id);
++  value.Set("title", title);
++  if (type == Type::kTab) {
++    value.Set("url", url);
++  } else {
++    value.Set("collapsed", collapsed);
++    value.Set("children", NodesToList(children));
++  }
++  return value;
++}
++
++base::DictValue ArcSidebarSpace::ToDict() const {
++  base::DictValue value;
++  value.Set("id", id);
++  value.Set("name", name);
++  value.Set("source_profile", source_profile);
++  value.Set("pins", NodesToList(pins));
++  return value;
++}
++
++base::DictValue ArcSidebarSnapshot::ToDict() const {
++  base::ListValue space_values;
++  space_values.reserve(spaces.size());
++  for (const ArcSidebarSpace& space : spaces) {
++    space_values.Append(space.ToDict());
++  }
++
++  base::DictValue value;
++  value.Set("version", version);
++  value.Set("source_profile", source_profile);
++  value.Set("favorites", NodesToList(favorites));
++  value.Set("spaces", std::move(space_values));
++  return value;
++}
++
++std::optional<ArcSidebarSnapshot> ParseArcSidebarSnapshot(
++    const base::DictValue& root,
++    std::string_view source_profile_directory) {
++  if (source_profile_directory.empty()) {
++    return std::nullopt;
++  }
++  const base::DictValue* sidebar_data = FindSidebarData(root);
++  if (!sidebar_data) {
++    return std::nullopt;
++  }
++
++  const base::ListValue* item_values = sidebar_data->FindList("items");
++  if (!item_values) {
++    return std::nullopt;
++  }
++  const std::map<std::string, RawItem> items = ParseItems(*item_values);
++
++  ArcSidebarSnapshot snapshot{
++      .source_profile = std::string(source_profile_directory),
++  };
++  ParseFavorites(*sidebar_data, source_profile_directory, items,
++                 &snapshot.favorites);
++  ParseSpaces(*sidebar_data, source_profile_directory, items, &snapshot.spaces);
++  return snapshot;
++}
++
++}  // namespace arcium
+Index: src/chrome/utility/importer/arc_sidebar_snapshot.h
+===================================================================
+--- /dev/null
++++ src/chrome/utility/importer/arc_sidebar_snapshot.h
+@@ -0,0 +1,69 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_UTILITY_IMPORTER_ARC_SIDEBAR_SNAPSHOT_H_
++#define CHROME_UTILITY_IMPORTER_ARC_SIDEBAR_SNAPSHOT_H_
++
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/values.h"
++
++namespace arcium {
++
++// A navigable tab or a first-class folder in an Arc sidebar tree. Arc's
++// container and split-view nodes are represented by the ordering of their
++// children rather than by synthetic Helium folders.
++struct ArcSidebarNode {
++  enum class Type {
++    kTab,
++    kFolder,
++  };
++
++  Type type = Type::kTab;
++  std::string source_id;
++  std::string title;
++  std::string url;
++  bool collapsed = false;
++  std::vector<ArcSidebarNode> children;
++
++  base::DictValue ToDict() const;
++};
++
++struct ArcSidebarSpace {
++  std::string id;
++  std::string name;
++  std::string source_profile;
++  std::vector<ArcSidebarNode> pins;
++
++  base::DictValue ToDict() const;
++};
++
++// A versioned, profile-scoped snapshot suitable for JSON serialization across
++// the importer Mojo boundary. Favorites are always flat tab nodes; Space pins
++// retain their recursive folder structure, including empty folders.
++struct ArcSidebarSnapshot {
++  static constexpr int kCurrentVersion = 1;
++
++  int version = kCurrentVersion;
++  std::string source_profile;
++  std::vector<ArcSidebarNode> favorites;
++  std::vector<ArcSidebarSpace> spaces;
++
++  base::DictValue ToDict() const;
++};
++
++// Parses one Arc profile from a decoded StorableSidebar.json root. Returns a
++// snapshot even when that profile currently has no favorites or Spaces.
++// Returns nullopt when the root schema is missing or the requested profile is
++// empty.
++std::optional<ArcSidebarSnapshot> ParseArcSidebarSnapshot(
++    const base::DictValue& root,
++    std::string_view source_profile_directory);
++
++}  // namespace arcium
++
++#endif  // CHROME_UTILITY_IMPORTER_ARC_SIDEBAR_SNAPSHOT_H_
+Index: src/chrome/utility/importer/arc_sidebar_snapshot_unittest.cc
+===================================================================
+--- /dev/null
++++ src/chrome/utility/importer/arc_sidebar_snapshot_unittest.cc
+@@ -0,0 +1,323 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/utility/importer/arc_sidebar_snapshot.h"
++
++#include <optional>
++#include <string_view>
++
++#include "base/json/json_reader.h"
++#include "base/values.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace arcium {
++namespace {
++
++constexpr std::string_view kProfile = "Profile 7";
++
++std::optional<base::DictValue> ParseFixture() {
++  return base::JSONReader::ReadDict(R"json(
++    {
++      "sidebar": {
++        "containers": [
++          {"global": {}},
++          {
++            "items": [
++              "favorites-container", {
++                "childrenIds": ["favorite-one", "favorite-folder"],
++                "data": {"itemContainer": {}}
++              },
++              "favorite-one", {
++                "title": "Favorite",
++                "data": {"tab": {
++                  "savedTitle": "Saved favorite",
++                  "savedURL": "HTTPS://FAVORITE.EXAMPLE/path"
++                }}
++              },
++              "favorite-folder", {
++                "title": "Synced wrapper",
++                "childrenIds": ["favorite-two", "favorite-arc"],
++                "data": {"list": {}}
++              },
++              "favorite-two", {
++                "data": {"tab": {
++                  "savedTitle": "Second favorite",
++                  "savedURL": "https://second.example/"
++                }}
++              },
++              "favorite-arc", {
++                "title": "Arc internal",
++                "data": {"tab": {
++                  "savedURL": "arc://settings"
++                }}
++              },
++
++              "space-one-pins", {
++                "childrenIds": [
++                  "outer-folder", "split", "arc-pin", "same-title-a"
++                ],
++                "data": {"itemContainer": {}}
++              },
++              "outer-folder", {
++                "title": "Outer",
++                "collapsed": true,
++                "childrenIds": ["empty-folder", "inner-folder"],
++                "data": {"list": {}}
++              },
++              "empty-folder", {
++                "title": "Empty",
++                "isCollapsed": true,
++                "childrenIds": [],
++                "data": {"list": {}}
++              },
++              "inner-folder", {
++                "childrenIds": ["same-title-b"],
++                "data": {"tabGroup": {"title": "Inner"}}
++              },
++              "same-title-b", {
++                "title": "Duplicate",
++                "data": {"tab": {
++                  "savedURL": "https://duplicate-b.example/"
++                }}
++              },
++              "split", {
++                "childrenIds": ["split-tab", "split-folder"],
++                "data": {"splitView": {"layoutOrientation": "horizontal"}}
++              },
++              "split-tab", {
++                "title": "First split child",
++                "data": {"tab": {
++                  "savedURL": "https://split.example/"
++                }}
++              },
++              "split-folder", {
++                "title": "Split folder",
++                "childrenIds": ["split-folder-tab"],
++                "data": {"list": {}}
++              },
++              "split-folder-tab", {
++                "title": "Nested split child",
++                "data": {"tab": {
++                  "savedURL": "https://nested-split.example/"
++                }}
++              },
++              "arc-pin", {
++                "title": "Ignored Arc page",
++                "data": {"tab": {
++                  "savedURL": "arc://downloads"
++                }}
++              },
++              "same-title-a", {
++                "title": "Duplicate",
++                "data": {"tab": {
++                  "savedURL": "https://duplicate-a.example/"
++                }}
++              },
++
++              "space-two-pins", {
++                "childrenIds": ["second-space-tab"],
++                "data": {"itemContainer": {}}
++              },
++              "second-space-tab", {
++                "title": "Second Space",
++                "data": {"tab": {
++                  "savedURL": "https://space-two.example/"
++                }}
++              },
++
++              "other-favorites", {
++                "childrenIds": ["other-favorite"],
++                "data": {"itemContainer": {}}
++              },
++              "other-favorite", {
++                "title": "Other favorite",
++                "data": {"tab": {
++                  "savedURL": "https://other-favorite.example/"
++                }}
++              },
++              "other-space-pins", {
++                "childrenIds": ["other-space-tab"],
++                "data": {"itemContainer": {}}
++              },
++              "other-space-tab", {
++                "title": "Other Space",
++                "data": {"tab": {
++                  "savedURL": "https://other-space.example/"
++                }}
++              }
++            ],
++            "spaces": [
++              "space-one", {
++                "title": "Work",
++                "profile": {"custom": {"_0": {
++                  "directoryBasename": "Profile 7"
++                }}},
++                "containerIDs": [
++                  "unpinned", "space-one-unpinned",
++                  "pinned", "space-one-pins"
++                ]
++              },
++              "other-space", {
++                "title": "Other",
++                "profile": {"default": true},
++                "containerIDs": [
++                  "pinned", "other-space-pins",
++                  "unpinned", "other-space-unpinned"
++                ]
++              },
++              "space-two", {
++                "title": "Personal",
++                "profile": {"custom": {"_0": {
++                  "directoryBasename": "Profile 7"
++                }}},
++                "containerIDs": [
++                  "pinned", "space-two-pins",
++                  "unpinned", "space-two-unpinned"
++                ]
++              }
++            ],
++            "topAppsContainerIDs": [
++              {"default": true}, "other-favorites",
++              {"custom": {"_0": {
++                "directoryBasename": "Profile 7"
++              }}}, "favorites-container"
++            ]
++          }
++        ]
++      }
++    }
++  )json",
++                                    base::JSON_PARSE_RFC);
++}
++
++TEST(ArcSidebarSnapshotTest, PreservesProfileScopedOrderedTreesAndIds) {
++  std::optional<base::DictValue> root = ParseFixture();
++  ASSERT_TRUE(root);
++  std::optional<ArcSidebarSnapshot> snapshot =
++      ParseArcSidebarSnapshot(*root, kProfile);
++  ASSERT_TRUE(snapshot);
++
++  EXPECT_EQ(ArcSidebarSnapshot::kCurrentVersion, snapshot->version);
++  EXPECT_EQ(kProfile, snapshot->source_profile);
++
++  // Top Apps are profile-wide tabs. Structural wrappers are transparent and
++  // Arc-internal URLs are ignored.
++  ASSERT_EQ(2u, snapshot->favorites.size());
++  EXPECT_EQ(ArcSidebarNode::Type::kTab, snapshot->favorites[0].type);
++  EXPECT_EQ("favorite-one", snapshot->favorites[0].source_id);
++  EXPECT_EQ("Favorite", snapshot->favorites[0].title);
++  EXPECT_EQ("https://favorite.example/path", snapshot->favorites[0].url);
++  EXPECT_EQ("favorite-two", snapshot->favorites[1].source_id);
++  EXPECT_EQ("Second favorite", snapshot->favorites[1].title);
++
++  ASSERT_EQ(2u, snapshot->spaces.size());
++  const ArcSidebarSpace& work = snapshot->spaces[0];
++  EXPECT_EQ("space-one", work.id);
++  EXPECT_EQ("Work", work.name);
++  EXPECT_EQ(kProfile, work.source_profile);
++  ASSERT_EQ(4u, work.pins.size());
++
++  const ArcSidebarNode& outer = work.pins[0];
++  ASSERT_EQ(ArcSidebarNode::Type::kFolder, outer.type);
++  EXPECT_EQ("outer-folder", outer.source_id);
++  EXPECT_EQ("Outer", outer.title);
++  EXPECT_TRUE(outer.collapsed);
++  ASSERT_EQ(2u, outer.children.size());
++
++  const ArcSidebarNode& empty = outer.children[0];
++  EXPECT_EQ(ArcSidebarNode::Type::kFolder, empty.type);
++  EXPECT_EQ("empty-folder", empty.source_id);
++  EXPECT_TRUE(empty.collapsed);
++  EXPECT_TRUE(empty.children.empty());
++
++  const ArcSidebarNode& inner = outer.children[1];
++  ASSERT_EQ(ArcSidebarNode::Type::kFolder, inner.type);
++  EXPECT_EQ("inner-folder", inner.source_id);
++  EXPECT_EQ("Inner", inner.title);
++  ASSERT_EQ(1u, inner.children.size());
++  EXPECT_EQ("same-title-b", inner.children[0].source_id);
++  EXPECT_EQ("Duplicate", inner.children[0].title);
++
++  // A split is flattened because the target model has no split layout node.
++  // Its children stay at the split's original position and real folders below
++  // the split remain first-class nodes.
++  EXPECT_EQ("split-tab", work.pins[1].source_id);
++  ASSERT_EQ(ArcSidebarNode::Type::kFolder, work.pins[2].type);
++  EXPECT_EQ("split-folder", work.pins[2].source_id);
++  ASSERT_EQ(1u, work.pins[2].children.size());
++  EXPECT_EQ("split-folder-tab", work.pins[2].children[0].source_id);
++
++  // Duplicate titles do not collapse stable Arc identities.
++  EXPECT_EQ("same-title-a", work.pins[3].source_id);
++  EXPECT_EQ("Duplicate", work.pins[3].title);
++  EXPECT_NE(inner.children[0].source_id, work.pins[3].source_id);
++
++  const ArcSidebarSpace& personal = snapshot->spaces[1];
++  EXPECT_EQ("space-two", personal.id);
++  EXPECT_EQ("Personal", personal.name);
++  ASSERT_EQ(1u, personal.pins.size());
++  EXPECT_EQ("second-space-tab", personal.pins[0].source_id);
++}
++
++TEST(ArcSidebarSnapshotTest, EmitsExactVersionedTransportSchema) {
++  std::optional<base::DictValue> root = ParseFixture();
++  ASSERT_TRUE(root);
++  std::optional<ArcSidebarSnapshot> snapshot =
++      ParseArcSidebarSnapshot(*root, kProfile);
++  ASSERT_TRUE(snapshot);
++
++  base::DictValue encoded = snapshot->ToDict();
++  EXPECT_EQ(4u, encoded.size());
++  EXPECT_EQ(1, encoded.FindInt("version"));
++  EXPECT_EQ(kProfile, *encoded.FindString("source_profile"));
++
++  const base::ListValue* favorites = encoded.FindList("favorites");
++  ASSERT_NE(nullptr, favorites);
++  ASSERT_EQ(2u, favorites->size());
++  const base::DictValue& favorite = favorites->front().GetDict();
++  EXPECT_EQ(4u, favorite.size());
++  EXPECT_EQ("tab", *favorite.FindString("type"));
++  EXPECT_EQ("favorite-one", *favorite.FindString("source_id"));
++  EXPECT_EQ("Favorite", *favorite.FindString("title"));
++  EXPECT_EQ("https://favorite.example/path", *favorite.FindString("url"));
++
++  const base::ListValue* spaces = encoded.FindList("spaces");
++  ASSERT_NE(nullptr, spaces);
++  ASSERT_EQ(2u, spaces->size());
++  const base::DictValue& work = spaces->front().GetDict();
++  EXPECT_EQ(4u, work.size());
++  EXPECT_EQ("space-one", *work.FindString("id"));
++  EXPECT_EQ("Work", *work.FindString("name"));
++  EXPECT_EQ(kProfile, *work.FindString("source_profile"));
++
++  const base::ListValue* pins = work.FindList("pins");
++  ASSERT_NE(nullptr, pins);
++  const base::DictValue& folder = pins->front().GetDict();
++  EXPECT_EQ(5u, folder.size());
++  EXPECT_EQ("folder", *folder.FindString("type"));
++  EXPECT_EQ("outer-folder", *folder.FindString("source_id"));
++  EXPECT_EQ("Outer", *folder.FindString("title"));
++  EXPECT_TRUE(folder.FindBool("collapsed").value_or(false));
++  ASSERT_NE(nullptr, folder.FindList("children"));
++  EXPECT_FALSE(folder.contains("url"));
++}
++
++TEST(ArcSidebarSnapshotTest, SupportsDefaultProfileAndRejectsBadRoots) {
++  std::optional<base::DictValue> root = ParseFixture();
++  ASSERT_TRUE(root);
++
++  std::optional<ArcSidebarSnapshot> default_snapshot =
++      ParseArcSidebarSnapshot(*root, "Default");
++  ASSERT_TRUE(default_snapshot);
++  ASSERT_EQ(1u, default_snapshot->favorites.size());
++  EXPECT_EQ("other-favorite", default_snapshot->favorites[0].source_id);
++  ASSERT_EQ(1u, default_snapshot->spaces.size());
++  EXPECT_EQ("other-space", default_snapshot->spaces[0].id);
++
++  EXPECT_FALSE(ParseArcSidebarSnapshot(*root, ""));
++  EXPECT_FALSE(ParseArcSidebarSnapshot(base::DictValue(), kProfile));
++}
++
++}  // namespace
++}  // namespace arcium
+Index: src/chrome/utility/importer/external_process_importer_bridge.cc
+===================================================================
+--- src.orig/chrome/utility/importer/external_process_importer_bridge.cc
++++ src/chrome/utility/importer/external_process_importer_bridge.cc
+@@ -57,6 +57,11 @@ void ExternalProcessImporterBridge::AddB
+   DCHECK_EQ(0, bookmarks_left);
+ }
+ 
++void ExternalProcessImporterBridge::AddArcSidebarSnapshot(
++    const std::string& snapshot_json) {
++  observer_->OnArcSidebarSnapshotReady(snapshot_json);
++}
++
+ void ExternalProcessImporterBridge::AddHomePage(const GURL& home_page) {
+   observer_->OnHomePageImportReady(home_page);
+ }
+Index: src/chrome/utility/importer/external_process_importer_bridge.h
+===================================================================
+--- src.orig/chrome/utility/importer/external_process_importer_bridge.h
++++ src/chrome/utility/importer/external_process_importer_bridge.h
+@@ -46,6 +46,7 @@ class ExternalProcessImporterBridge : pu
+   void AddBookmarks(
+       const std::vector<user_data_importer::ImportedBookmarkEntry>& bookmarks,
+       const std::u16string& first_folder_name) override;
++  void AddArcSidebarSnapshot(const std::string& snapshot_json) override;
+ 
+   void AddHomePage(const GURL& home_page) override;
+ 
+Index: src/chrome/browser/importer/arcium_arc_import_browsertest.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/importer/arcium_arc_import_browsertest.cc
+@@ -0,0 +1,134 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/importer/arcium_arc_import.h"
++
++#include <map>
++#include <string>
++
++#include "chrome/browser/ui/arcium/tab_provenance.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/tab_group_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "components/tabs/public/tab_group.h"
++#include "components/tab_groups/tab_group_visual_data.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace arcium {
++namespace {
++
++constexpr char kSnapshot[] = R"json({
++  "version": 1,
++  "source_profile": "arc-profile",
++  "favorites": [
++    {"type":"tab","source_id":"favorite","title":"Favorite",
++     "url":"https://favorite.test/"}
++  ],
++  "spaces": [
++    {"id":"space-a","name":"Space A","source_profile":"arc-profile",
++     "pins":[
++       {"type":"tab","source_id":"root","title":"Root",
++        "url":"https://root.test/"},
++       {"type":"folder","source_id":"outer","title":"Outer",
++        "collapsed":true,"children":[
++          {"type":"tab","source_id":"outer-tab","title":"Outer tab",
++           "url":"https://outer.test/"},
++          {"type":"folder","source_id":"inner","title":"Inner",
++           "collapsed":false,"children":[
++             {"type":"tab","source_id":"inner-tab","title":"Inner tab",
++              "url":"https://inner.test/"}
++           ]}
++        ]}
++     ]},
++    {"id":"space-b","name":"Space B","source_profile":"arc-profile",
++     "pins":[
++       {"type":"tab","source_id":"other-space","title":"Other space",
++        "url":"https://space-b.test/"}
++     ]}
++  ]
++})json";
++
++Browser* BrowserForSpace(helium::HeliumSpaceService* service,
++                         std::string_view id) {
++  helium::HeliumSpace* space = service->GetSpaceById(id);
++  if (!space || !space->GetPrimaryBrowser()) {
++    return nullptr;
++  }
++  return space->GetPrimaryBrowser()->GetBrowserForMigrationOnly();
++}
++
++std::map<std::string, content::WebContents*> ArcTabs(Browser* browser) {
++  std::map<std::string, content::WebContents*> result;
++  for (int index = 0; index < browser->tab_strip_model()->count(); ++index) {
++    content::WebContents* contents =
++        browser->tab_strip_model()->GetWebContentsAt(index);
++    const TabProvenance* provenance = TabProvenance::FromWebContents(contents);
++    if (provenance && provenance->source() == "arc") {
++      EXPECT_EQ("arc-profile", provenance->collection_id());
++      result[provenance->item_id()] = contents;
++    }
++  }
++  return result;
++}
++
++std::map<std::u16string, bool> GroupCollapseState(Browser* browser) {
++  std::map<std::u16string, bool> result;
++  for (const tab_groups::TabGroupId& group_id :
++       browser->tab_strip_model()->group_model()->ListTabGroups()) {
++    const TabGroup* group =
++        browser->tab_strip_model()->group_model()->GetTabGroup(group_id);
++    result[group->visual_data()->title()] =
++        group->visual_data()->is_collapsed();
++  }
++  return result;
++}
++
++class ArciumArcImportBrowserTest : public InProcessBrowserTest {};
++
++IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
++                       ImportsNestedFoldersAsTabsWithoutPins) {
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  content::WebContents* unrelated =
++      browser()->tab_strip_model()->GetActiveWebContents();
++
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot));
++  Browser* space_a = BrowserForSpace(service, "space-a");
++  Browser* space_b = BrowserForSpace(service, "space-b");
++  ASSERT_TRUE(space_a);
++  ASSERT_TRUE(space_b);
++  EXPECT_NE(space_a, space_b);
++
++  const auto space_a_tabs = ArcTabs(space_a);
++  EXPECT_EQ(4u, space_a_tabs.size());
++  EXPECT_TRUE(space_a_tabs.contains("favorite"));
++  EXPECT_TRUE(space_a_tabs.contains("root"));
++  EXPECT_TRUE(space_a_tabs.contains("outer-tab"));
++  EXPECT_TRUE(space_a_tabs.contains("inner-tab"));
++  const auto space_b_tabs = ArcTabs(space_b);
++  EXPECT_EQ(1u, space_b_tabs.size());
++  EXPECT_TRUE(space_b_tabs.contains("other-space"));
++
++  const std::map<std::u16string, bool> group_state =
++      GroupCollapseState(space_a);
++  EXPECT_EQ(false, group_state.at(u"Favorites"));
++  EXPECT_EQ(true, group_state.at(u"Outer"));
++  EXPECT_EQ(false, group_state.at(u"Outer / Inner"));
++
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot));
++  EXPECT_EQ(4u, ArcTabs(space_a).size());
++  EXPECT_EQ(1u, ArcTabs(space_b).size());
++  EXPECT_NE(-1, browser()->tab_strip_model()->GetIndexOfWebContents(unrelated));
++}
++
++}  // namespace
++}  // namespace arcium

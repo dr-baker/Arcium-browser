@@ -1,0 +1,1309 @@
+# Applies after the selected Helium and Arcium fork-flag registrations.
+# Maintain ownership, lifetime and histogram metadata for persistent fork flags.
+Index: src/chrome/browser/flag-metadata.json
+===================================================================
+--- src.orig/chrome/browser/flag-metadata.json
++++ src/chrome/browser/flag-metadata.json
+@@ -679,6 +679,12 @@
+     "expiry_milestone": 130
+   },
+   {
++    "name": "arcium-glass-backend",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "ash-capture-mode-education",
+     "owners": [ "hewer@chromium.org", "meganlfu@google.com"],
+     "expiry_milestone": 133
+@@ -1254,6 +1260,12 @@
+     "expiry_milestone": 170
+   },
+ 
++  {
++    "name": "bookmark-bar-ntp",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
+   {
+     "name": "bookmark-pane-android",
+     "owners": [ "wylieb@google.com", "clank-tab-dev@google.com" ],
+@@ -1744,6 +1756,12 @@
+     "expiry_milestone": 155
+   },
+   {
++    "name": "clear-data-on-exit",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "click-to-call",
+     "owners": [ "ellyjones@chromium.org" ],
+     "expiry_milestone": 115
+@@ -1755,6 +1773,18 @@
+       "chrome-counter-abuse-alerts@google.com"
+     ],
+     "expiry_milestone": 150
++  },
++  {
++    "name": "close-confirmation",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "close-window-with-last-tab",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "cloud-gaming-device",
+@@ -2252,6 +2282,18 @@
+     "expiry_milestone": 160
+   },
+   {
++    "name": "custom-ntp",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "custom-update-server-url",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "customize-chrome-side-panel-extensions-card",
+     "owners": [ "chrome-desktop-ntp@google.com" ],
+     "expiry_milestone": 134
+@@ -2565,6 +2607,12 @@
+     "owners": [ "osaul@google.com", "payments-autofill-team@google.com" ],
+     // This flag does not expire because it allows users to test or debug issues
+     // by disabling the strike system, which is not desirable in production.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "disable-beforeunload",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
+     "expiry_milestone": -1
+   },
+   {
+@@ -2592,6 +2640,12 @@
+     "expiry_milestone": 160
+   },
+   {
++    "name": "disable-ech",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "disable-explicit-dma-fences",
+     "owners": [ "chromeos-gfx@google.com" ],
+     // This flag is used for QA & debugging on ChromeOS, which has no way to
+@@ -2610,6 +2664,12 @@
+     "expiry_milestone": 160
+   },
+   {
++    "name": "disable-grease-tls",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "disable-javascript-harmony-shipping",
+     "owners": [ "adamk@chromium.org", "syg@chromium.org" ],
+     // This flag is used for field debugging along with
+@@ -2627,6 +2687,12 @@
+     "expiry_milestone": 160
+   },
+   {
++    "name": "disable-link-drag",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "disable-partner-homepage-android",
+     "owners": [ "ckitagawa@chromium.org", "clank-tab-dev@google.com" ],
+     "expiry_milestone": 160
+@@ -2636,6 +2702,18 @@
+     "owners": [
+       "alexmos@google.com", "creis@google.com", "lbrady@google.com" ],
+     "expiry_milestone": 170
++  },
++  {
++    "name": "disable-search-engine-collection",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "disable-top-sites",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "disable-u18-feedback-desktop",
+@@ -2646,6 +2724,12 @@
+     "name": "disable-virtual-keyboard",
+     "owners": [ "dvallet@chromium.org", "essential-inputs-team@google.com" ],
+     "expiry_milestone": 116
++  },
++  {
++    "name": "disable-webgl",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "disallow-doc-written-script-loads",
+@@ -3743,6 +3827,12 @@
+     "expiry_milestone": 155
+   },
+   {
++    "name": "enable-incognito-themes",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "enable-input-event-logging",
+     "owners": [ "hcutts@chromium.org", "chromeos-tango@google.com" ],
+     // Used to attach input device debugging information to feedback reports.
+@@ -3898,6 +3988,12 @@
+     // Never expires because it is used by developers to enable logging JS
+     // console messages in system logs for debugging purposes. It's disabled by
+     // default because logs may contain PII.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "enable-low-end-device-mode",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
+     "expiry_milestone": -1
+   },
+   {
+@@ -4558,6 +4654,12 @@
+     "expiry_milestone": 154
+   },
+   {
++    "name": "energy-saver-fps-limit",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "enforce-can-sign-in-to-chrome-capability",
+     "owners": [
+       "ddac@google.com",
+@@ -4568,6 +4670,12 @@
+     "expiry_milestone": 155
+   },
+   {
++    "name": "enforce-certificate-transparency",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "enforce-incognito-isolation",
+     "owners": [ "shuyng@google.com", "clank-large-form-factors@google.com" ],
+     "expiry_milestone": 152
+@@ -4670,6 +4778,12 @@
+     "expiry_milestone": 143
+   },
+   {
++    "name": "extension-mime-request-handling",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "extension-tab-context-menu",
+     "owners": [ "migueloruiz@google.com" ],
+     "expiry_milestone": 152
+@@ -4946,6 +5060,18 @@
+     "expiry_milestone": 156
+   },
+   {
++    "name": "fingerprinting-canvas-measuretext-noise",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "fingerprinting-client-rects-noise",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "first-run-desktop-choice-screen-refresh",
+     "owners": [ "kbajkiewicz@google.com", "saskekun@google.com", "ernn@google.com", "chrome-signin-team@google.com" ],
+     "expiry_milestone": 162
+@@ -4990,6 +5116,12 @@
+     "name": "force-control-face-ae",
+     "owners": [ "chromeos-camera-eng@google.com" ],
+     "expiry_milestone": 120
++  },
++  {
++    "name": "force-dark-mode",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "force-drive-disclaimer-accepted",
+@@ -5021,6 +5153,12 @@
+     "owners": [ "chrome-signin-team@google.com" ],
+     // This is required by test teams and dev teams to verify the
+     // history opt-in screen functionality.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "force-punycode-hostnames",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
+     "expiry_milestone": -1
+   },
+   {
+@@ -5649,6 +5787,42 @@
+     "expiry_milestone": -1
+   },
+   {
++    "name": "helium-compact-location-width",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "helium-noise",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "helium-noise-audio",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "helium-noise-canvas",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "helium-noise-hw-concurrency",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "helium-update-channel",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "help-app-app-detail-page",
+     "owners": [ "//ash/webui/help_app_ui/OWNERS" ],
+     "expiry_milestone": 126
+@@ -5693,10 +5867,34 @@
+     "expiry_milestone": 150
+   },
+   {
++    "name": "hide-crashed-bubble",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "hide-extensions-menu",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "hide-fullscreen-exit-ui",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "hide-fusebox-voice-lens-actions",
+     "owners": [
+     "stkhapugin@chromium.org", "bling-flags@google.com"],
+     "expiry_milestone": 150
++  },
++  {
++    "name": "hide-tab-close-buttons",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "hide-toolbars-in-overflow-menu",
+@@ -5741,6 +5939,12 @@
+     "name": "home-module-pref-refactor",
+     "owners": [ "jhimawan@google.com", "clank-app-team@google.com" ],
+     "expiry_milestone": 160
++  },
++  {
++    "name": "http-accept-header",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "http-cache-custom-backend",
+@@ -5865,6 +6069,12 @@
+     "expiry_milestone": 170
+   },
+   {
++    "name": "incognito",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "incognito-as-window-full-screen",
+     "owners": [ "shuyng@google.com", "clank-large-form-factors@google.com" ],
+     "expiry_milestone": 160
+@@ -5879,6 +6089,12 @@
+     "name": "incognito-theme-overlay-testing",
+     "owners": ["jtanaristy@google.com", "wenyufu@chromium.org"],
+     "expiry_milestone": 150
++  },
++  {
++    "name": "increase-incognito-storage-quota",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "infinite-tabs-freezing",
+@@ -6238,6 +6454,12 @@
+     "expiry_milestone": 145
+   },
+   {
++    "name": "keep-old-history",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "language-packs-in-settings",
+     "owners": ["mlcui@google.com", "claudiomagni@chromium.org", "cros-borders-eng@google.com"],
+     "expiry_milestone": 126
+@@ -6633,6 +6855,12 @@
+       "vsemeniuk@google.com"
+     ],
+     "expiry_milestone": 144
++  },
++  {
++    "name": "max-connections-per-host",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "mbi-mode",
+@@ -6725,6 +6953,12 @@
+     "expiry_milestone": 94
+   },
+   {
++    "name": "middle-click-autoscroll",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "migrate-account-manager-delegate",
+     "owners": ["mlbipin@google.com", "chrome-signin-mobile-team@google.com"],
+     "expiry_milestone": 160
+@@ -6745,6 +6979,12 @@
+     "expiry_milestone": 160
+   },
+   {
++    "name": "minimal-referrers",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "mobile-ntp-promo-on-desktop",
+     "owners": [ "hiramahmood@google.com", "bling-pandamonium@google.com" ],
+     "expiry_milestone": 152
+@@ -6891,12 +7131,24 @@
+     "expiry_milestone": 165
+   },
+   {
++    "name": "no-default-browser-check",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "no-pause-media-on-headphone-unplug",
+     "owners": [
+       "philyan@chromium.org",
+       "media-dev@chromium.org"
+     ],
+     "expiry_milestone": 170
++  },
++  {
++    "name": "no-pings",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "notification-collision-management",
+@@ -7195,6 +7447,12 @@
+     "name": "omnibox-asynchronous-view-inflation",
+     "owners": ["ender@google.com", "pnoland@google.com", "gangwu@google.com"],
+     "expiry_milestone": 160
++  },
++  {
++    "name": "omnibox-autocomplete-filtering",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "omnibox-calc-provider",
+@@ -7921,6 +8179,12 @@
+     "expiry_milestone": 156
+   },
+   {
++    "name": "popups-to-tabs",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "predictable-reported-quota",
+     "owners": ["reemaaa@chromium.org"],
+     "expiry_milestone": 150
+@@ -8338,6 +8602,12 @@
+     "owners": [ "pwa-team@google.com" ],
+     // This flag is used for in-the-field debugging of preinstalled web apps on
+     // Chrome OS.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "reduced-system-info",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
+     "expiry_milestone": -1
+   },
+   {
+@@ -8401,6 +8671,24 @@
+     "owners": [ "//ash/webui/help_app_ui/OWNERS" ],
+     // This is required by test teams to verify functionality on dev/beta
+     // channels on devices which have no access to commandline flags.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "remove-client-hints",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "remove-cross-origin-referrers",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "remove-referrers",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
+     "expiry_milestone": -1
+   },
+   {
+@@ -8587,6 +8875,12 @@
+     "expiry_milestone": -1
+   },
+   {
++    "name": "scroll-tabs",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "search-engine-explicit-choice-dialog",
+     "owners": [
+       "cjgrant@chromium.org",
+@@ -8661,6 +8955,12 @@
+     "name": "session-restore-after-crash",
+     "owners": ["aishwaryarj@google.com", "zheliooo@google.com", "clank-large-form-factors@google.com"],
+     "expiry_milestone": 170
++  },
++  {
++    "name": "set-ipv6-probe-false",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "set-market-url-for-testing",
+@@ -8751,6 +9051,12 @@
+     "name": "show-autofill-type-predictions",
+     "owners": [ "ftirelo@chromium.org", "mathp@chromium.org" ],
+     // This is used by autofill devs to debug on Android.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "show-avatar-button",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
+     "expiry_milestone": -1
+   },
+   {
+@@ -8936,6 +9242,18 @@
+     "name": "split-view-tab-restore",
+     "owners": [ "kunaldaftari@google.com", "top-chrome-desktop-ui@google.com" ],
+     "expiry_milestone": 155
++  },
++  {
++    "name": "spoof-webgl-info",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "start-maximized",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
+   },
+   {
+     "name": "start-surface-user-setting",
+@@ -9173,6 +9491,12 @@
+     "expiry_milestone": 160
+   },
+   {
++    "name": "tab-hover-cards",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
++    "expiry_milestone": -1
++  },
++  {
+     "name": "tab-search-for-al",
+     "owners": [
+       "bjfong@google.com",
+@@ -10034,6 +10358,12 @@
+     // This flag does not expire because it allows users to enable or disable
+     // HW video encoding only in webrtc usecase for debugging purpose and
+     // temporary workaround for some issues.
++    "expiry_milestone": -1
++  },
++  {
++    "name": "webrtc-ip-handling-policy",
++    "owners": [ "dlrdbaker@gmail.com" ],
++    // Arcium keeps this fork control available across Chromium milestones.
+     "expiry_milestone": -1
+   },
+   {
+Index: src/chrome/browser/flag-never-expire-list.json
+===================================================================
+--- src.orig/chrome/browser/flag-never-expire-list.json
++++ src/chrome/browser/flag-never-expire-list.json
+@@ -17,12 +17,19 @@
+   "allow-cross-device-feature-suite",
+   "always-enable-hdcp",
+   "arc-native-bridge-toggle",
++  "arcium-glass-backend",
+   "ash-debug-shortcuts",
+   "ash-enable-unified-desktop",
+   "block-root-window-accessible-name-change-event",
++  "bookmark-bar-ntp",
+   "borealis-enable-unsupported-hardware",
+   "cellular-bypass-esim-installation-connectivity-check",
+   "cellular-use-second-euicc",
++  "clear-data-on-exit",
++  "close-confirmation",
++  "close-window-with-last-tab",
++  "custom-ntp",
++  "custom-update-server-url",
+   "cws-info-fast-check",
+   "dcheck-is-fatal",
+   "devtools-protocol-monitor",
+@@ -31,10 +38,17 @@
+   "disable-accelerated-video-decode",
+   "disable-accelerated-video-encode",
+   "disable-autofill-strike-system",
++  "disable-beforeunload",
+   "disable-bruschetta-install-checks",
++  "disable-ech",
+   "disable-explicit-dma-fences",
+   "disable-facilitated-payments-merchant-allowlist",
++  "disable-grease-tls",
+   "disable-javascript-harmony-shipping",
++  "disable-link-drag",
++  "disable-search-engine-collection",
++  "disable-top-sites",
++  "disable-webgl",
+   "disallow-doc-written-script-loads",
+   "double-buffer-compositing",
+   "enable-autofill-credit-card-upload",
+@@ -53,11 +67,13 @@
+   "enable-gpu-service-logging",
+   "enable-hardware-secure-decryption",
+   "enable-hardware-secure-decryption-fallback",
++  "enable-incognito-themes",
+   "enable-input-event-logging",
+   "enable-isolated-web-app-dev-mode",
+   "enable-javascript-harmony",
+   "enable-libinput-to-handle-touchpad",
+   "enable-logging-js-console-messages",
++  "enable-low-end-device-mode",
+   "enable-network-logging-to-file",
+   "enable-parallel-downloading",
+   "enable-perfetto-system-tracing",
+@@ -79,12 +95,19 @@
+   "enable-webgl-draft-extensions",
+   "enable-webgpu-developer-features",
+   "enable-zero-copy",
++  "energy-saver-fps-limit",
++  "enforce-certificate-transparency",
++  "extension-mime-request-handling",
+   "extensions-on-chrome-urls",
+   "extensions-on-extension-urls",
+   "external-navigation-debug-logs",
+   "fedcm-without-well-known-enforcement",
++  "fingerprinting-canvas-measuretext-noise",
++  "fingerprinting-client-rects-noise",
+   "force-color-profile",
++  "force-dark-mode",
+   "force-history-opt-in-screen",
++  "force-punycode-hostnames",
+   "force-show-update-menu-badge",
+   "force-startup-signin-promo",
+   "force-text-direction",
+@@ -93,42 +116,73 @@
+   "fullscreen-viewport-adjustment-experiment",
+   "gesture-properties-dbus-service",
+   "heavy-ad-privacy-mitigations",
++  "helium-compact-location-width",
++  "helium-noise",
++  "helium-noise-audio",
++  "helium-noise-canvas",
++  "helium-noise-hw-concurrency",
++  "helium-update-channel",
++  "hide-crashed-bubble",
++  "hide-extensions-menu",
++  "hide-fullscreen-exit-ui",
++  "hide-tab-close-buttons",
++  "http-accept-header",
+   "ignore-gpu-blocklist",
+   "in-product-help-demo-mode-choice",
++  "incognito",
+   "incognito-screenshot",
++  "increase-incognito-storage-quota",
+   "instant-tethering",
+   "isolate-origins",
+   "iwa-key-distribution-component-exp-cohort",
++  "keep-old-history",
++  "max-connections-per-host",
+   "media-router-cast-allow-all-ips",
+   "memlog",
+   "memlog-sampling-rate",
+   "memlog-stack-mode",
++  "middle-click-autoscroll",
++  "minimal-referrers",
++  "no-default-browser-check",
++  "no-pings",
+   "omaha-min-sdk-version-android",
++  "omnibox-autocomplete-filtering",
+   "omnibox-debug-logs",
+   "on-device-app-controls",
+   "optimization-guide-debug-logs",
+   "optimization-guide-enable-dogfood-logging",
+   "overlay-scrollbars",
+   "overlay-strategies",
++  "popups-to-tabs",
+   "prerender2",
+   "printing-ppd-channel",
+   "protected-audience-debug-token",
+   "reader-mode-heuristics",
+   "record-web-app-debug-info",
++  "reduced-system-info",
+   "related-website-sets-permission-grants",
+   "release-notes-notification-all-channels",
+   "release-notes-notification-always-eligible",
++  "remove-client-hints",
++  "remove-cross-origin-referrers",
++  "remove-referrers",
+   "scheduler-configuration",
++  "scroll-tabs",
++  "set-ipv6-probe-false",
+   "set-market-url-for-testing",
+   "show-autofill-type-predictions",
++  "show-avatar-button",
+   "show-bluetooth-debug-log-toggle",
+   "show-overdraw-feedback",
+   "show-taps",
+   "show-touch-hud",
+   "site-isolation-trial-opt-out",
+   "smooth-scrolling",
++  "spoof-webgl-info",
++  "start-maximized",
+   "strict-origin-isolation",
+   "system-keyboard-lock",
++  "tab-hover-cards",
+   "terminal-dev",
+   "tethering-experimental-functionality",
+   "tint-composited-content",
+@@ -150,6 +204,7 @@
+   "web-authentication-permit-enterprise-attestation",
+   "webrtc-hw-decoding",
+   "webrtc-hw-encoding",
++  "webrtc-ip-handling-policy",
+   "webtransport-developer-mode",
+   "webxr-runtime",
+   "windows-system-tracing"
+Index: src/tools/metrics/histograms/enums.xml
+===================================================================
+--- src.orig/tools/metrics/histograms/enums.xml
++++ src/tools/metrics/histograms/enums.xml
+@@ -7927,6 +7927,7 @@
+   <int value="-2116440101" label="EnablePenetratingImageSelection:enabled"/>
+   <int value="-2116226068" label="ReaderModeDistillInApp:disabled"/>
+   <int value="-2116063296" label="DesktopPartialTranslate:disabled"/>
++  <int value="-2115471265" label="ReducedSystemInfo:disabled"/>
+   <int value="-2115449643"
+       label="ExtensionTelemetryEnterpriseShortReportingInterval:disabled"/>
+   <int value="-2115078255" label="MobilePromoOnDesktopForcePromoType:disabled"/>
+@@ -8040,6 +8041,7 @@
+       label="AutofillCreditCardLastUsedDateDisplay:enabled"/>
+   <int value="-2081943876"
+       label="ExperimentalAccessibilityDictationHints:enabled"/>
++  <int value="-2081744572" label="no-default-browser-check"/>
+   <int value="-2080657940" label="DirectActions:disabled"/>
+   <int value="-2080504230" label="TabHoverCards:disabled"/>
+   <int value="-2080227937" label="ImeTrayHideVoiceButton:enabled"/>
+@@ -8253,6 +8255,7 @@
+   <int value="-2022956008" label="ExternalPciDevicesAllowed:disabled"/>
+   <int value="-2022243258" label="SiteDataImprovements:enabled"/>
+   <int value="-2021954068" label="TapVisualizerApp:disabled"/>
++  <int value="-2021936222" label="incognito"/>
+   <int value="-2020886334"
+       label="MediaAppImageMantisExpandBackground:disabled"/>
+   <int value="-2020721975" label="smart-virtual-keyboard"/>
+@@ -8409,6 +8412,7 @@
+   <int value="-1972312724" label="OfflinePagesLoadSignalCollecting:enabled"/>
+   <int value="-1972219399" label="NTPSaveToOffline:enabled"/>
+   <int value="-1971490389" label="UachOverrideBlank:disabled"/>
++  <int value="-1971195951" label="helium-update-channel"/>
+   <int value="-1971086581" label="print-scaling"/>
+   <int value="-1970672551" label="CanvasContextLostInBackground:disabled"/>
+   <int value="-1969636234" label="OmniboxRefinedFocusState:disabled"/>
+@@ -8655,6 +8659,7 @@
+   <int value="-1892000374" label="SeccompSandboxAndroid:enabled"/>
+   <int value="-1891391298" label="SysUiShouldHoldbackTaskManagement:enabled"/>
+   <int value="-1890374564" label="OobeRecommendAppsScreen:disabled"/>
++  <int value="-1889966859" label="scroll-tabs"/>
+   <int value="-1889151011" label="Cardboard:disabled"/>
+   <int value="-1888958061" label="InlinePdfV2:enabled"/>
+   <int value="-1888578524" label="DisplayIdentification:enabled"/>
+@@ -8690,6 +8695,7 @@
+   <int value="-1877733239" label="LensOverlayImageContextMenuActions:disabled"/>
+   <int value="-1877458140" label="ShopCardImpressionLimits:enabled"/>
+   <int value="-1877422414" label="FlexFirmwareUpdate:disabled"/>
++  <int value="-1877342338" label="HeliumNoiseCanvas:enabled"/>
+   <int value="-1876955850" label="EnablePciguardUi:enabled"/>
+   <int value="-1876881908"
+       label="disable-infobar-for-protected-media-identifier"/>
+@@ -9029,6 +9035,7 @@
+       label="ExperimentalAccessibilityDictationListening:enabled"/>
+   <int value="-1772172557" label="enable-osk-overscroll"/>
+   <int value="-1771552112" label="QueryTilesInOmnibox:disabled"/>
++  <int value="-1771154093" label="hide-extensions-menu"/>
+   <int value="-1769585756" label="LoadAllTabsAtStartup:enabled"/>
+   <int value="-1769361050" label="DynamicSafeAreaInsetsSupportedByCC:disabled"/>
+   <int value="-1768672408" label="ChromeDuplex:disabled"/>
+@@ -9358,6 +9365,7 @@
+   <int value="-1662556193" label="OmniboxNumSrpZpsRecentSearches:disabled"/>
+   <int value="-1662447331" label="wake-on-packets"/>
+   <int value="-1661282561" label="SharingHubDesktopOmnibox:enabled"/>
++  <int value="-1661127986" label="enable-low-end-device-mode"/>
+   <int value="-1660972490" label="gpu-rasterization-msaa-sample-count"/>
+   <int value="-1660884825" label="ReadLaterNewBadgePromo:enabled"/>
+   <int value="-1659659261" label="VpnAppsOnFlex:disabled"/>
+@@ -9379,6 +9387,7 @@
+   <int value="-1655495554" label="NtpCalendarModule:disabled"/>
+   <int value="-1655281250" label="DefaultCalculatorWebApp:enabled"/>
+   <int value="-1654902085" label="PwaNavigationCapturing:enabled"/>
++  <int value="-1654716884" label="NoCrossOriginReferrers:disabled"/>
+   <int value="-1654476091" label="cast-streaming-force-enable-hardware-vp8"/>
+   <int value="-1654344175" label="disable-extension-info-dialog"/>
+   <int value="-1654293330" label="InfobarPrioritization:enabled"/>
+@@ -9442,6 +9451,7 @@
+   <int value="-1637552275" label="NtpRealboxUseGoogleGIcon:disabled"/>
+   <int value="-1637519819" label="EnablePolicyTestPage:disabled"/>
+   <int value="-1636940108" label="EcheSWACheckAndroidNetworkInfo:enabled"/>
++  <int value="-1636645114" label="bookmark-bar-ntp"/>
+   <int value="-1636188191" label="IncognitoNtpRevamp:enabled"/>
+   <int value="-1635048938" label="DetectFormSubmissionOnFormClear:disabled"/>
+   <int value="-1634878515" label="ChromeHomeModernLayout:enabled"/>
+@@ -9562,6 +9572,7 @@
+   <int value="-1603074997" label="LensRegionSearch:enabled"/>
+   <int value="-1603026968"
+       label="AlignFontDisplayAutoTimeoutWithLCPGoal:disabled"/>
++  <int value="-1603009210" label="HeliumNoiseAudio:disabled"/>
+   <int value="-1601658823" label="AutofillVcnEnrollStrikeExpiryTime:enabled"/>
+   <int value="-1601374850" label="DialMediaRouteProvider:disabled"/>
+   <int value="-1600599500" label="IOSPromoBookmarkBubble:enabled"/>
+@@ -9571,6 +9582,7 @@
+   <int value="-1599780676" label="FastDrmMasterDrop:disabled"/>
+   <int value="-1599538279" label="enable-md-policy-page"/>
+   <int value="-1598785167" label="RequestDesktopSiteAdditions:disabled"/>
++  <int value="-1598267313" label="IncreaseIncognitoStorageQuota:disabled"/>
+   <int value="-1598163341" label="AndroidDesktopZoomScaling:disabled"/>
+   <int value="-1597399851" label="ProductSpecificationsSync:disabled"/>
+   <int value="-1597088741" label="RequestDesktopSiteAdditions:enabled"/>
+@@ -9691,6 +9703,7 @@
+   <int value="-1557048150" label="TabGroupShortcuts:disabled"/>
+   <int value="-1556805396" label="ScreenshotsForAndroidV2:enabled"/>
+   <int value="-1556654570" label="tab-groups-save-v2:enabled"/>
++  <int value="-1556012247" label="SetIpv6ProbeFalse:disabled"/>
+   <int value="-1555616901" label="ShoppingListTrackByDefault:disabled"/>
+   <int value="-1555375841" label="FedCmRpContext:enabled"/>
+   <int value="-1554921134"
+@@ -9781,6 +9794,7 @@
+   <int value="-1526934250" label="BorealisProvision:disabled"/>
+   <int value="-1526740682"
+       label="EnableHistorySyncOptinExpansionPill:disabled"/>
++  <int value="-1526045425" label="CertificateTransparencyAskBeforeEnabling:disabled"/>
+   <int value="-1525432906" label="AllowLegacyMV2Extensions:disabled"/>
+   <int value="-1525286543"
+       label="DeviceBoundSessionsForRestrictedSites:enabled"/>
+@@ -10518,6 +10532,7 @@
+   <int value="-1303417000" label="UseStorkSmdsServerAddress:enabled"/>
+   <int value="-1302904242" label="enable-navigation-tracing"/>
+   <int value="-1302859198" label="enable-stylus-virtual-keyboard:disabled"/>
++  <int value="-1302638457" label="close-confirmation"/>
+   <int value="-1302023752" label="SubApps:enabled"/>
+   <int value="-1301897303" label="SaasUsageReporting:disabled"/>
+   <int value="-1301804101"
+@@ -10749,6 +10764,7 @@
+       label="ChildProcessSecurityPolicyRustProcessState:disabled"/>
+   <int value="-1227660915" label="WebContentsOcclusion:disabled"/>
+   <int value="-1227571965" label="SnapGroup:enabled"/>
++  <int value="-1226893077" label="show-avatar-button"/>
+   <int value="-1226536953" label="DeskTemplateSync:disabled"/>
+   <int value="-1226013774" label="EnablePixAccountLinkingNative:disabled"/>
+   <int value="-1225861190" label="SupportTool:disabled"/>
+@@ -10773,6 +10789,7 @@
+   <int value="-1221040370" label="OsSettingsAppBadgingToggle:enabled"/>
+   <int value="-1220815756" label="WebAppShortEdgesCutoutMode:disabled"/>
+   <int value="-1220675698" label="OmniboxDeferredKeyboardPopup:enabled"/>
++  <int value="-1219670353" label="HeliumNoise:enabled"/>
+   <int value="-1219547098" label="SearchWebInSidePanel:disabled"/>
+   <int value="-1218608640" label="disable-offline-load-stale-cache"/>
+   <int value="-1218110631"
+@@ -11692,6 +11709,7 @@
+   <int value="-923422400" label="DiscardOccludedBitmaps:enabled"/>
+   <int value="-923318290"
+       label="autofill-ai-wallet-pass-branding-2026:disabled"/>
++  <int value="-921940118" label="IncreaseIncognitoStorageQuota:enabled"/>
+   <int value="-921755651" label="EnableManagedByParentUi:disabled"/>
+   <int value="-920794084" label="PickerFlip:disabled"/>
+   <int value="-920483976" label="AccessCodeCastRememberDevices:disabled"/>
+@@ -12210,6 +12228,7 @@
+   <int value="-757282194" label="EnableFilesystemInIncognito:enabled"/>
+   <int value="-757144288"
+       label="read-anything-with-readability-enabled:enabled"/>
++  <int value="-756507602" label="disable-search-engine-collection"/>
+   <int value="-756038603" label="ImeKoreanModeSwitchDebug:disabled"/>
+   <int value="-755776824" label="OmniboxRedoCurrentMatch:disabled"/>
+   <int value="-755068996" label="AutofillEnableCardArtImage:disabled"/>
+@@ -12566,6 +12585,7 @@
+   <int value="-643187834" label="OmniboxContextualSearchActionsAtTop:disabled"/>
+   <int value="-643105409" label="PickerGifs:enabled"/>
+   <int value="-642973094" label="ArabicIndicDigitInput:enabled"/>
++  <int value="-642736284" label="NoReferrers:disabled"/>
+   <int value="-642346675" label="DesktopPWAsAttentionBadgingCrOS:enabled"/>
+   <int value="-641846393" label="WebViewLegacyTlsSupport:enabled"/>
+   <int value="-641820371" label="EnableCustomMacPaperSizes:enabled"/>
+@@ -12601,6 +12621,7 @@
+   <int value="-633955136" label="ShowScrollableMVTOnNTPAndroid:disabled"/>
+   <int value="-633514774" label="WebAppMigrationApi:enabled"/>
+   <int value="-633425040" label="ClipboardHistoryReorder:disabled"/>
++  <int value="-632361176" label="ClearDataOnExit:enabled"/>
+   <int value="-632030508" label="NativeWindowNavButtons:disabled"/>
+   <int value="-631740127" label="inert-visual-viewport"/>
+   <int value="-631730924" label="ToolbarTabletResizeRefactor:enabled"/>
+@@ -12717,6 +12738,7 @@
+   <int value="-595819071"
+       label="OmniboxUIExperimentBlueTitlesOnPageSuggestions:disabled"/>
+   <int value="-595353721" label="RecordWebAppDebugInfo:enabled"/>
++  <int value="-595112266" label="omnibox-autocomplete-filtering"/>
+   <int value="-594732580" label="CCTResizableForThirdParties:enabled"/>
+   <int value="-594076614" label="PluginVmShowCameraPermissions:disabled"/>
+   <int value="-593536514" label="ExperimentalTabController:enabled"/>
+@@ -12764,6 +12786,7 @@
+   <int value="-576759065" label="HoldingSpaceInProgressAnimationV2:disabled"/>
+   <int value="-576475188" label="BorealisForceDoubleScale:disabled"/>
+   <int value="-576462208" label="PageContentCache:enabled"/>
++  <int value="-575560897" label="DisableLinkDrag:disabled"/>
+   <int value="-575139778" label="NtpDriveModuleNoSyncRequirement:enabled"/>
+   <int value="-575081438"
+       label="OmniboxMostVisitedTilesFadingOnTablet:disabled"/>
+@@ -13028,6 +13051,7 @@
+   <int value="-498084007" label="ImprovedSettingsUIOnDesktop:disabled"/>
+   <int value="-497986393" label="HoldingSpacePredictability:disabled"/>
+   <int value="-497571337" label="SkipUndecryptablePasswords:enabled"/>
++  <int value="-497520725" label="max-connections-per-host"/>
+   <int value="-496989565"
+       label="DesktopPWAsFlashAppNameInsteadOfOrigin:disabled"/>
+   <int value="-496879081" label="disable-ip-privacy-proxy"/>
+@@ -13155,12 +13179,14 @@
+   <int value="-455823639" label="RetainOmniboxOnFocus:disabled"/>
+   <int value="-455413094" label="FilesJsModules:enabled"/>
+   <int value="-455203267" label="use_new_features_summary"/>
++  <int value="-455070721" label="arcium-glass-backend"/>
+   <int value="-454549390" label="force-high-performance-gpu"/>
+   <int value="-454532863" label="CryptographyComplianceCnsa:disabled"/>
+   <int value="-454459100" label="ReadAnythingWithAlgorithm:enabled"/>
+   <int value="-454362199" label="HelpAppV2:disabled"/>
+   <int value="-454359275" label="kQuickAnswersMaterialNextUI:disabled"/>
+   <int value="-454246685" label="AndroidAppIntegrationWithFavicon:disabled"/>
++  <int value="-454126348" label="HeliumNoiseCpuCores:enabled"/>
+   <int value="-453506590" label="MediaLinkHelpers:disabled"/>
+   <int value="-452734575" label="ArcExtendInputAnrTimeout:enabled"/>
+   <int value="-451898735" label="private-aggregation-developer-mode"/>
+@@ -13581,6 +13607,7 @@
+       label="CustomizeChromeWallpaperSearchInspirationCard:disabled"/>
+   <int value="-311262273" label="BrowsingHistoryActorIntegrationM1:enabled"/>
+   <int value="-311148335" label="v8-pac-mojo-out-of-process"/>
++  <int value="-311031414" label="webrtc-ip-handling-policy"/>
+   <int value="-310908854" label="new-wallpaper-picker"/>
+   <int value="-310615515" label="EnableSuggestedFiles:disabled"/>
+   <int value="-309744108"
+@@ -13778,6 +13805,7 @@
+   <int value="-255264176" label="OmniboxSearchEngineLogo:disabled"/>
+   <int value="-255157394" label="ButtonARCNetworkDiagnostics:enabled"/>
+   <int value="-254887599" label="google-profile-info"/>
++  <int value="-254234686" label="disable-grease-tls"/>
+   <int value="-254183580" label="AccessibilityLabeledBy:disabled"/>
+   <int value="-254158542" label="SubresourceRedirectPreviews:enabled"/>
+   <int value="-253685023" label="PrivacyGuideAndroid3:enabled"/>
+@@ -13835,6 +13863,7 @@
+   <int value="-235949168" label="DrawPredictedInkPoint:enabled"/>
+   <int value="-235843754" label="OmniboxGroupingFrameworkForNonZPS:disabled"/>
+   <int value="-234966279" label="PointerEvent:disabled"/>
++  <int value="-234794599" label="hide-crashed-bubble"/>
+   <int value="-234687894"
+       label="NonValidatingReloadOnRefreshContentV2:disabled"/>
+   <int value="-234683458" label="AutofillAiAlwaysTriggerServerModel:disabled"/>
+@@ -13903,6 +13932,7 @@
+   <int value="-213214894" label="enable-chromevox-arc-support"/>
+   <int value="-211590646" label="ToolbarPhoneAnimationRefactor:disabled"/>
+   <int value="-211162053" label="OmniboxHeaderPaddingUpdate:enabled"/>
++  <int value="-210277678" label="fingerprinting-canvas-measuretext-noise"/>
+   <int value="-208587977" label="OmniboxMaterialDesignWeatherIcons:enabled"/>
+   <int value="-208435024" label="EnableUsernameCorrection:enabled"/>
+   <int value="-208357844" label="PrivacyPolicyInsights:enabled"/>
+@@ -14095,6 +14125,7 @@
+   <int value="-152349324" label="CameraAppMultiPageDocScan:disabled"/>
+   <int value="-150820109" label="ProjectorAppDebug:disabled"/>
+   <int value="-150395873" label="NTPEnterpriseShortcuts:enabled"/>
++  <int value="-150168564" label="ReducedSystemInfo:enabled"/>
+   <int value="-150077791" label="FontAccessChooser:disabled"/>
+   <int value="-149667706" label="CameraAppDigitalZoom:enabled"/>
+   <int value="-149459029" label="OnDemandBackgroundTabContextCapture:disabled"/>
+@@ -14353,6 +14384,7 @@
+   <int value="-70434056" label="UseGles2ForOopR:enabled"/>
+   <int value="-69919375" label="ShimlessRMAFlexibleSerialNumberName:enabled"/>
+   <int value="-69427025" label="OfflinePagesPrefetchingUI:enabled"/>
++  <int value="-69310315" label="SpoofWebGLInfo:enabled"/>
+   <int value="-69224661" label="FeedAblation:enabled"/>
+   <int value="-68877684" label="BackgroundVideoTrackOptimization:enabled"/>
+   <int value="-68832811" label="LensOverlayOmniboxEntryPoint:disabled"/>
+@@ -14376,6 +14408,7 @@
+   <int value="-63641059" label="AutofillSyncEwalletAccounts:disabled"/>
+   <int value="-63207112" label="NtpSingleRowShortcuts:disabled"/>
+   <int value="-60692320" label="PrefBasedDataCollectionConsentHelper:disabled"/>
++  <int value="-60692241" label="NoReferrers:enabled"/>
+   <int value="-60219461" label="BluetoothFlossTelephony:enabled"/>
+   <int value="-60106539" label="ReadAloudBackgroundPlayback:enabled"/>
+   <int value="-59530055" label="ChromeVoxArcSupport:enabled"/>
+@@ -14443,6 +14476,7 @@
+   <int value="-38088645"
+       label="ReadClipboardDataOnClipboardItemGetType:enabled"/>
+   <int value="-37966026" label="PermissionPredictions:enabled"/>
++  <int value="-37227553" label="ClearDataOnExit:disabled"/>
+   <int value="-36671802"
+       label="ApplyClientsideModelPredictionsForOtps:disabled"/>
+   <int value="-36550471" label="HTMLPopoverAttribute:enabled"/>
+@@ -14487,6 +14521,7 @@
+   <int value="-25025176" label="PerformantSplitViewResizing:enabled"/>
+   <int value="-24570936" label="DestroyProfileOnBrowserClose:disabled"/>
+   <int value="-24217468" label="QuickAnswersTextAnnotator:enabled"/>
++  <int value="-23990397" label="MinimalReferrers:enabled"/>
+   <int value="-23804418"
+       label="NTPArticleSuggestionsExpandableHeader:disabled"/>
+   <int value="-23772747" label="NoWakeUpsForCanceledTasks:enabled"/>
+@@ -14503,6 +14538,7 @@
+   <int value="-20438829" label="SyncUSSAutofillProfile:enabled"/>
+   <int value="-20329017" label="EduCoexistence:disabled"/>
+   <int value="-20267582" label="ResourceLoadingHints:disabled"/>
++  <int value="-19710812" label="HeliumMiddleClickAutoscroll:enabled"/>
+   <int value="-19498390"
+       label="RunVideoCaptureServiceInBrowserProcess:disabled"/>
+   <int value="-18757749" label="CalendarJelly:disabled"/>
+@@ -14626,6 +14662,7 @@
+   <int value="21055794" label="OpenXR:enabled"/>
+   <int value="21376808" label="LongScreenshotsNoMemoryCheck:disabled"/>
+   <int value="21641175" label="OptimizeEarlyNavigation:disabled"/>
++  <int value="21850967" label="SpoofWebGLInfo:disabled"/>
+   <int value="22043520" label="GlicContextualCueBubble:disabled"/>
+   <int value="22142588" label="OptimizationGuidePushNotifications:disabled"/>
+   <int value="22322436" label="AutofillEnablePaymentsMandatoryReauth:disabled"/>
+@@ -14701,6 +14738,7 @@
+   <int value="44088203" label="ExpensiveBackgroundTimerThrottling:enabled"/>
+   <int value="44240181" label="SharingQRCodeGenerator:disabled"/>
+   <int value="45681371" label="CCTResizableSideSheet:enabled"/>
++  <int value="45713231" label="RemoveClientHints:enabled"/>
+   <int value="46201270" label="Taiyaki:disabled"/>
+   <int value="46334141"
+       label="FeatureNotificationGuideSkipCheckForLowEngagedUsers:enabled"/>
+@@ -14822,6 +14860,7 @@
+   <int value="88127181" label="NotebookLmAppPreinstall:enabled"/>
+   <int value="88437020" label="FeaturePolicy:enabled"/>
+   <int value="88863813" label="DesktopPWAsDetailedInstallDialog:enabled"/>
++  <int value="88914354" label="CertificateTransparencyAskBeforeEnabling:enabled"/>
+   <int value="89357752" label="PdfXfaSupport:enabled"/>
+   <int value="89748527" label="AllowLegacyMV2Extensions:enabled"/>
+   <int value="89758831" label="FontAccessChooser:enabled"/>
+@@ -15080,6 +15119,7 @@
+   <int value="171273307" label="SystemEmojiPickerClipboard:disabled"/>
+   <int value="171751855"
+       label="AutofillEnableCardBenefitsForCapitalOne:enabled"/>
++  <int value="172346586" label="enable-incognito-themes"/>
+   <int value="172797653" label="StylusHandwritingWin:enabled"/>
+   <int value="172878751"
+       label="OmniboxRemoveSuggestionHeaderCapitalization:enabled"/>
+@@ -15378,6 +15418,7 @@
+   <int value="268535107"
+       label="ash-new-touch-support-for-screen-magnification"/>
+   <int value="269249648" label="StartSurfaceSpareTab:disabled"/>
++  <int value="269522099" label="NoCrossOriginReferrers:enabled"/>
+   <int value="269631838" label="BorealisLinuxMode:disabled"/>
+   <int value="269855165" label="UseWritePixelsYUV:enabled"/>
+   <int value="270038252" label="SignInProfileCreationEnterprise:disabled"/>
+@@ -15784,6 +15825,8 @@
+   <int value="388996324" label="CustomContextMenu:disabled"/>
+   <int value="390360656" label="TrustSafetySentimentSurvey:enabled"/>
+   <int value="390675143" label="AXTreeFixing:enabled"/>
++  <int value="391181299" label="HeliumNoise:disabled"/>
++  <int value="391385119" label="disable-ech"/>
+   <int value="391632490" label="NtpDriveModule:enabled"/>
+   <int value="392107748" label="PwaUpdateDialogForIcon:disabled"/>
+   <int value="392154827" label="BaselineGM3SurfaceColors:enabled"/>
+@@ -15852,6 +15895,7 @@
+   <int value="411920294"
+       label="FullscreenInsetsApiMigrationOnAutomotive:enabled"/>
+   <int value="411987377" label="Apb144Patch9:enabled"/>
++  <int value="412021872" label="MinimalReferrers:disabled"/>
+   <int value="412185345"
+       label="DownloadServiceForegroundSessionIOSFeature:enabled"/>
+   <int value="412957264" label="tab-close-buttons-hidden-with-touch"/>
+@@ -16086,6 +16130,7 @@
+   <int value="492528575"
+       label="AutofillEnableUserAvatarInSaveCardFooter:enabled"/>
+   <int value="492849345" label="ImprovedDesksKeyboardShortcuts:disabled"/>
++  <int value="492973433" label="disable-beforeunload"/>
+   <int value="492985975" label="use-monitor-color-space"/>
+   <int value="493758709" label="RestrictGamepadAccess:disabled"/>
+   <int value="493903641" label="disable-appcontainer"/>
+@@ -16545,6 +16590,7 @@
+   <int value="647724971" label="LauncherImageSearchIca:disabled"/>
+   <int value="648101846" label="AiSettingsPageEnterpriseDisabledUi:disabled"/>
+   <int value="648697679" label="VirtualKeyboardNewHeader:disabled"/>
++  <int value="648937415" label="close-window-with-last-tab"/>
+   <int value="649111851" label="MidiManagerCros:enabled"/>
+   <int value="649384106" label="FailFastQuietChip:disabled"/>
+   <int value="649508040" label="AutofillEnableCompanyName:enabled"/>
+@@ -16854,6 +16900,7 @@
+   <int value="735180038"
+       label="AccessibilitySelectToSpeakHoverTextImprovements:disabled"/>
+   <int value="735393448" label="InsertKeyToggleMode:disabled"/>
++  <int value="736036456" label="HeliumNoiseCanvas:disabled"/>
+   <int value="736402508" label="BundledSecuritySettingsSecureDnsV2:enabled"/>
+   <int value="736740751"
+       label="OmniboxFocusTriggersWebAndSRPZeroSuggest:disabled"/>
+@@ -17139,6 +17186,7 @@
+   <int value="824961931" label="use-simple-cache-backend"/>
+   <int value="824968180" label="SimLockPolicy:enabled"/>
+   <int value="825381037" label="NtpFeatureOptimizationModuleRemoval:disabled"/>
++  <int value="825748485" label="HeliumNoiseAudio:enabled"/>
+   <int value="826644834" label="NtpRealboxCr23ConsistentRowHeight:disabled"/>
+   <int value="826748470" label="NtpCalendarModule:enabled"/>
+   <int value="828092263" label="TemporaryUnexpireFlagsM78:enabled"/>
+@@ -17186,6 +17234,7 @@
+   <int value="842158411" label="PdfViewerDocumentProperties:enabled"/>
+   <int value="842432903" label="CaptureThumbnailOnNavigatingAway:enabled"/>
+   <int value="842543328" label="ActorScriptToolSkipPageContent:enabled"/>
++  <int value="842647619" label="disable-top-sites"/>
+   <int value="842789526" label="CloudPrinterHandler:disabled"/>
+   <int value="843857704" label="PassExplicitSyncPassphraseToGmsCore:enabled"/>
+   <int value="843896452" label="UserActivationV2:enabled"/>
+@@ -17194,6 +17243,7 @@
+   <int value="844587371"
+       label="DesktopPWAsLocalUpdatingThrottlePersistence:disabled"/>
+   <int value="844878845" label="mantis-feature-key:enabled"/>
++  <int value="844995920" label="force-dark-mode"/>
+   <int value="845659238" label="DevicePosture:enabled"/>
+   <int value="845666212" label="AutofillAiWithDataSchema:disabled"/>
+   <int value="846452845" label="SplitViewLinkOpen:disabled"/>
+@@ -17281,6 +17331,7 @@
+   <int value="872509587" label="ArcWindowPredictor:enabled"/>
+   <int value="873323760" label="MediaFoundationClearPlayback:disabled"/>
+   <int value="874614410" label="CSSOverflowForReplacedElements:enabled"/>
++  <int value="874632452" label="keep-old-history"/>
+   <int value="875077636" label="OriginAgentClusterDefaultEnable:disabled"/>
+   <int value="875388341"
+       label="ContextualTasksEphemeralBrandedEntryPoint:enabled"/>
+@@ -17887,6 +17938,7 @@
+   <int value="1082054180" label="PersistentWindowBounds:disabled"/>
+   <int value="1082064896" label="WebAuthenticationAmbientSignin:enabled"/>
+   <int value="1082840061" label="LinkDoctorDeprecationAndroid:disabled"/>
++  <int value="1082971867" label="start-maximized"/>
+   <int value="1083020187" label="FractionalScrollOffsets:enabled"/>
+   <int value="1083201516" label="PersistentWindowBounds:enabled"/>
+   <int value="1083575298" label="LoadCryptoTokenExtension:enabled"/>
+@@ -18084,6 +18136,7 @@
+       label="NtpMostRelevantTabResumptionModuleDeviceIcon:enabled"/>
+   <int value="1138345742" label="PreferConstantFrameRate:disabled"/>
+   <int value="1138349838" label="EnableMDRoundedCornersOnDialogs:disabled"/>
++  <int value="1138397236" label="fingerprinting-client-rects-noise"/>
+   <int value="1138690502" label="PreconnectToSearch:enabled"/>
+   <int value="1139226452" label="enable-nacl-debug"/>
+   <int value="1139313302" label="BatchTabRestore:disabled"/>
+@@ -18159,6 +18212,7 @@
+   <int value="1167350114" label="AndroidNightMode:enabled"/>
+   <int value="1167613030" label="enable-permission-action-reporting"/>
+   <int value="1168226627" label="OmniboxMaxZeroSuggestMatches:enabled"/>
++  <int value="1168517752" label="extension-mime-request-handling"/>
+   <int value="1169418814" label="ManualFallbacksFilling:enabled"/>
+   <int value="1169602917" label="GlicExperimentalTriggeringScreenshot:enabled"/>
+   <int value="1170030686" label="BookmarkBottomSheet:enabled"/>
+@@ -18342,6 +18396,7 @@
+       label="kAutofillRationalizeRepeatedServerPredictions:enabled"/>
+   <int value="1222309415" label="SplitCacheByNetworkIsolationKey:enabled"/>
+   <int value="1222525128" label="FirstRunDesktopRevamp:disabled"/>
++  <int value="1222559604" label="popups-to-tabs"/>
+   <int value="1222808563" label="DisableInitialMostVisitedFadeIn:disabled"/>
+   <int value="1224660785" label="ImeSwitchCheckConnectionStatus:disabled"/>
+   <int value="1224806430" label="ConsumerAutoUpdateToggleAllowed:enabled"/>
+@@ -18370,6 +18425,7 @@
+   <int value="1232707660" label="FilesKernelDrivers:enabled"/>
+   <int value="1233218014" label="OmniboxMultimodalInput:enabled"/>
+   <int value="1233310128" label="ExoConsumedByImeByFlag:enabled"/>
++  <int value="1233792846" label="SetIpv6ProbeFalse:enabled"/>
+   <int value="1234601252" label="ForceUseAPDownloadProtection:enabled"/>
+   <int value="1234891176" label="AnimateSuggestionsListAppearance:enabled"/>
+   <int value="1234950775" label="FileTransferEnterpriseConnector:enabled"/>
+@@ -18481,6 +18537,7 @@
+       label="AutofillUpstreamUseGooglePayOnAndroidBranding:disabled"/>
+   <int value="1266619643" label="ImprovedSigninUIOnDesktop:disabled"/>
+   <int value="1266886673" label="delay-reload-stop-button-change"/>
++  <int value="1266984122" label="DisableLinkDrag:enabled"/>
+   <int value="1267279578" label="NtpDriveModuleShowSixFiles:disabled"/>
+   <int value="1267585140" label="ShareSheetMigrationAndroid:enabled"/>
+   <int value="1268470658" label="disable-android-password-link"/>
+@@ -18675,6 +18732,7 @@
+   <int value="1316607485" label="MultiProfileAccountConsistency:enabled"/>
+   <int value="1316844889" label="ScreenshotsForAndroidV2:disabled"/>
+   <int value="1317207024" label="VoiceSearchCoherenceSearchbox:enabled"/>
++  <int value="1317460634" label="RemoveClientHints:disabled"/>
+   <int value="1317562265" label="SeccompSandboxAndroid:disabled"/>
+   <int value="1318073661" label="MaterialDesignExtensions:enabled"/>
+   <int value="1319024729" label="ServiceWorkerServicification:disabled"/>
+@@ -18686,6 +18744,7 @@
+   <int value="1319697431" label="PersistAcrossRebootsDebugLogs:enabled"/>
+   <int value="1319725131" label="enable-distance-field-text"/>
+   <int value="1319804064" label="YourSavedInfoSettingsPage:disabled"/>
++  <int value="1319949521" label="tab-hover-cards"/>
+   <int value="1320201920" label="enable-touchpad-three-finger-click"/>
+   <int value="1320450434" label="ArcUsbStorageUI:disabled"/>
+   <int value="1321935981" label="CrosSafetyService:disabled"/>
+@@ -19188,6 +19247,7 @@
+   <int value="1482245628" label="OmniboxNativeVoiceSuggestProvider:enabled"/>
+   <int value="1482277613" label="GlanceablesTimeManagementTasksView:enabled"/>
+   <int value="1482839038" label="AutofillCreditCardAuthentication:enabled"/>
++  <int value="1482953319" label="HeliumMiddleClickAutoscroll:disabled"/>
+   <int value="1483980996" label="MacSyscallSandbox:enabled"/>
+   <int value="1486092162"
+       label="AutofillEnableOffersInClankKeyboardAccessory:enabled"/>
+@@ -19325,6 +19385,7 @@
+   <int value="1527172748" label="disable-http2-grease-settings"/>
+   <int value="1527292264" label="DisplayChangeModal:enabled"/>
+   <int value="1527444466" label="RelatedWebsiteSetsDevUI:enabled"/>
++  <int value="1527767564" label="energy-saver-fps-limit"/>
+   <int value="1528149296" label="TabGroupPaneAndroid:enabled"/>
+   <int value="1528633042"
+       label="kFileSystemAccessPersistentPermissionsUpdatedPageInfo:disabled"/>
+@@ -19399,6 +19460,7 @@
+   <int value="1551743170"
+       label="WebAuthenticationNewDiscoverableCredentialsUi:disabled"/>
+   <int value="1551752543" label="ArcvmSwapoutKeyboardShortcut:disabled"/>
++  <int value="1551870084" label="hide-tab-close-buttons"/>
+   <int value="1552753678" label="DnsHttpssvc:disabled"/>
+   <int value="1553017633" label="OmniboxHeaderPaddingUpdate:disabled"/>
+   <int value="1553310752" label="AccessibilityCursorColor:enabled"/>
+@@ -19678,6 +19740,7 @@
+   <int value="1643712769" label="PrintWithReducedRasterization:enabled"/>
+   <int value="1644340731" label="NearbySharingSelfShareUI:enabled"/>
+   <int value="1644405691" label="VCPortraitRelighting:disabled"/>
++  <int value="1644626631" label="HeliumCompactLocationWidth:enabled"/>
+   <int value="1644777968" label="ArcUnthrottleOnActiveAudio:disabled"/>
+   <int value="1645141340" label="DesksCloseAll:enabled"/>
+   <int value="1645447927" label="MixedContentSiteSetting:disabled"/>
+@@ -19923,6 +19986,7 @@
+   <int value="1718341860" label="NTPButton:enabled"/>
+   <int value="1718421370" label="SharingHubLinkToggle:enabled"/>
+   <int value="1718774381" label="DragDropTabTearingEnableOEM:enabled"/>
++  <int value="1718922096" label="force-punycode-hostnames"/>
+   <int value="1719019077" label="FileSystemProviderCloudFileSystem:disabled"/>
+   <int value="1719189460" label="EnablePasswordSelection:disabled"/>
+   <int value="1719498202" label="BrowserControlsScrollSnapAnimation:enabled"/>
+@@ -20328,6 +20392,7 @@
+   <int value="1838990777" label="V8Future:enabled"/>
+   <int value="1839005510" label="MutingCompromisedCredentials:enabled"/>
+   <int value="1839740266" label="LocationHardReload:disabled"/>
++  <int value="1839821521" label="HeliumCompactLocationWidth:disabled"/>
+   <int value="1839869519"
+       label="AutofillEnablePaymentSettingsCardPromoAndScanCard:enabled"/>
+   <int value="1840087820" label="NtpRealboxMatchSearchboxTheme:enabled"/>
+@@ -20401,6 +20466,7 @@
+   <int value="1863622457" label="WebAuthentication:enabled"/>
+   <int value="1864062646" label="ChromeWhatsNewUI:disabled"/>
+   <int value="1864412948" label="AvatarsCloudMigration:disabled"/>
++  <int value="1864436823" label="HeliumNoiseCpuCores:disabled"/>
+   <int value="1864947900"
+       label="EnableBluetoothSerialPortProfileInSerialApi:enabled"/>
+   <int value="1865068568" label="disable-audio-support-for-desktop-share"/>
+@@ -20568,6 +20634,7 @@
+   <int value="1921387145" label="WebCryptoPQC:disabled"/>
+   <int value="1921543515" label="ExoLockNotification:enabled"/>
+   <int value="1921615454" label="DataSharingAndroidV2:disabled"/>
++  <int value="1922004168" label="hide-fullscreen-exit-ui"/>
+   <int value="1922609313"
+       label="DeviceBoundSessionAccessObserverSharedRemote:enabled"/>
+   <int value="1923052799" label="CrostiniUseDlc:disabled"/>

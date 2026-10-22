@@ -1,0 +1,104 @@
+--- a/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper_browsertest.cc
++++ b/chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper_browsertest.cc
+@@ -12,6 +12,7 @@
+ #include "base/test/simple_test_tick_clock.h"
+ #include "base/test/test_future.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/browser/chrome_content_browser_client.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/media/media_engagement_service.h"
+@@ -25,7 +26,10 @@
+ #include "chrome/browser/picture_in_picture/hats/auto_picture_in_picture_hats_service_factory.h"
+ #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
++#include "components/safe_browsing/core/browser/db/fake_database_manager.h"
++#endif
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/hats/hats_service_factory.h"
+@@ -47,7 +51,6 @@
+ #include "components/keyed_service/content/browser_context_dependency_manager.h"
+ #include "components/metrics/content/subprocess_metrics_provider.h"
+ #include "components/permissions/permission_decision_auto_blocker.h"
+-#include "components/safe_browsing/core/browser/db/fake_database_manager.h"
+ #include "components/ukm/test_ukm_recorder.h"
+ #include "components/zoom/zoom_controller.h"
+ #include "content/public/browser/media_session.h"
+@@ -1012,9 +1015,13 @@
+     : public AutoPictureInPictureTabHelperBrowserTest {
+  public:
+   AutoPictureInPictureWithVideoPlaybackBrowserTest()
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       : safe_browsing_factory_(
+             std::make_unique<safe_browsing::TestSafeBrowsingServiceFactory>()),
+         dependency_manager_subscription_(
++#else
++      : dependency_manager_subscription_(
++#endif
+             BrowserContextDependencyManager::GetInstance()
+                 ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+                     &AutoPictureInPictureWithVideoPlaybackBrowserTest::
+@@ -1035,6 +1042,7 @@
+     return features;
+   }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void AddDangerousUrl(const GURL& dangerous_url) {
+     fake_safe_browsing_database_manager_->AddDangerousUrl(
+         dangerous_url,
+@@ -1044,6 +1052,7 @@
+   void ClearDangerousUrl(const GURL& dangerous_url) {
+     fake_safe_browsing_database_manager_->ClearDangerousUrl(dangerous_url);
+   }
++#endif
+ 
+   MediaEngagementService* GetMediaEngagementService() const {
+     return MediaEngagementServiceFactory::GetForProfile(browser()->profile());
+@@ -1057,6 +1066,7 @@
+   }
+ 
+  protected:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void CreatedBrowserMainParts(
+       content::BrowserMainParts* browser_main_parts) override {
+     fake_safe_browsing_database_manager_ =
+@@ -1067,6 +1077,7 @@
+     safe_browsing::SafeBrowsingService::RegisterFactory(
+         safe_browsing_factory_.get());
+   }
++#endif
+ 
+   void SetTestingFactory(content::BrowserContext* context) {
+     MediaEngagementServiceFactory::GetInstance()->SetTestingFactory(
+@@ -1074,10 +1085,12 @@
+   }
+ 
+  private:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   scoped_refptr<safe_browsing::FakeSafeBrowsingDatabaseManager>
+       fake_safe_browsing_database_manager_;
+   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
+       safe_browsing_factory_;
++#endif
+   base::CallbackListSubscription dependency_manager_subscription_;
+ };
+ 
+@@ -1292,6 +1305,7 @@
+   SwitchToNewTabAndDontExpectAutopip();
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
+                        DoesNotVideoAutopip_DangerousURL) {
+   // Load a page that registers for autopip and start video playback.
+@@ -1348,6 +1362,7 @@
+   SwitchToNewTabAndBackAndExpectAutopip(/*should_video_pip=*/true,
+                                         /*should_document_pip=*/false);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(AutoPictureInPictureWithVideoPlaybackBrowserTest,
+                        DoesNotVideoAutopip_LowEngagementScore) {

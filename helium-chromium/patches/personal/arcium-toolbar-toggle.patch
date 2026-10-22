@@ -1,0 +1,425 @@
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -153,6 +153,7 @@
+ #define IDC_ARCIUM_FOCUS_SPLIT_1 34139
+ #define IDC_ARCIUM_FOCUS_SPLIT_2 34140
+ #define IDC_ARCIUM_SELECT_TAB_9 34141
++#define IDC_ARCIUM_TOGGLE_TOOLBAR 34142
+ 
+ // Page-related commands
+ #define IDC_BOOKMARK_THIS_TAB           35000
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -2003,6 +2003,9 @@ are declared in tools/grit/grit_args.gni
+       <message name="IDS_SHORTCUT_COMMAND_TOGGLE_SIDEBAR" desc="Command name shown on the Settings shortcuts page for showing or hiding the sidebar.">
+         Show or hide sidebar
+       </message>
++      <message name="IDS_SHORTCUT_COMMAND_TOGGLE_TOOLBAR" desc="Command name shown on the Settings shortcuts page for showing or hiding the browser toolbar.">
++        Show or hide toolbar
++      </message>
+       <message name="IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP" desc="Command name shown on the Settings shortcuts page for closing the find bar or stopping page loading.">
+         Close find bar or stop loading
+       </message>
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -58,6 +58,7 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ #include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_commands.h"
+ #include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+@@ -837,6 +838,12 @@ void BrowserCommandController::HandleCom
+     case IDC_ARCIUM_TOGGLE_SPACE_PIN:
+       browser_shortcuts::arcium::ToggleCurrentSpacePin(browser_);
+       break;
++    case IDC_ARCIUM_TOGGLE_TOOLBAR: {
++      PrefService* prefs = profile()->GetPrefs();
++      prefs->SetBoolean(arcium::kShowToolbarPref,
++                        !prefs->GetBoolean(arcium::kShowToolbarPref));
++      break;
++    }
+     case IDC_ARCIUM_SELECT_SPACE_1:
+     case IDC_ARCIUM_SELECT_SPACE_2:
+     case IDC_ARCIUM_SELECT_SPACE_3:
+@@ -1167,7 +1174,9 @@ void BrowserCommandController::HandleCom
+       FocusToolbar(browser_);
+       break;
+     case IDC_FOCUS_LOCATION:
+-      if (!window()->IsLocationBarVisible()) {
++      if (!window()->IsLocationBarVisible() &&
++          !(browser_->is_type_normal() && !window()->IsFullscreen() &&
++            !profile()->GetPrefs()->GetBoolean(arcium::kShowToolbarPref))) {
+         break;
+       }
+       base::RecordAction(base::UserMetricsAction("Accel_Focus_Location"));
+@@ -2592,6 +2601,11 @@ void BrowserCommandController::UpdateCom
+   command_updater_->UpdateCommandEnabled(IDC_FULLSCREEN, fullscreen_enabled);
+   command_updater_->UpdateCommandEnabled(IDC_TOGGLE_FULLSCREEN_TOOLBAR,
+                                          fullscreen_enabled);
++  command_updater_->UpdateCommandEnabled(
++      IDC_ARCIUM_TOGGLE_TOOLBAR,
++      browser_->is_type_normal() && !is_fullscreen &&
++          !profile()->GetPrefs()->FindPreference(arcium::kShowToolbarPref)
++               ->IsManaged());
+ 
+   UpdateCommandsForBookmarkBar();
+   UpdateCommandsForIncognitoAvailability();
+--- a/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.cc
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.cc
+@@ -93,6 +93,8 @@ constexpr ShortcutDefinition kSupportedS
+     {"save_page_as", "Save Page As", IDC_SAVE_PAGE, "Meta+Shift+KeyS"},
+     {"show_hide_sidebar", "Show or Hide the Sidebar",
+      IDC_TOGGLE_VERTICAL_TABS_COLLAPSE, "Meta+KeyS"},
++    {"show_hide_toolbar", "Show or Hide the Toolbar",
++     IDC_ARCIUM_TOGGLE_TOOLBAR, "Meta+Shift+KeyD"},
+     {"copy_current_tab_url", "Copy current tab URL", IDC_COPY_URL,
+      "Meta+Shift+KeyC"},
+     {"change_current_tab_url", "Change current tab URL", IDC_FOCUS_LOCATION,
+--- a/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc
+@@ -15,11 +15,13 @@
+ #include "base/test/scoped_feature_list.h"
+ #include "base/values.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.h"
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_prefs.h"
+ #include "chrome/browser/ui/helium/helium_layout_state_controller.h"
+ #include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/grit/generated_resources.h"
+ #include "components/prefs/pref_registry_simple.h"
+ #include "components/prefs/testing_pref_service.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+@@ -42,6 +44,8 @@ void RegisterPrefs(TestingPrefServiceSim
+                                                 false);
+   pref_service->registry()->RegisterBooleanPref(::prefs::kCtrlTabMru, false);
+   pref_service->registry()->RegisterIntegerPref(::prefs::kHeliumLayout, 0);
++  pref_service->registry()->RegisterBooleanPref(::arcium::kShowToolbarPref,
++                                                true);
+   pref_service->registry()->RegisterIntegerPref(::arcium::kCollapsedSidebarStylePref,
+       ::arcium::kCollapsedSidebarStyleIconRail);
+ }
+@@ -212,6 +216,39 @@ TEST(ArciumShortcutPresetsTest, UsesDedi
+   EXPECT_FALSE(pref_service.GetBoolean(::prefs::kCopyPageUrlShortcut));
+ }
+ 
++TEST(ArciumShortcutPresetsTest,
++     ExposesToolbarShortcutInEditorAndRestoresBookmarkAllTabsConflict) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++
++  EXPECT_TRUE(service.HasCommand(IDC_ARCIUM_TOGGLE_TOOLBAR));
++  const auto label = GetBrowserShortcutCommandLabel(
++      IDC_ARCIUM_TOGGLE_TOOLBAR, &pref_service);
++  ASSERT_TRUE(label.has_value());
++  EXPECT_EQ(label->message_id, IDS_SHORTCUT_COMMAND_TOGGLE_TOOLBAR);
++  bool editor_command_found = false;
++  for (int command_id :
++       GetBrowserShortcutCommandsWithoutDefault(&pref_service)) {
++    editor_command_found |= command_id == IDC_ARCIUM_TOGGLE_TOOLBAR;
++  }
++  EXPECT_TRUE(editor_command_found);
++
++  const char kArcToolbarShortcut[] = "Meta+Shift+KeyD";
++  EXPECT_EQ(service.FindCommandForAccelerator(kArcToolbarShortcut),
++            IDC_BOOKMARK_ALL_TABS);
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_EQ(service.FindCommandForAccelerator(kArcToolbarShortcut),
++            IDC_ARCIUM_TOGGLE_TOOLBAR);
++  EXPECT_TRUE(HasPreviousArcShortcutConfiguration(service));
++
++  EXPECT_EQ(RestorePreviousArcShortcutConfiguration(&service),
++            PresetResult::kApplied);
++  EXPECT_EQ(service.FindCommandForAccelerator(kArcToolbarShortcut),
++            IDC_BOOKMARK_ALL_TABS);
++  EXPECT_FALSE(HasPreviousArcShortcutConfiguration(service));
++}
++
+ TEST(ArciumShortcutPresetsTest, KeepsSequentialAndRecentCommandsIndependent) {
+   for (bool mru_enabled : {false, true}) {
+     TestingPrefServiceSimple pref_service;
+@@ -400,8 +437,10 @@ TEST(ArciumShortcutPresetsTest, ArcPrese
+   TestingPrefServiceSimple pref_service;
+   RegisterPrefs(&pref_service);
+   UseVerticalSidebar(&pref_service);
++  pref_service.SetBoolean(::arcium::kShowToolbarPref, false);
+   BrowserShortcutService service(&pref_service);
+   EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_FALSE(pref_service.GetBoolean(::arcium::kShowToolbarPref));
+   EXPECT_EQ(pref_service.GetInteger(::arcium::kCollapsedSidebarStylePref),
+             ::arcium::kCollapsedSidebarStyleFullyHidden);
+   EXPECT_EQ(service.FindCommandForAccelerator("Meta+KeyS"),
+@@ -417,6 +456,7 @@ TEST(ArciumShortcutPresetsTest, ArcPrese
+   EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
+   EXPECT_EQ(RestorePreviousArcShortcutConfiguration(&service),
+             PresetResult::kApplied);
++  EXPECT_FALSE(pref_service.GetBoolean(::arcium::kShowToolbarPref));
+   EXPECT_EQ(pref_service.GetInteger(::arcium::kCollapsedSidebarStylePref),
+             ::arcium::kCollapsedSidebarStyleIconRail);
+   EXPECT_EQ(pref_service.GetUserPrefValue(::arcium::kCollapsedSidebarStylePref),
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
+@@ -195,6 +195,8 @@ std::optional<BrowserShortcutCommandLabe
+       return Label(IDS_BOOKMARK_ALL_TABS);
+     case IDC_SHOW_BOOKMARK_BAR:
+       return Label(IDS_SHOW_BOOKMARK_BAR);
++    case IDC_ARCIUM_TOGGLE_TOOLBAR:
++      return Label(IDS_SHORTCUT_COMMAND_TOGGLE_TOOLBAR);
+     case IDC_SHOW_BOOKMARK_MANAGER:
+       return Label(IDS_BOOKMARK_MANAGER);
+     case IDC_FOCUS_BOOKMARKS:
+@@ -320,6 +322,7 @@ std::vector<int> GetBrowserShortcutComma
+   // constructed yet. Keep it assignable independently of the layout-aware
+   // Ctrl+S dispatcher.
+   commands.push_back(IDC_SAVE_PAGE);
++  commands.push_back(IDC_ARCIUM_TOGGLE_TOOLBAR);
+   commands.push_back(IDC_TOGGLE_VERTICAL_TABS_COLLAPSE);
+ 
+   commands.push_back(IDC_COPY_URL);
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -11,6 +11,7 @@
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #if defined(TOOLKIT_VIEWS)
+@@ -139,6 +140,7 @@ void RegisterBrowserUserPrefs(user_prefs
+   registry->RegisterIntegerPref(
+       arcium::kCollapsedSidebarStylePref,
+       arcium::kCollapsedSidebarStyleIconRail);
++  registry->RegisterBooleanPref(arcium::kShowToolbarPref, true);
+ 
+ #if defined(TOOLKIT_VIEWS)
+   registry->RegisterDictionaryPref(
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -300,6 +300,8 @@ NSMenuItem* BuildViewMenu(NSApplication*
+               Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
+                   .command_id(IDC_SHOW_BOOKMARK_BAR)
+                   .remove_if(is_pwa),
++              Item(IDS_SHORTCUT_COMMAND_TOGGLE_TOOLBAR)
++                  .command_id(IDC_ARCIUM_TOGGLE_TOOLBAR),
+               Item(IDS_TOGGLE_FULLSCREEN_TOOLBAR_MAC)
+                   .command_id(IDC_TOGGLE_FULLSCREEN_TOOLBAR),
+               Item(IDS_CONTEXT_MENU_SHOW_FULL_URLS)
+--- a/chrome/browser/ui/helium/arcium_appearance_prefs.h
++++ b/chrome/browser/ui/helium/arcium_appearance_prefs.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_HELIUM_ARCIUM_APPEARANCE_PREFS_H_
+ 
+ namespace arcium {
++inline constexpr char kShowToolbarPref[] = "arcium.appearance.show_toolbar";
+ inline constexpr char kCollapsedSidebarStylePref[] =
+     "arcium.appearance.collapsed_sidebar_style";
+ inline constexpr int kCollapsedSidebarStyleIconRail = 0;
+--- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -64,6 +64,7 @@
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ #import "ui/views/cocoa/native_widget_mac_ns_window_host.h"
+ #include "ui/views/interaction/element_tracker_views.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ 
+ namespace {
+ 
+@@ -323,6 +324,12 @@ void BrowserNativeWidgetMac::ValidateUse
+           prefs->GetBoolean(bookmarks::prefs::kShowBookmarkBar);
+       break;
+     }
++    case IDC_ARCIUM_TOGGLE_TOOLBAR: {
++      PrefService* prefs = browser->profile()->GetPrefs();
++      result->new_toggle_state =
++          prefs->GetBoolean(arcium::kShowToolbarPref);
++      break;
++    }
+     case IDC_TOGGLE_FULLSCREEN_TOOLBAR: {
+       web_app::AppBrowserController* app_controller =
+           web_app::AppBrowserController::From(browser);
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -89,6 +89,7 @@
+ #include "chrome/browser/ui/browser_command_controller.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.h"
+@@ -1442,6 +1443,10 @@ BrowserView::BrowserView(Browser* browse
+       base::BindRepeating(&BrowserView::OnCollapsedSidebarStylePrefChanged,
+                           base::Unretained(this)));
+   registrar_.Add(
++      arcium::kShowToolbarPref,
++      base::BindRepeating(&BrowserView::OnToolbarVisibilityPrefChanged,
++                          base::Unretained(this)));
++  registrar_.Add(
+       prefs::kFullscreenAllowed,
+       base::BindRepeating(&BrowserView::UpdateFullscreenAllowedFromPolicy,
+                           base::Unretained(this), CanFullscreen()));
+@@ -1485,10 +1490,6 @@ BrowserView::BrowserView(Browser* browse
+ 
+   GetViewAccessibility().SetRole(ax::mojom::Role::kClient);
+ 
+-  if (GetFocusManager()) {
+-    focus_manager_observation_.Observe(GetFocusManager());
+-  }
+-
+   if (base::FeatureList::IsEnabled(features::kCustomizableBrowserShortcuts)) {
+     browser_shortcut_service_ =
+         browser_shortcuts::BrowserShortcutServiceFactory::GetForProfile(
+@@ -1665,7 +1666,8 @@ ClientFrameElementInfo BrowserView::GetF
+                 ->GetPreferredSize()
+                 .height()
+           : 0;
+-  if (toolbar_ && ShouldDrawVerticalTabStrip()) {
++  if (toolbar_ && ShouldDrawVerticalTabStrip() &&
++      (IsFullscreen() || IsToolbarVisible())) {
+     info.toolbar_minimum_height = toolbar_->GetMinimumSize().height();
+   } else if (web_app_frame_toolbar_ && ShouldDrawWebAppFrameToolbar()) {
+     info.toolbar_minimum_height =
+@@ -2110,6 +2112,14 @@ void BrowserView::OnCollapsedSidebarStyl
+   UpdateCollapsedSidebarHiddenState();
+ }
+ 
++void BrowserView::OnToolbarVisibilityPrefChanged() {
++  toolbar_temporarily_revealed_for_location_focus_ = false;
++  InvalidateLayout();
++  if (GetWidget()) {
++    GetWidget()->OnSizeConstraintsChanged();
++  }
++}
++
+ void BrowserView::UpdateCollapsedSidebarHiddenState(bool force_reveal_reset) {
+   const bool fully_hidden = IsCollapsedSidebarFullyHiddenForLayout();
+   const bool state_changed = fully_hidden != collapsed_sidebar_fully_hidden_;
+@@ -3638,6 +3648,25 @@ void BrowserView::SetFocusToLocationBar(
+     return;
+   }
+ #endif
++  const bool reveal_hidden_toolbar =
++      browser_->is_type_normal() && !IsFullscreen() &&
++      browser_->SupportsWindowFeature(
++          Browser::WindowFeature::kFeatureLocationBar) &&
++      !GetProfile()->GetPrefs()->GetBoolean(arcium::kShowToolbarPref);
++  if (!IsLocationBarVisible() && !reveal_hidden_toolbar) {
++    return;
++  }
++
++  // Keep the omnibox usable when the user has hidden the toolbar without
++  // changing the saved preference. The temporary reveal ends when focus leaves
++  // the location bar.
++  if (reveal_hidden_toolbar) {
++    toolbar_temporarily_revealed_for_location_focus_ = true;
++    InvalidateLayout();
++    if (GetWidget()) {
++      GetWidget()->GetRootView()->DeprecatedLayoutImmediately();
++    }
++  }
+   if (!IsLocationBarVisible()) {
+     return;
+   }
+@@ -4318,6 +4347,12 @@ bool BrowserView::IsToolbarVisible() con
+   }
+ #endif
+ 
++  if (browser_->is_type_normal() && !IsFullscreen() &&
++      !toolbar_temporarily_revealed_for_location_focus_ &&
++      !GetProfile()->GetPrefs()->GetBoolean(arcium::kShowToolbarPref)) {
++    return false;
++  }
++
+   // It's possible to reach here before we've been notified of being added to a
+   // widget, so |toolbar_| is still null.  Return false in this case so callers
+   // don't assume they can access the toolbar yet.
+@@ -6230,6 +6265,12 @@ void BrowserView::ViewHierarchyChanged(
+ void BrowserView::AddedToWidget() {
+   arcium::UpdateChromeUIScaleCache(
+       GetWidget(), GetIsNormalType() ? GetProfile() : nullptr);
++  // The focus manager is only available once this view belongs to a widget.
++  // Observe again after reparenting, even when the view is already initialized.
++  if (GetFocusManager() && !focus_manager_observation_.IsObserving()) {
++    focus_manager_observation_.Observe(GetFocusManager());
++  }
++
+   // BrowserView may be added to a widget more than once if the user changes
+   // themes after starting the browser. Do not re-initialize BrowserView in
+   // this case.
+@@ -7424,6 +7465,14 @@ void BrowserView::OnWillChangeFocus(View
+ }
+ void BrowserView::OnDidChangeFocus(View* focused_before, View* focused_now) {
+   UpdateAccessibleNameForRootView();
++  const bool focus_remains_in_location_bar =
++      focused_now && toolbar_ && toolbar_->location_bar_view() &&
++      toolbar_->location_bar_view()->Contains(focused_now);
++  if (toolbar_temporarily_revealed_for_location_focus_ &&
++      !focus_remains_in_location_bar) {
++    toolbar_temporarily_revealed_for_location_focus_ = false;
++    InvalidateLayout();
++  }
+   if (IsChromeRevealModeEnabled()) {
+     UpdateZenModeRevealFromCursor();
+   }
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -974,6 +974,7 @@ class BrowserView : public BrowserWindow
+   void OnZenModeSideChromePinnedPrefChanged();
+   void OnZenModeTopChromePinnedPrefChanged();
+   void OnCollapsedSidebarStylePrefChanged();
++  void OnToolbarVisibilityPrefChanged();
+   void UpdateCollapsedSidebarHiddenState(bool force_reveal_reset = false);
+   void FinishCollapsedSidebarAnimation();
+   void UpdateZenModeState();
+@@ -1478,6 +1479,7 @@ class BrowserView : public BrowserWindow
+   bool is_window_controls_overlay_available_ = false;
+   bool unframed_mode_enabled_ = false;
+   bool window_management_permission_granted_ = false;
++  bool toolbar_temporarily_revealed_for_location_focus_ = false;
+ #if BUILDFLAG(IS_WIN)
+   class PipExclusionObserverImpl;
+   std::unique_ptr<PipExclusionObserverImpl> pip_exclusion_observer_;
+--- a/chrome/browser/ui/views/frame/browser_view_unittest.cc
++++ b/chrome/browser/ui/views/frame/browser_view_unittest.cc
+@@ -24,6 +24,7 @@
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
+@@ -177,6 +178,28 @@ TEST_F(BrowserViewTest, BrowserView) {
+   EXPECT_EQ(customize_chrome_action->GetEnabled(), true);
+ }
+ 
++TEST_F(BrowserViewTest, HiddenToolbarCanBeTemporarilyRevealedForOmnibox) {
++  PrefService* prefs = browser()->profile()->GetPrefs();
++  ASSERT_TRUE(browser_view()->GetIsNormalType());
++  EXPECT_TRUE(browser_view()->IsToolbarVisible());
++
++  ASSERT_TRUE(chrome::IsCommandEnabled(browser(), IDC_ARCIUM_TOGGLE_TOOLBAR));
++  chrome::ExecuteCommand(browser(), IDC_ARCIUM_TOGGLE_TOOLBAR);
++  EXPECT_FALSE(prefs->GetBoolean(arcium::kShowToolbarPref));
++  EXPECT_FALSE(browser_view()->IsToolbarVisible());
++  EXPECT_TRUE(chrome::IsCommandEnabled(browser(), IDC_FOCUS_LOCATION));
++
++  chrome::ExecuteCommand(browser(), IDC_FOCUS_LOCATION);
++  EXPECT_TRUE(browser_view()->IsToolbarVisible());
++  EXPECT_FALSE(prefs->GetBoolean(arcium::kShowToolbarPref));
++  browser_view()->GetFocusManager()->ClearFocus();
++  EXPECT_FALSE(browser_view()->IsToolbarVisible());
++
++  chrome::ExecuteCommand(browser(), IDC_ARCIUM_TOGGLE_TOOLBAR);
++  EXPECT_TRUE(prefs->GetBoolean(arcium::kShowToolbarPref));
++  EXPECT_TRUE(browser_view()->IsToolbarVisible());
++}
++
+ TEST_F(BrowserViewTest, MRUTabSwitcherSharesBrowserWidget) {
+   content::WebContents* active =
+       browser()->tab_strip_model()->GetActiveWebContents();

@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/views/tabs/tab_unittest.cc b/chrome/browser/ui/views/tabs/tab_unittest.cc
+--- a/chrome/browser/ui/views/tabs/tab_unittest.cc
++++ b/chrome/browser/ui/views/tabs/tab_unittest.cc
+@@ -368,7 +368,7 @@
+   TestingProfile profile_;
+ };
+ 
+-TEST_F(TabTest, TabTitleAppliesChromeUIScaleLive) {
++TEST_F(TabContentsTest, TabTitleAppliesChromeUIScaleLive) {
+   if (!profile_.GetPrefs()->FindPreference(arcium::kChromeUIScalePref)) {
+     profile_.GetTestingPrefService()->registry()->RegisterIntegerPref(
+         arcium::kChromeUIScalePref, arcium::kChromeUIScaleDefault);

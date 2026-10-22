@@ -1,0 +1,208 @@
+# Automatic Peek routing for eligible Arcium Pins and Favorites.
+Index: src/chrome/browser/ui/helium/helium_anchored_navigation_throttle.cc
+===================================================================
+--- src.orig/chrome/browser/ui/helium/helium_anchored_navigation_throttle.cc
++++ src/chrome/browser/ui/helium/helium_anchored_navigation_throttle.cc
+@@ -9,9 +9,9 @@
+ 
+ #include "base/functional/bind.h"
+ #include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/ui/arcium/optional_navigation.h"
+ #include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
+ #include "chrome/browser/ui/helium/helium_persistent_item_model.h"
++#include "chrome/browser/ui/views/helium/peek_controller.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/navigation_throttle_registry.h"
+@@ -36,9 +36,13 @@
+   return true;
+ }
+ 
+-bool OpenOptionalNavigation(Profile* profile,
+-                            const content::OpenURLParams& params) {
+-  return arcium::MaybeHandleOptionalNavigation(profile, params);
++bool OpenPeek(content::WebContents* source_contents,
++              Profile* profile,
++              const content::OpenURLParams& params) {
++  return profile && source_contents &&
++         source_contents->GetBrowserContext() == profile &&
++         ShowPeekForLink(source_contents,
++                         content::NavigationController::LoadURLParams(params));
+ }
+ 
+ }  // namespace
+@@ -68,7 +72,7 @@
+ HeliumAnchoredNavigationThrottle::ProductionDependencies() {
+   return {
+       .resolve_anchored_home = base::BindRepeating(&ResolveAnchoredHome),
+-      .open_optional_navigation = base::BindRepeating(&OpenOptionalNavigation),
++      .open_peek = base::BindRepeating(&OpenPeek),
+   };
+ }
+ 
+@@ -126,13 +130,13 @@
+   if (!ShouldUseOptionalNavigationForAnchoredItem(
+           PersistentNavigationDisposition::kCurrentTab, is_link_transition,
+           is_anchored, home_url, navigation_handle()->GetURL()) ||
+-      !profile || !dependencies_.open_optional_navigation) {
++      !profile || !dependencies_.open_peek) {
+     return PROCEED;
+   }
+ 
+   content::OpenURLParams params =
+       content::OpenURLParams::FromNavigationHandle(navigation_handle());
+-  if (!dependencies_.open_optional_navigation.Run(profile, params)) {
++  if (!dependencies_.open_peek.Run(contents, profile, params)) {
+     return PROCEED;
+   }
+ 
+Index: src/chrome/browser/ui/helium/helium_anchored_navigation_throttle.h
+===================================================================
+--- src.orig/chrome/browser/ui/helium/helium_anchored_navigation_throttle.h
++++ src/chrome/browser/ui/helium/helium_anchored_navigation_throttle.h
+@@ -21,20 +21,21 @@ namespace helium {
+ 
+ // Intercepts renderer-initiated primary-main-frame link navigations that would
+ // take a live Favorite/Pin away from its stored home. Those destinations open
+-// in Helium Little Arc; the original same-tab navigation is ignored only after
+-// the popup is created. chrome::Navigate never sees ordinary same-tab renderer
++// in Peek; the original same-tab navigation is ignored only after the attached
++// preview is created. chrome::Navigate never sees ordinary same-tab renderer
+ // link clicks, so this throttle is the ownership point for that path.
+ class HeliumAnchoredNavigationThrottle : public content::NavigationThrottle {
+  public:
+   using ResolveAnchoredHomeCallback = base::RepeatingCallback<
+       bool(content::WebContents* contents, GURL* home_url, Profile** profile)>;
+-  using OpenOptionalNavigationCallback =
+-      base::RepeatingCallback<bool(Profile* profile,
++  using OpenPeekCallback =
++      base::RepeatingCallback<bool(content::WebContents* source_contents,
++                                   Profile* profile,
+                                    const content::OpenURLParams& params)>;
+ 
+   struct Dependencies {
+     ResolveAnchoredHomeCallback resolve_anchored_home;
+-    OpenOptionalNavigationCallback open_optional_navigation;
++    OpenPeekCallback open_peek;
+   };
+ 
+   static void MaybeCreateAndAdd(content::NavigationThrottleRegistry& registry);
+Index: src/chrome/browser/ui/helium/helium_anchored_navigation_throttle_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/helium/helium_anchored_navigation_throttle_unittest.cc
++++ src/chrome/browser/ui/helium/helium_anchored_navigation_throttle_unittest.cc
+@@ -83,15 +83,17 @@ class HeliumAnchoredNavigationThrottleTe
+           return true;
+         },
+         is_anchored, GURL(kHome), profile());
+-    deps.open_optional_navigation = base::BindRepeating(
++    deps.open_peek = base::BindRepeating(
+         [](int* open_count, std::optional<content::OpenURLParams>* last_params,
+-           bool* open_succeeds, Profile*,
++           content::WebContents** last_source, bool* open_succeeds,
++           content::WebContents* source_contents, Profile*,
+            const content::OpenURLParams& params) {
+           ++*open_count;
++          *last_source = source_contents;
+           *last_params = params;
+           return *open_succeeds;
+         },
+-        &open_count_, &last_params_, &open_succeeds_);
++        &open_count_, &last_params_, &last_source_, &open_succeeds_);
+     open_succeeds_ = open_succeeds;
+     return deps;
+   }
+@@ -104,6 +106,7 @@ class HeliumAnchoredNavigationThrottleTe
+   }
+ 
+   int open_count_ = 0;
++  content::WebContents* last_source_ = nullptr;
+   std::optional<content::OpenURLParams> last_params_;
+   bool open_succeeds_ = true;
+   std::unique_ptr<content::MockNavigationHandle> handle_;
+@@ -117,6 +120,7 @@ TEST_F(HeliumAnchoredNavigationThrottleT
+   EXPECT_EQ(NavigationThrottle::CANCEL_AND_IGNORE,
+             throttle->WillStartRequest().action());
+   EXPECT_EQ(1, open_count_);
++  EXPECT_EQ(web_contents(), last_source_);
+   ASSERT_TRUE(last_params_.has_value());
+   EXPECT_EQ(GURL(kAway), last_params_->url);
+   EXPECT_EQ(GURL(kReferrer), last_params_->referrer.url);
+@@ -133,7 +137,7 @@ TEST_F(HeliumAnchoredNavigationThrottleT
+   EXPECT_EQ(1, open_count_);
+ }
+ 
+-TEST_F(HeliumAnchoredNavigationThrottleTest, PopupFailureFallsBackToSameTab) {
++TEST_F(HeliumAnchoredNavigationThrottleTest, PeekFailureFallsBackToSameTab) {
+   HeliumAnchoredNavigationThrottle* throttle =
+       CreateThrottle(/*is_anchored=*/true, /*open_succeeds=*/false);
+   EXPECT_EQ(NavigationThrottle::PROCEED, throttle->WillStartRequest().action());
+Index: src/chrome/browser/ui/helium/helium_favorites_and_pins.cc
+===================================================================
+--- src.orig/chrome/browser/ui/helium/helium_favorites_and_pins.cc
++++ src/chrome/browser/ui/helium/helium_favorites_and_pins.cc
+@@ -13,13 +13,14 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/session_service.h"
+ #include "chrome/browser/sessions/session_service_factory.h"
+-#include "chrome/browser/ui/arcium/optional_navigation.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
++#include "chrome/browser/ui/navigator/browser_navigator_params_utils.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/helium/peek_controller.h"
+ #include "components/sessions/content/session_tab_helper.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -94,37 +95,6 @@
+ bool HasHomeMetadata(const tabs::TabInterface* tab) {
+   const TabUIHelper* const helper = GetTabUIHelper(tab);
+   return helper && helper->HasAnchoredPinnedTabHome();
+-}
+-
+-content::OpenURLParams OpenURLParamsFromNavigateParams(
+-    const NavigateParams& params) {
+-  content::OpenURLParams open_url_params(
+-      params.url, params.referrer, params.disposition, params.transition,
+-      params.is_renderer_initiated, params.started_from_context_menu);
+-  open_url_params.initiator_frame_token = params.initiator_frame_token;
+-  open_url_params.initiator_process_id = params.initiator_process_id;
+-  open_url_params.initiator_origin = params.initiator_origin;
+-  open_url_params.initiator_base_url = params.initiator_base_url;
+-  open_url_params.initiator_navigation_state =
+-      params.initiator_navigation_state;
+-  open_url_params.source_site_instance = params.source_site_instance;
+-  open_url_params.redirect_chain = params.redirect_chain;
+-  open_url_params.post_data = params.post_data;
+-  open_url_params.extra_headers = params.extra_headers;
+-  open_url_params.frame_tree_node_id = params.frame_tree_node_id;
+-  open_url_params.user_gesture = params.user_gesture;
+-  open_url_params.started_by_ad = params.started_by_ad;
+-  open_url_params.should_replace_current_entry =
+-      params.should_replace_current_entry;
+-  open_url_params.blob_url_loader_factory = params.blob_url_loader_factory;
+-  open_url_params.is_service_worker_open_window =
+-      params.is_service_worker_open_window;
+-  open_url_params.href_translate = params.href_translate;
+-  open_url_params.reload_type = params.reload_type;
+-  open_url_params.impression = params.impression;
+-  open_url_params.internal_scroll_to_text_fragment =
+-      params.internal_scroll_to_text_fragment;
+-  return open_url_params;
+ }
+ 
+ void PersistAnchoredPinnedTabExtraData(tabs::TabInterface* tab) {
+@@ -461,9 +431,7 @@
+           params->url)) {
+     return false;
+   }
+-  Profile* profile = tab->GetProfile();
+-  if (!arcium::MaybeHandleOptionalNavigation(
+-          profile, OpenURLParamsFromNavigateParams(*params))) {
++  if (!ShowPeekForLink(source, LoadURLParamsFromNavigateParams(params))) {
+     return false;
+   }
+   params->disposition = WindowOpenDisposition::IGNORE_ACTION;

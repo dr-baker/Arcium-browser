@@ -1,0 +1,13 @@
+--- a/chrome/browser/media/router/test/mock_dns_sd_registry.cc
++++ b/chrome/browser/media/router/test/mock_dns_sd_registry.cc
+@@ -6,9 +6,9 @@
+ 
+ namespace media_router {
+ 
+ MockDnsSdRegistry::MockDnsSdRegistry(DnsSdRegistry::DnsSdObserver* observer)
+-    : DnsSdRegistry(nullptr), observer_(observer) {}
++    : DnsSdRegistry(), observer_(observer) {}
+ 
+ MockDnsSdRegistry::~MockDnsSdRegistry() = default;
+ 
+ void MockDnsSdRegistry::DispatchMDnsEvent(const std::string& service_type,

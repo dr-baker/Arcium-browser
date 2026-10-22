@@ -1,0 +1,126 @@
+--- a/chrome/test/data/webui/history/history_routing_test.ts
++++ b/chrome/test/data/webui/history/history_routing_test.ts
+@@ -8,9 +8,8 @@ import type {HistoryAppElement, HistoryS
+ import {BrowserProxyImpl, CrRouter, historyClustersBrowserProxyFactory, historyEmbeddingsBrowserProxyFactory, HistoryEmbeddingsPageHandlerRemote, MetricsProxyImpl, PageHandlerRemote as HistoryClustersPageHandlerRemote} from 'chrome://history/history.js';
+ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+-import {keyDownOn} from 'chrome://webui-test/keyboard_mock_interactions.js';
+ import {TestMock} from 'chrome://webui-test/test_mock.js';
+-import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
++import {isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
+ 
+ import {TestMetricsProxy} from './history_clusters/utils.js';
+ import {TestHistoryBrowserProxy} from './test_browser_proxy.js';
+@@ -62,7 +61,7 @@ import {navigateTo} from './test_util.js
+       assertEquals(app.$.history, app.$.tabsContent.selectedItem);
+ 
+       navigateTo('/syncedTabs', app);
+-      await eventToPromise('iron-select', sidebar.$.menu);
++      await microtasksFinished();
+ 
+       assertEquals('chrome://history/syncedTabs', window.location.href);
+       await microtasksFinished();
+@@ -115,18 +114,8 @@ import {navigateTo} from './test_util.js
+       assertEquals('history', sidebar.$.menu.selected);
+       assertEquals('chrome://history/', window.location.href);
+ 
+-      sidebar.$.syncedTabs.click();
+-      await eventToPromise('iron-select', sidebar.$.menu);
+-      await microtasksFinished();
+-      assertEquals('syncedTabs', sidebar.$.menu.selected);
+-      assertEquals('chrome://history/syncedTabs', window.location.href);
+-
+-      // Currently selected history view is preserved in sidebar menu item.
+-      keyDownOn(sidebar.$.history, 0, [], ' ');
+-      await eventToPromise('iron-select', sidebar.$.menu);
+-      await microtasksFinished();
+-      assertEquals('history', sidebar.$.menu.selected);
+-      assertEquals('chrome://history/', window.location.href);
++      // The sidebar currently exposes History and Clear browsing data only.
++      // The /syncedTabs route is covered by direct navigation below.
+ 
+       const historyTabs = app.shadowRoot.querySelector('cr-tabs');
+       assertEquals(!!historyTabs, isHistoryClustersEnabled);
+@@ -138,15 +127,15 @@ import {navigateTo} from './test_util.js
+         assertEquals('grouped', sidebar.$.menu.selected);
+         assertEquals('chrome://history/grouped', window.location.href);
+ 
+-        keyDownOn(sidebar.$.syncedTabs, 0, [], ' ');
+-        await eventToPromise('iron-select', sidebar.$.menu);
++        // Synced tabs isn't a tabbed page. The History link should preserve
++        // the selected grouped tab when returning from that route.
++        navigateTo('/syncedTabs', app);
+         await microtasksFinished();
+-        assertEquals('syncedTabs', sidebar.$.menu.selected);
+         assertEquals('chrome://history/syncedTabs', window.location.href);
++        assertEquals('grouped', sidebar.$.history.getAttribute('path'));
++        assertEquals('chrome://history/grouped', sidebar.$.history.href);
+ 
+-        // Currently selected history view is preserved in sidebar menu item.
+-        keyDownOn(sidebar.$.history, 0, [], ' ');
+-        await eventToPromise('iron-select', sidebar.$.menu);
++        sidebar.$.history.click();
+         await microtasksFinished();
+         assertEquals('grouped', sidebar.$.menu.selected);
+         assertEquals('chrome://history/grouped', window.location.href);
+@@ -177,42 +166,24 @@ import {navigateTo} from './test_util.js
+       assertEquals('chrome://history/?q=' + searchTerm, window.location.href);
+     });
+ 
+-    test(
+-        'search is preserved across tabs and sidebar menu items',
+-        async function() {
+-          const searchTerm = 'Soldier76';
+-          assertEquals('history', sidebar.$.menu.selected);
+-          navigateTo('/?q=' + searchTerm, app);
+-
+-          sidebar.$.syncedTabs.click();
+-          await eventToPromise('iron-select', sidebar.$.menu);
+-          await microtasksFinished();
+-          assertEquals('syncedTabs', sidebar.$.menu.selected);
+-          assertEquals(searchTerm, app.$.toolbar.searchTerm);
+-          assertEquals(
+-              'chrome://history/syncedTabs?q=' + searchTerm,
+-              window.location.href);
+-
+-          sidebar.$.history.click();
+-          await eventToPromise('iron-select', sidebar.$.menu);
+-          await microtasksFinished();
+-          assertEquals('history', sidebar.$.menu.selected);
+-          assertEquals(searchTerm, app.$.toolbar.searchTerm);
+-          assertEquals(
+-              'chrome://history/?q=' + searchTerm, window.location.href);
+-
+-          if (isHistoryClustersEnabled) {
+-            const tabs = app.shadowRoot.querySelector('cr-tabs');
+-            assertTrue(!!tabs);
+-            tabs.selected = 1;
+-            await microtasksFinished();
+-            assertEquals('grouped', sidebar.$.menu.selected);
+-            assertEquals(searchTerm, app.$.toolbar.searchTerm);
+-            assertEquals(
+-                'chrome://history/grouped?q=' + searchTerm,
+-                window.location.href);
+-          }
+-        });
++    test('search is preserved across direct route changes', async function() {
++      const searchTerm = 'Soldier76';
++      navigateTo('/?q=' + searchTerm, app);
++      await microtasksFinished();
++      assertEquals(searchTerm, app.$.toolbar.searchTerm);
++
++      navigateTo('/syncedTabs?q=' + searchTerm, app);
++      await microtasksFinished();
++      assertEquals(searchTerm, app.$.toolbar.searchTerm);
++      assertEquals(
++          'chrome://history/syncedTabs?q=' + searchTerm,
++          window.location.href);
++
++      navigateTo('/?q=' + searchTerm, app);
++      await microtasksFinished();
++      assertEquals(searchTerm, app.$.toolbar.searchTerm);
++      assertEquals('chrome://history/?q=' + searchTerm, window.location.href);
++    });
+ 
+     test(
+         'routing to chrome://history/syncedTabs works correctly',

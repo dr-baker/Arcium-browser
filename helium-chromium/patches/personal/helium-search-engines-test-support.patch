@@ -1,0 +1,255 @@
+--- a/components/search_engines/BUILD.gn
++++ b/components/search_engines/BUILD.gn
+@@ -217,8 +217,9 @@ static_library("test_support") {
+     "//components/regional_capabilities",
+     "//components/regional_capabilities:test_support",
+     "//components/signin/public/identity_manager:test_support",
+     "//components/sync_preferences:test_support",
++    "//services/network:test_support",
+     "//testing/gtest",
+     "//third_party/search_engines_data:regional_settings",
+   ]
+ }
+--- a/components/search_engines/search_engines_test_environment.cc
++++ b/components/search_engines/search_engines_test_environment.cc
+@@ -19,8 +19,9 @@
+ #include "components/search_engines/template_url_prepopulate_data_resolver.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "components/search_engines/template_url_service_test_util.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
++#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+ 
+ namespace search_engines {
+ 
+ namespace {
+@@ -39,8 +40,9 @@ SearchEnginesTestEnvironment::ServiceFac
+   default_factories.template_url_service_factory = base::BindLambdaForTesting(
+       [deps](SearchEnginesTestEnvironment& environment) {
+         return std::make_unique<TemplateURLService>(
+             environment.pref_service(),
++            environment.test_url_loader_factory().GetSafeWeakWrapper(),
+             environment.search_engine_choice_service(),
+             environment.prepopulate_data_resolver(),
+             deps.template_url_service_initializer);
+       });
+--- a/components/search_engines/search_engines_test_environment.h
++++ b/components/search_engines/search_engines_test_environment.h
+@@ -14,8 +14,9 @@
+ #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
++#include "services/network/test/test_url_loader_factory.h"
+ 
+ namespace regional_capabilities {
+ class RegionalCapabilitiesService;
+ }
+@@ -102,8 +103,12 @@ class SearchEnginesTestEnvironment {
+   metrics::ProfileMetricsService& profile_metrics_service();
+ 
+   SearchEngineChoiceService& search_engine_choice_service();
+ 
++  network::TestURLLoaderFactory& test_url_loader_factory() {
++    return test_url_loader_factory_;
++  }
++
+   // Guaranteed to be non-null unless `ReleaseTemplateURLService` has been
+   // called.
+   TemplateURLService* template_url_service();
+ 
+@@ -134,8 +139,11 @@ class SearchEnginesTestEnvironment {
+ 
+   const ServiceFactories service_factories_overrides_;
+   const ServiceFactories default_factories_;
+ 
++  // Keeps a no-network URL loader available to the default TemplateURLService.
++  network::TestURLLoaderFactory test_url_loader_factory_;
++
+   // Services below have dependencies between each other, they must be kept
+   // in order to ensure destruction correctness.
+   std::unique_ptr<regional_capabilities::RegionalCapabilitiesService>
+       regional_capabilities_service_;
+--- a/components/search_engines/template_url_service_test_util.cc
++++ b/components/search_engines/template_url_service_test_util.cc
+@@ -26,8 +26,9 @@
+ #include "components/search_engines/template_url_prepopulate_data_resolver.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "components/search_engines/template_url_service_client.h"
+ #include "components/webdata/common/web_database_service.h"
++#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+ 
+ void RegisterPrefsForTemplateURLService(
+     user_prefs::PrefRegistrySyncable* registry) {
+   TemplateURLService::RegisterProfilePrefs(registry);
+@@ -113,9 +114,10 @@ void TemplateURLServiceUnitTestBase::Set
+ 
+ std::unique_ptr<TemplateURLService>
+ TemplateURLServiceUnitTestBase::CreateService() {
+   return std::make_unique<TemplateURLService>(
+-      pref_service_, *search_engine_choice_service_,
++      pref_service_, test_url_loader_factory().GetSafeWeakWrapper(),
++      *search_engine_choice_service_,
+       *prepopulate_data_resolver_.get(), std::make_unique<SearchTermsData>(),
+       nullptr /* KeywordWebDataService */,
+       nullptr /* TemplateURLServiceClient */, base::RepeatingClosure());
+ }
+@@ -145,9 +147,10 @@ LoadedTemplateURLServiceUnitTestBase::Cr
+       base::MakeRefCounted<KeywordWebDataService>(database_, task_runner);
+   keyword_data_service_->Init(base::DoNothing());
+ 
+   auto template_url_service = std::make_unique<TemplateURLService>(
+-      pref_service(), search_engine_choice_service(),
++      pref_service(), test_url_loader_factory().GetSafeWeakWrapper(),
++      search_engine_choice_service(),
+       prepopulate_data_resolver(), std::make_unique<SearchTermsData>(),
+       keyword_data_service_, nullptr /* TemplateURLServiceClient */,
+       base::RepeatingClosure());
+ 
+--- a/components/search_engines/template_url_service_test_util.h
++++ b/components/search_engines/template_url_service_test_util.h
+@@ -12,8 +12,9 @@
+ #include "components/search_engines/template_url_service.h"
+ #include "components/search_engines/template_url_service_observer.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
++#include "services/network/test/test_url_loader_factory.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+ class KeywordWebDataService;
+ class WebDatabaseService;
+@@ -84,8 +85,12 @@ class TemplateURLServiceUnitTestBase : p
+     return *template_url_service_.get();
+   }
+ 
+  protected:
++  network::TestURLLoaderFactory& test_url_loader_factory() {
++    return test_url_loader_factory_;
++  }
++
+   virtual std::unique_ptr<TemplateURLService> CreateService();
+ 
+   base::test::TaskEnvironment task_environment{
+       base::test::TaskEnvironment::MainThreadType::UI};
+@@ -101,8 +106,9 @@ class TemplateURLServiceUnitTestBase : p
+   std::unique_ptr<policy::ManagementService> management_service_;
+   std::unique_ptr<metrics::ProfileMetricsService> profile_metrics_service_;
+   std::unique_ptr<search_engines::SearchEngineChoiceService>
+       search_engine_choice_service_;
++  network::TestURLLoaderFactory test_url_loader_factory_;
+   std::unique_ptr<TemplateURLService> template_url_service_;
+ };
+ 
+ class LoadedTemplateURLServiceUnitTestBase
+--- a/chrome/browser/search_engines/template_url_service_test_util.cc
++++ b/chrome/browser/search_engines/template_url_service_test_util.cc
+@@ -41,8 +41,9 @@
+ #include "components/search_engines/testing_search_terms_data.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "components/webdata/common/web_database_service.h"
+ #include "content/public/browser/browser_context.h"
++#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+ namespace {
+ 
+@@ -164,8 +165,10 @@ TemplateURLServiceTestUtil::TemplateURLS
+   profile_builder.AddTestingFactories(std::move(testing_factories));
+   profile_builder.AddTestingFactories(
+       TemplateURLServiceTestUtil::SetUpRequiredServicesWithCustomLocalState(
+           local_state_));
++  profile_builder.SetSharedURLLoaderFactory(
++      test_url_loader_factory_.GetSafeWeakWrapper());
+ 
+   profile_ = profile_builder.Build();
+ 
+   scoped_refptr<WebDatabaseService> web_database_service =
+@@ -251,8 +254,9 @@ TemplateURLServiceTestUtil::CreateTempla
+     std::unique_ptr<TemplateURLServiceClient> client,
+     base::RepeatingClosure dsp_change_callback) {
+   return std::make_unique<TemplateURLService>(
+       CHECK_DEREF(profile->GetPrefs()),
++      profile->GetURLLoaderFactory(),
+       CHECK_DEREF(
+           search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
+               profile)),
+       CHECK_DEREF(
+@@ -267,8 +271,9 @@ TemplateURLServiceTestUtil::CreateTempla
+     Profile* profile,
+     base::span<const TemplateURLService::Initializer> initializers) {
+   return std::make_unique<TemplateURLService>(
+       CHECK_DEREF(profile->GetPrefs()),
++      profile->GetURLLoaderFactory(),
+       CHECK_DEREF(
+           search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
+               profile)),
+       CHECK_DEREF(
+--- a/chrome/browser/search_engines/template_url_service_test_util.h
++++ b/chrome/browser/search_engines/template_url_service_test_util.h
+@@ -18,8 +18,9 @@
+ #include "components/search_engines/template_url_data.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "components/search_engines/template_url_service_observer.h"
+ #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
++#include "services/network/test/test_url_loader_factory.h"
+ 
+ class KeywordWebDataService;
+ 
+ // Sets the managed preferences for the default search provider. `enabled`
+@@ -77,9 +78,10 @@ class TemplateURLServiceTestUtil : publi
+   static BrowserContextKeyedServiceFactory::TestingFactory
+   GetTemplateURLServiceTestingFactory();
+ 
+   // Forwards to the equivalent `TemplateURLService` constructor, pulling
+-  // services it depends on from `profile`.
++  // services it depends on from `profile`. `profile` must provide a URL loader
++  // factory when `web_data_service` is non-null.
+   static std::unique_ptr<TemplateURLService> CreateTemplateURLServiceForTesting(
+       Profile* profile,
+       std::unique_ptr<SearchTermsData> search_terms_data,
+       scoped_refptr<KeywordWebDataService> web_data_service,
+@@ -145,8 +147,10 @@ class TemplateURLServiceTestUtil : publi
+ 
+   // We pass `local_state_` to the constructor in some cases where we can't
+   // or don't want to use `g_browser_process->local_state()`.
+   raw_ptr<PrefService> local_state_;
++  // Supplies a no-network loader for the TemplateURLService test profile.
++  network::TestURLLoaderFactory test_url_loader_factory_;
+   std::unique_ptr<TestingProfile> profile_;
+   int changed_count_ = 0;
+   std::u16string search_term_;
+   int dsp_set_to_google_callback_count_ = 0;
+--- a/chrome/browser/sync/test/integration/search_engines_helper.cc
++++ b/chrome/browser/sync/test/integration/search_engines_helper.cc
+@@ -213,16 +213,17 @@ void EditSearchEngine(int profile_index,
+       service->GetTemplateURLForKeyword(base::UTF8ToUTF16(keyword));
+   EXPECT_TRUE(turl);
+   ASSERT_FALSE(new_keyword.empty());
+   service->ResetTemplateURL(turl, short_name, base::UTF8ToUTF16(new_keyword),
+-                            url);
++                            url, turl->suggestions_url());
+   // Make sure we do the same on the verifier.
+   if (test()->UseVerifier()) {
+     TemplateURL* verifier_turl = GetVerifierService()->GetTemplateURLForKeyword(
+         base::UTF8ToUTF16(keyword));
+     EXPECT_TRUE(verifier_turl);
+-    GetVerifierService()->ResetTemplateURL(verifier_turl, short_name,
+-                                           base::UTF8ToUTF16(new_keyword), url);
++    GetVerifierService()->ResetTemplateURL(
++        verifier_turl, short_name, base::UTF8ToUTF16(new_keyword), url,
++        verifier_turl->suggestions_url());
+   }
+ }
+ 
+ void DeleteSearchEngine(int profile_index, const std::string& keyword) {
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -226,8 +226,9 @@ static_library("test_support") {
+   public_deps = [
+     "//chrome/browser/notifications:test_support",
+     "//chrome/browser/origin_trials",
+     "//chrome/browser/renderer_context_menu:test_support",
++    "//services/network:test_support",
+   ]
+ 
+   sources = [
+     "../app/startup_timestamps.h",

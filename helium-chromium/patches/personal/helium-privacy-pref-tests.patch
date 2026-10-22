@@ -1,0 +1,86 @@
+diff --git a/chrome/browser/prefs/pref_functional_browsertest.cc b/chrome/browser/prefs/pref_functional_browsertest.cc
+--- a/chrome/browser/prefs/pref_functional_browsertest.cc
++++ b/chrome/browser/prefs/pref_functional_browsertest.cc
+@@ -54,10 +54,9 @@
+         browser->profile()->GetDownloadManager();
+ 
+     content::DownloadTestObserver* downloads_observer =
+-         new content::DownloadTestObserverTerminal(
+-             download_manager,
+-             num_downloads,
+-             content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
++        new content::DownloadTestObserverTerminal(
++            download_manager, num_downloads,
++            content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
+     return base::WrapUnique(downloads_observer);
+   }
+ };
+@@ -140,8 +139,7 @@
+ }
+ 
+ // Verify restore for bookmark bar visibility.
+-IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest,
+-                       TestSessionRestoreShowBookmarkBar) {
++IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestSessionRestoreShowBookmarkBar) {
+   EXPECT_FALSE(browser()->profile()->GetPrefs()->GetBoolean(
+       bookmarks::prefs::kShowBookmarkBar));
+   browser()->profile()->GetPrefs()->SetBoolean(
+@@ -196,8 +194,7 @@
+ 
+   PrefService* prefs = browser()->profile()->GetPrefs();
+   prefs->SetBoolean(prefs::kHomePageIsNewTabPage, false);
+-  const PrefService::Preference* pref =
+-      prefs->FindPreference(prefs::kHomePage);
++  const PrefService::Preference* pref = prefs->FindPreference(prefs::kHomePage);
+   if (pref && !pref->IsManaged()) {
+     prefs->SetString(prefs::kHomePage, home_page_url.spec());
+   }
+@@ -216,30 +213,27 @@
+ IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, PRE_TestPrivacySecurityPrefs) {
+   PrefService* prefs = browser()->profile()->GetPrefs();
+ 
+-  static_assert(prefetch::NetworkPredictionOptions::kDefault !=
+-                    prefetch::NetworkPredictionOptions::kDisabled,
+-                "PrefsFunctionalTest.TestPrivacySecurityPrefs relies on "
+-                "predictive network actions being enabled by default.");
++  // Write an explicit opt-in state so the restart test verifies persistence
++  // independently of Arcium's disabled-by-default prefetch setting.
++  prefetch::SetPreloadPagesState(
++      prefs, prefetch::PreloadPagesState::kStandardPreloading);
++
++  // Alternate error pages default to disabled; opt in to test persistence.
++  EXPECT_FALSE(
++      prefs->GetBoolean(embedder_support::kAlternateErrorPagesEnabled));
++  prefs->SetBoolean(embedder_support::kAlternateErrorPagesEnabled, true);
++
++  EXPECT_TRUE(prefs->GetBoolean(prefs::kSearchSuggestEnabled));
++  prefs->SetBoolean(prefs::kSearchSuggestEnabled, false);
++}
++
++// Verify the security preference under privacy across restarts. Part2
++IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestPrivacySecurityPrefs) {
++  PrefService* prefs = browser()->profile()->GetPrefs();
++
+   EXPECT_EQ(prefetch::PreloadPagesState::kStandardPreloading,
+             prefetch::GetPreloadPagesState(*prefs));
+-  prefetch::SetPreloadPagesState(prefs,
+-                                 prefetch::PreloadPagesState::kNoPreloading);
+-
+   EXPECT_TRUE(prefs->GetBoolean(embedder_support::kAlternateErrorPagesEnabled));
+-  prefs->SetBoolean(embedder_support::kAlternateErrorPagesEnabled, false);
+-
+-  EXPECT_TRUE(prefs->GetBoolean(prefs::kSearchSuggestEnabled));
+-  prefs->SetBoolean(prefs::kSearchSuggestEnabled, false);
+-}
+-
+-// Verify the security preference under privacy across restarts. Part2
+-IN_PROC_BROWSER_TEST_F(PrefsFunctionalTest, TestPrivacySecurityPrefs) {
+-  PrefService* prefs = browser()->profile()->GetPrefs();
+-
+-  EXPECT_EQ(prefetch::PreloadPagesState::kNoPreloading,
+-            prefetch::GetPreloadPagesState(*prefs));
+-  EXPECT_FALSE(
+-      prefs->GetBoolean(embedder_support::kAlternateErrorPagesEnabled));
+   EXPECT_FALSE(prefs->GetBoolean(prefs::kSearchSuggestEnabled));
+ }
+ 

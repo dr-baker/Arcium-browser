@@ -1,0 +1,702 @@
+Index: src/chrome/app/settings_strings.grdp
+===================================================================
+--- src.orig/chrome/app/settings_strings.grdp
++++ src/chrome/app/settings_strings.grdp
+@@ -4140,6 +4140,12 @@
+       <message name="IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX" desc="Checkbox for importing form data for autofill">
+         Autofill form data
+       </message>
++      <message name="IDS_SETTINGS_IMPORT_ARC_AS_PINS" desc="Toggle for importing an Arc sidebar into Arcium Pins instead of normal tabs">
++        Import sidebar as Pins
++      </message>
++      <message name="IDS_SETTINGS_IMPORT_ARC_AS_PINS_DESCRIPTION" desc="Description for the Arc Pins import destination toggle">
++        Preserve Arc folders as Pin folders. Turn this off to import them as tab groups.
++      </message>
+ 
+       <message name="IDS_SETTINGS_IMPORT_CHOOSE_FILE" desc="Text for the Choose File on dialog">
+         Choose File
+Index: src/chrome/browser/importer/arcium_arc_import.cc
+===================================================================
+--- src.orig/chrome/browser/importer/arcium_arc_import.cc
++++ src/chrome/browser/importer/arcium_arc_import.cc
+@@ -44,22 +44,35 @@ struct ImportedTab {
+   bool group_collapsed = false;
+ };
+ 
++struct ImportedNode {
++  enum class Type {
++    kTab,
++    kFolder,
++  };
++
++  Type type = Type::kTab;
++  std::string source_id;
++  std::string title;
++  GURL url;
++  bool collapsed = false;
++  std::vector<ImportedNode> children;
++};
++
+ struct ImportedSpace {
+   std::string id;
+   std::string name;
+-  std::vector<ImportedTab> tabs;
++  std::vector<ImportedNode> nodes;
+ };
+ 
+ struct Snapshot {
+   std::string source_profile;
+-  std::vector<ImportedTab> favorites;
++  std::vector<ImportedNode> favorites;
+   std::vector<ImportedSpace> spaces;
+ };
+ 
+-bool AppendNodes(const base::ListValue& nodes,
+-                 const std::string& parent_path,
+-                 std::vector<ImportedTab>* tabs) {
+-  for (const base::Value& value : nodes) {
++bool ParseNodes(const base::ListValue& values,
++                std::vector<ImportedNode>* nodes) {
++  for (const base::Value& value : values) {
+     const base::DictValue* node = value.GetIfDict();
+     const std::string* type = node ? node->FindString("type") : nullptr;
+     const std::string* source_id =
+@@ -74,11 +87,11 @@ bool AppendNodes(const base::ListValue&
+       if (!url.is_valid() || url.SchemeIs("arc")) {
+         return false;
+       }
+-      tabs->push_back({
++      nodes->push_back({
++          .type = ImportedNode::Type::kTab,
+           .source_id = *source_id,
+           .title = *title,
+           .url = url,
+-          .group_title = parent_path,
+       });
+       continue;
+     }
+@@ -90,27 +103,78 @@ bool AppendNodes(const base::ListValue&
+     if (!children || !collapsed) {
+       return false;
+     }
+-    const std::string folder_title = title->empty() ? "Folder" : *title;
+-    const std::string path =
+-        parent_path.empty() ? folder_title
+-                            : base::StrCat({parent_path, " / ", folder_title});
+-    const size_t first_child = tabs->size();
+-    if (!AppendNodes(*children, path, tabs)) {
++    ImportedNode folder{
++        .type = ImportedNode::Type::kFolder,
++        .source_id = *source_id,
++        .title = title->empty() ? "Folder" : *title,
++        .collapsed = *collapsed,
++    };
++    if (!ParseNodes(*children, &folder.children)) {
+       return false;
+     }
+-    for (size_t i = first_child; i < tabs->size(); ++i) {
+-      if ((*tabs)[i].group_title == path) {
+-        (*tabs)[i].group_collapsed = *collapsed;
+-      }
+-    }
++    nodes->push_back(std::move(folder));
+   }
+   return true;
+ }
+ 
++void FlattenNodes(const std::vector<ImportedNode>& nodes,
++                  const std::string& parent_path,
++                  bool parent_collapsed,
++                  std::vector<ImportedTab>* tabs) {
++  for (const ImportedNode& node : nodes) {
++    if (node.type == ImportedNode::Type::kTab) {
++      tabs->push_back({
++          .source_id = node.source_id,
++          .title = node.title,
++          .url = node.url,
++          .group_title = parent_path,
++          .group_collapsed = parent_collapsed,
++      });
++      continue;
++    }
++    const std::string path =
++        parent_path.empty()
++            ? node.title
++            : base::StrCat({parent_path, " / ", node.title});
++    FlattenNodes(node.children, path, node.collapsed, tabs);
++  }
++}
++
++helium::PersistentNodes ToPersistentNodes(
++    const std::vector<ImportedNode>& nodes,
++    std::string_view source_profile,
++    std::string_view scope) {
++  helium::PersistentNodes result;
++  result.reserve(nodes.size());
++  for (const ImportedNode& node : nodes) {
++    const std::string id = base::StrCat(
++        {"arc:", source_profile, ":", scope, ":", node.source_id});
++    if (node.type == ImportedNode::Type::kTab) {
++      result.push_back(helium::PersistentNode{
++          .data = helium::PersistentLink{
++              .id = id,
++              .title = base::UTF8ToUTF16(node.title),
++              .url = node.url,
++          }});
++      continue;
++    }
++    result.push_back(helium::PersistentNode{
++        .data = helium::PersistentFolder{
++            .id = id,
++            .title = base::UTF8ToUTF16(node.title),
++            .collapsed = node.collapsed,
++            .children =
++                ToPersistentNodes(node.children, source_profile, scope),
++        }});
++  }
++  return result;
++}
++
+ std::optional<Snapshot> ParseSnapshot(std::string_view snapshot_json) {
+-  std::optional<base::Value> value =
++  std::optional<base::Value> root_value =
+       base::JSONReader::Read(snapshot_json, base::JSON_PARSE_RFC);
+-  const base::DictValue* root = value ? value->GetIfDict() : nullptr;
++  const base::DictValue* root =
++      root_value ? root_value->GetIfDict() : nullptr;
+   const std::optional<int> version =
+       root ? root->FindInt("version") : std::nullopt;
+   const std::string* source_profile =
+@@ -124,11 +188,11 @@ std::optional<Snapshot> ParseSnapshot(st
+   }
+ 
+   Snapshot snapshot{.source_profile = *source_profile};
+-  if (!AppendNodes(*favorites, "Favorites", &snapshot.favorites)) {
++  if (!ParseNodes(*favorites, &snapshot.favorites)) {
+     return std::nullopt;
+   }
+-  for (const base::Value& value : *spaces) {
+-    const base::DictValue* space = value.GetIfDict();
++  for (const base::Value& space_value : *spaces) {
++    const base::DictValue* space = space_value.GetIfDict();
+     const std::string* id = space ? space->FindString("id") : nullptr;
+     const std::string* name = space ? space->FindString("name") : nullptr;
+     const std::string* profile =
+@@ -139,7 +203,7 @@ std::optional<Snapshot> ParseSnapshot(st
+       return std::nullopt;
+     }
+     ImportedSpace imported_space{.id = *id, .name = *name};
+-    if (!AppendNodes(*pins, std::string(), &imported_space.tabs)) {
++    if (!ParseNodes(*pins, &imported_space.nodes)) {
+       return std::nullopt;
+     }
+     snapshot.spaces.push_back(std::move(imported_space));
+@@ -215,7 +279,8 @@ std::vector<content::WebContents*> Impor
+ }  // namespace
+ 
+ bool ImportArcSidebarSnapshot(Profile* profile,
+-                              std::string_view snapshot_json) {
++                              std::string_view snapshot_json,
++                              ArcSidebarDestination destination) {
+   std::optional<Snapshot> snapshot = ParseSnapshot(snapshot_json);
+   helium::HeliumSpaceService* service =
+       profile ? helium::HeliumSpaceServiceFactory::GetForProfile(profile)
+@@ -224,18 +289,44 @@ bool ImportArcSidebarSnapshot(Profile* p
+     return false;
+   }
+ 
+-  std::map<std::string, std::vector<ImportedTab>> tabs_by_space;
++  if (destination == ArcSidebarDestination::kPins) {
++    std::vector<helium::ImportedPersistentSpace> imported_spaces;
++    imported_spaces.reserve(snapshot->spaces.size());
++    for (const ImportedSpace& imported : snapshot->spaces) {
++      imported_spaces.push_back(helium::ImportedPersistentSpace{
++          .id = imported.id,
++          .name = base::UTF8ToUTF16(imported.name),
++          .pins = ToPersistentNodes(imported.nodes, snapshot->source_profile,
++                                    imported.id),
++      });
++    }
++    service->ReconcileImportedPersistentItems(
++        snapshot->source_profile,
++        ToPersistentNodes(snapshot->favorites, snapshot->source_profile,
++                          "favorite"),
++        std::move(imported_spaces));
++    return true;
++  }
++
++  std::map<std::string, std::vector<ImportedNode>> nodes_by_space;
+   for (const ImportedSpace& imported : snapshot->spaces) {
+-    tabs_by_space[imported.id] = imported.tabs;
++    nodes_by_space[imported.id] = imported.nodes;
+     service->GetOrCreateSpace(imported.id, base::UTF8ToUTF16(imported.name));
+   }
+   const std::string favorites_space_id = snapshot->spaces.empty()
+                                              ? service->GetDefaultSpace()->id()
+                                              : snapshot->spaces.front().id;
+-  auto& favorites_destination = tabs_by_space[favorites_space_id];
+-  favorites_destination.insert(favorites_destination.begin(),
+-                               snapshot->favorites.begin(),
+-                               snapshot->favorites.end());
++  auto& favorites_destination = nodes_by_space[favorites_space_id];
++  if (!snapshot->favorites.empty()) {
++    ImportedNode favorites{
++        .type = ImportedNode::Type::kFolder,
++        .source_id = "__favorites__",
++        .title = "Favorites",
++        .children = std::move(snapshot->favorites),
++    };
++    favorites_destination.insert(favorites_destination.begin(),
++                                 std::move(favorites));
++  }
+ 
+   for (helium::HeliumSpace* space : service->GetSpaces()) {
+     BrowserWindowInterface* existing_window = space->GetPrimaryBrowser();
+@@ -245,17 +336,27 @@ bool ImportArcSidebarSnapshot(Profile* p
+     std::vector<content::WebContents*> old_tabs =
+         browser ? ImportedContents(browser, snapshot->source_profile)
+                 : std::vector<content::WebContents*>();
+-    const auto replacement = tabs_by_space.find(space->id());
+-    if (replacement != tabs_by_space.end() && !replacement->second.empty()) {
++    const auto replacement = nodes_by_space.find(space->id());
++    if (replacement != nodes_by_space.end() && !replacement->second.empty()) {
+       browser = browser ? browser : GetOrCreateBrowser(space, service);
+       if (!browser) {
+         return false;
+       }
+-      AddTabs(browser, snapshot->source_profile, replacement->second);
+     }
+     if (browser && !old_tabs.empty()) {
+-      browser->tab_strip_model()->CloseWebContentses(old_tabs, CLOSE_NONE,
+-                                                     nullptr);
++      for (content::WebContents* contents : old_tabs) {
++        const int index =
++            browser->tab_strip_model()->GetIndexOfWebContents(contents);
++        if (index != TabStripModel::kNoTab) {
++          browser->tab_strip_model()->CloseWebContentsAt(index, CLOSE_NONE);
++        }
++      }
++    }
++    if (browser && replacement != nodes_by_space.end() &&
++        !replacement->second.empty()) {
++      std::vector<ImportedTab> tabs;
++      FlattenNodes(replacement->second, std::string(), false, &tabs);
++      AddTabs(browser, snapshot->source_profile, tabs);
+     }
+   }
+   return true;
+Index: src/chrome/browser/importer/arcium_arc_import.h
+===================================================================
+--- src.orig/chrome/browser/importer/arcium_arc_import.h
++++ src/chrome/browser/importer/arcium_arc_import.h
+@@ -11,9 +11,18 @@ class Profile;
+ 
+ namespace arcium {
+ 
++enum class ArcSidebarDestination {
++  kTabs,
++  kPins,
++};
++
+ // Validates and reconciles an Arc sidebar snapshot as unloaded normal tabs
+-// and native tab groups. Returns false without mutation for malformed input.
+-bool ImportArcSidebarSnapshot(Profile* profile, std::string_view snapshot_json);
++// with native groups, or as dormant lightweight Pins. Returns false without
++// mutation for malformed input.
++bool ImportArcSidebarSnapshot(
++    Profile* profile,
++    std::string_view snapshot_json,
++    ArcSidebarDestination destination = ArcSidebarDestination::kTabs);
+ 
+ }  // namespace arcium
+ 
+Index: src/chrome/browser/importer/profile_writer.cc
+===================================================================
+--- src.orig/chrome/browser/importer/profile_writer.cc
++++ src/chrome/browser/importer/profile_writer.cc
+@@ -80,7 +80,10 @@ void ShowBookmarkBar(Profile* profile) {
+ 
+ }  // namespace
+ 
+-ProfileWriter::ProfileWriter(Profile* profile) : profile_(profile) {}
++ProfileWriter::ProfileWriter(
++    Profile* profile,
++    arcium::ArcSidebarDestination arc_sidebar_destination)
++    : profile_(profile), arc_sidebar_destination_(arc_sidebar_destination) {}
+ 
+ bool ProfileWriter::BookmarkModelIsLoaded() const {
+   return BookmarkModelFactory::GetForBrowserContext(profile_)->loaded();
+@@ -230,7 +233,8 @@ void ProfileWriter::AddBookmarks(
+ 
+ void ProfileWriter::AddArcSidebarSnapshot(
+     const std::string& snapshot_json) {
+-  arcium::ImportArcSidebarSnapshot(profile_, snapshot_json);
++  arcium::ImportArcSidebarSnapshot(profile_, snapshot_json,
++                                   arc_sidebar_destination_);
+ }
+ 
+ void ProfileWriter::AddFavicons(
+Index: src/chrome/browser/importer/profile_writer.h
+===================================================================
+--- src.orig/chrome/browser/importer/profile_writer.h
++++ src/chrome/browser/importer/profile_writer.h
+@@ -11,6 +11,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/ref_counted.h"
+ #include "build/build_config.h"
++#include "chrome/browser/importer/arcium_arc_import.h"
+ #include "components/favicon_base/favicon_usage_data.h"
+ #include "components/history/core/browser/history_types.h"
+ #include "components/search_engines/template_url_service.h"
+@@ -34,7 +35,10 @@ struct ImportedBookmarkEntry;
+ // This object must be invoked on UI thread.
+ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
+  public:
+-  explicit ProfileWriter(Profile* profile);
++  explicit ProfileWriter(
++      Profile* profile,
++      arcium::ArcSidebarDestination arc_sidebar_destination =
++          arcium::ArcSidebarDestination::kTabs);
+ 
+   ProfileWriter(const ProfileWriter&) = delete;
+   ProfileWriter& operator=(const ProfileWriter&) = delete;
+@@ -100,6 +104,7 @@ class ProfileWriter : public base::RefCo
+ 
+  private:
+   const raw_ptr<Profile> profile_;
++  const arcium::ArcSidebarDestination arc_sidebar_destination_;
+ };
+ 
+ #endif  // CHROME_BROWSER_IMPORTER_PROFILE_WRITER_H_
+Index: src/chrome/browser/resources/settings/people_page/import_data_browser_proxy.ts
+===================================================================
+--- src.orig/chrome/browser/resources/settings/people_page/import_data_browser_proxy.ts
++++ src/chrome/browser/resources/settings/people_page/import_data_browser_proxy.ts
+@@ -19,6 +19,7 @@ export interface BrowserProfile {
+   passwords: boolean;
+   search: boolean;
+   autofillFormData: boolean;
++  isArc: boolean;
+ }
+ 
+ /**
+@@ -44,7 +45,7 @@ export interface ImportDataBrowserProxy
+    */
+   importData(
+       sourceBrowserProfileIndex: number,
+-      types: {[type: string]: boolean}): void;
++      types: {[type: string]: boolean}, importArcAsPins: boolean): void;
+ 
+   /**
+    * Prompts the user to choose a bookmarks file to import bookmarks from.
+@@ -58,8 +59,10 @@ export class ImportDataBrowserProxyImpl
+   }
+ 
+   importData(
+-      sourceBrowserProfileIndex: number, types: {[type: string]: boolean}) {
+-    chrome.send('importData', [sourceBrowserProfileIndex, types]);
++      sourceBrowserProfileIndex: number, types: {[type: string]: boolean},
++      importArcAsPins: boolean) {
++    chrome.send(
++        'importData', [sourceBrowserProfileIndex, types, importArcAsPins]);
+   }
+ 
+   importFromBookmarksFile() {
+Index: src/chrome/browser/resources/settings/people_page/import_data_dialog.html
+===================================================================
+--- src.orig/chrome/browser/resources/settings/people_page/import_data_dialog.html
++++ src/chrome/browser/resources/settings/people_page/import_data_dialog.html
+@@ -50,6 +50,12 @@
+             </template>
+           </select>
+           <div class="description">$i18n{importDescription}</div>
++          <settings-toggle-button id="importArcAsPins"
++              hidden="[[!selected_.isArc]]"
++              checked="{{importArcAsPins_}}"
++              label="$i18n{importArcAsPins}"
++              sub-label="$i18n{importArcAsPinsDescription}" no-set-pref>
++          </settings-toggle-button>
+ 
+           <!--
+             A parent div is needed here to prevent bugs caused by elements
+Index: src/chrome/browser/resources/settings/people_page/import_data_dialog.ts
+===================================================================
+--- src.orig/chrome/browser/resources/settings/people_page/import_data_dialog.ts
++++ src/chrome/browser/resources/settings/people_page/import_data_dialog.ts
+@@ -76,6 +76,11 @@ export class SettingsImportDataDialogEle
+         value: ImportDataStatus.INITIAL,
+       },
+ 
++      importArcAsPins_: {
++        type: Boolean,
++        value: false,
++      },
++
+       /**
+        * Mirroring the enum so that it can be used from HTML bindings.
+        */
+@@ -91,6 +96,7 @@ export class SettingsImportDataDialogEle
+   declare private selected_: BrowserProfile;
+   declare private noImportDataTypeSelected_: boolean;
+   declare private importStatus_: ImportDataStatus;
++  declare private importArcAsPins_: boolean;
+   private browserProxy_: ImportDataBrowserProxy =
+       ImportDataBrowserProxyImpl.getInstance();
+ 
+@@ -158,6 +164,7 @@ export class SettingsImportDataDialogEle
+ 
+   private onBrowserProfileSelectionChange_() {
+     this.selected_ = this.browserProfiles_[this.$.browserSelect.selectedIndex];
++    this.importArcAsPins_ = false;
+   }
+ 
+   private onActionButtonClick_() {
+@@ -169,7 +176,9 @@ export class SettingsImportDataDialogEle
+       checkboxes.forEach(checkbox => {
+         types[checkbox.pref!.key] = checkbox.checked && !checkbox.hidden;
+       });
+-      this.browserProxy_.importData(this.$.browserSelect.selectedIndex, types);
++      this.browserProxy_.importData(
++          this.$.browserSelect.selectedIndex, types,
++          this.selected_.isArc && this.importArcAsPins_);
+     }
+     checkboxes.forEach(checkbox => checkbox.sendPrefChange());
+   }
+Index: src/chrome/browser/ui/webui/settings/brave_import_data_handler.cc
+===================================================================
+--- src.orig/chrome/browser/ui/webui/settings/brave_import_data_handler.cc
++++ src/chrome/browser/ui/webui/settings/brave_import_data_handler.cc
+@@ -79,16 +79,19 @@ void BraveImportDataHandler::StartImport
+                   source_profile.importer_type,
+                   base::BindOnce(&BraveImportDataHandler::StartImportImpl,
+                                  weak_factory_.GetWeakPtr(), source_profile,
+-                                 imported_items, profile));
++                                 imported_items, profile,
++                                 arc_sidebar_destination()));
+ #else
+-  StartImportImpl(source_profile, imported_items, profile);
++  StartImportImpl(source_profile, imported_items, profile,
++                  arc_sidebar_destination());
+ #endif
+ }
+ 
+ void BraveImportDataHandler::StartImportImpl(
+     const user_data_importer::SourceProfile& source_profile,
+     uint16_t imported_items,
+-    Profile* profile) {
++    Profile* profile,
++    arcium::ArcSidebarDestination arc_sidebar_destination) {
+   // If another import is already ongoing, let it finish silently.
+   if (import_observers_.count(source_profile.source_path)) {
+     import_observers_.erase(source_profile.source_path);
+@@ -109,7 +112,8 @@ void BraveImportDataHandler::StartImport
+   importer_host->set_parent_view(web_ui()->GetWebContents()->GetNativeView());
+ 
+   importer_host->StartImportSettings(source_profile, profile, imported_items,
+-                                     new ProfileWriter(profile));
++                                     new ProfileWriter(
++                                         profile, arc_sidebar_destination));
+ }
+ 
+ void BraveImportDataHandler::NotifyImportProgress(
+Index: src/chrome/browser/ui/webui/settings/brave_import_data_handler.h
+===================================================================
+--- src.orig/chrome/browser/ui/webui/settings/brave_import_data_handler.h
++++ src/chrome/browser/ui/webui/settings/brave_import_data_handler.h
+@@ -50,7 +50,8 @@ class BraveImportDataHandler : public Im
+ 
+   void StartImportImpl(const user_data_importer::SourceProfile& source_profile,
+                        uint16_t imported_items,
+-                       Profile* profile);
++                       Profile* profile,
++                       arcium::ArcSidebarDestination arc_sidebar_destination);
+   virtual void NotifyImportProgress(
+       const user_data_importer::SourceProfile& source_profile,
+       const base::DictValue& info);
+Index: src/chrome/browser/ui/webui/settings/import_data_handler.cc
+===================================================================
+--- src.orig/chrome/browser/ui/webui/settings/import_data_handler.cc
++++ src/chrome/browser/ui/webui/settings/import_data_handler.cc
+@@ -116,7 +116,8 @@ void ImportDataHandler::StartImport(
+   importer_host_->set_parent_view(web_ui()->GetWebContents()->GetNativeView());
+ 
+   importer_host_->StartImportSettings(source_profile, profile, imported_items,
+-                                      new ProfileWriter(profile));
++                                      new ProfileWriter(
++                                          profile, arc_sidebar_destination_));
+ 
+   importer::LogImporterUseToMetrics("ImportDataHandler",
+                                     source_profile.importer_type);
+@@ -161,6 +162,11 @@ void ImportDataHandler::HandleImportData
+ 
+   const user_data_importer::SourceProfile& source_profile =
+       importer_list_->GetSourceProfileAt(browser_index);
++  arc_sidebar_destination_ =
++      source_profile.importer_type == user_data_importer::TYPE_ARC &&
++              list.size() >= 3 && list[2].is_bool() && list[2].GetBool()
++          ? arcium::ArcSidebarDestination::kPins
++          : arcium::ArcSidebarDestination::kTabs;
+   uint16_t supported_items = source_profile.services_supported;
+ 
+   uint16_t imported_items = (selected_items & supported_items);
+@@ -227,6 +233,8 @@ void ImportDataHandler::SendBrowserProfi
+     base::DictValue browser_profile;
+     browser_profile.Set("name", source_profile.importer_name);
+     browser_profile.Set("index", static_cast<int>(i));
++    browser_profile.Set(
++        "isArc", source_profile.importer_type == user_data_importer::TYPE_ARC);
+     browser_profile.Set("profileName", source_profile.profile);
+     browser_profile.Set("history",
+                         (browser_services & user_data_importer::HISTORY) != 0);
+@@ -286,6 +294,8 @@ void ImportDataHandler::FileSelected(con
+   source_profile.importer_type = user_data_importer::TYPE_BOOKMARKS_FILE;
+   source_profile.source_path = file.path();
+ 
++  arc_sidebar_destination_ = arcium::ArcSidebarDestination::kTabs;
++
+   StartImport(source_profile, user_data_importer::FAVORITES);
+ }
+ 
+Index: src/chrome/browser/ui/webui/settings/import_data_handler.h
+===================================================================
+--- src.orig/chrome/browser/ui/webui/settings/import_data_handler.h
++++ src/chrome/browser/ui/webui/settings/import_data_handler.h
+@@ -10,6 +10,7 @@
+ #include <memory>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "chrome/browser/importer/arcium_arc_import.h"
+ #include "chrome/browser/importer/importer_progress_observer.h"
+ #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
+ #include "components/user_data_importer/common/importer_data_types.h"
+@@ -37,6 +38,12 @@ class ImportDataHandler : public Setting
+   void OnJavascriptAllowed() override {}
+   void OnJavascriptDisallowed() override;
+   friend class BraveImportDataHandler;
++
++ protected:
++  arcium::ArcSidebarDestination arc_sidebar_destination() const {
++    return arc_sidebar_destination_;
++  }
++
+  private:
+   virtual void StartImport(const user_data_importer::SourceProfile& source_profile,
+                    uint16_t imported_items);
+@@ -73,6 +80,8 @@ class ImportDataHandler : public Setting
+ 
+   bool import_did_succeed_{false};
+   bool importer_list_loaded_{false};
++  arcium::ArcSidebarDestination arc_sidebar_destination_ =
++      arcium::ArcSidebarDestination::kTabs;
+ 
+   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+ };
+Index: src/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+===================================================================
+--- src.orig/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ src/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -1157,6 +1157,9 @@ void AddImportDataStrings(content::WebUI
+       {"importSearch", IDS_SETTINGS_IMPORT_SEARCH_ENGINES_CHECKBOX},
+       {"importAutofillFormData",
+        IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX},
++      {"importArcAsPins", IDS_SETTINGS_IMPORT_ARC_AS_PINS},
++      {"importArcAsPinsDescription",
++       IDS_SETTINGS_IMPORT_ARC_AS_PINS_DESCRIPTION},
+       {"importChooseFile", IDS_SETTINGS_IMPORT_CHOOSE_FILE},
+       {"importCommit", IDS_SETTINGS_IMPORT_COMMIT},
+       {"noProfileFound", IDS_SETTINGS_IMPORT_NO_PROFILE_FOUND},
+Index: src/chrome/browser/importer/arcium_arc_import_browsertest.cc
+===================================================================
+--- src.orig/chrome/browser/importer/arcium_arc_import_browsertest.cc
++++ src/chrome/browser/importer/arcium_arc_import_browsertest.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <map>
+ #include <string>
++#include <utility>
+ 
+ #include "chrome/browser/ui/arcium/tab_provenance.h"
+ #include "chrome/browser/ui/browser.h"
+@@ -21,6 +22,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
+ 
+ namespace arcium {
+ namespace {
+@@ -130,5 +132,74 @@ IN_PROC_BROWSER_TEST_F(ArciumArcImportBr
+   EXPECT_NE(-1, browser()->tab_strip_model()->GetIndexOfWebContents(unrelated));
+ }
+ 
++helium::PersistentNode Link(std::string id,
++                            std::u16string title,
++                            const char* url) {
++  return helium::PersistentNode{
++      .data = helium::PersistentLink{
++          .id = std::move(id), .title = std::move(title), .url = GURL(url)}};
++}
++
++helium::PersistentNode Folder(std::string id,
++                              std::u16string title,
++                              bool collapsed,
++                              helium::PersistentNodes children) {
++  return helium::PersistentNode{
++      .data = helium::PersistentFolder{.id = std::move(id),
++                                       .title = std::move(title),
++                                       .collapsed = collapsed,
++                                       .children = std::move(children)}};
++}
++
++IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
++                       ImportsNestedFoldersAsDormantPins) {
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  const int original_tab_count = browser()->tab_strip_model()->count();
++
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot,
++                                       ArcSidebarDestination::kPins));
++  EXPECT_EQ(original_tab_count, browser()->tab_strip_model()->count());
++  ASSERT_EQ(2u, service->GetSpaces().size());
++
++  helium::HeliumSpace* space_a = service->GetSpaceById("space-a");
++  helium::HeliumSpace* space_b = service->GetSpaceById("space-b");
++  ASSERT_TRUE(space_a);
++  ASSERT_TRUE(space_b);
++  EXPECT_EQ("arc-profile", space_a->source_profile());
++  EXPECT_EQ("arc-profile", space_b->source_profile());
++
++  const helium::PersistentNodes expected_space_a = {
++      Link("arc:arc-profile:space-a:root", u"Root", "https://root.test/"),
++      Folder("arc:arc-profile:space-a:outer", u"Outer", true,
++             {Link("arc:arc-profile:space-a:outer-tab", u"Outer tab",
++                   "https://outer.test/"),
++              Folder("arc:arc-profile:space-a:inner", u"Inner", false,
++                     {Link("arc:arc-profile:space-a:inner-tab", u"Inner tab",
++                           "https://inner.test/")})})};
++  const helium::PersistentNodes expected_space_b = {
++      Link("arc:arc-profile:space-b:other-space", u"Other space",
++           "https://space-b.test/")};
++  const helium::PersistentNodes expected_favorites = {
++      Link("arc:arc-profile:favorite:favorite", u"Favorite",
++           "https://favorite.test/")};
++  EXPECT_EQ(expected_space_a, space_a->pins());
++  EXPECT_EQ(expected_space_b, space_b->pins());
++  EXPECT_EQ(expected_favorites, service->GetFavoritesForSpace(*space_a));
++  EXPECT_EQ(expected_favorites, service->GetFavoritesForSpace(*space_b));
++
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot,
++                                       ArcSidebarDestination::kPins));
++  EXPECT_EQ(original_tab_count, browser()->tab_strip_model()->count());
++  ASSERT_EQ(2u, service->GetSpaces().size());
++  space_a = service->GetSpaceById("space-a");
++  space_b = service->GetSpaceById("space-b");
++  ASSERT_TRUE(space_a);
++  ASSERT_TRUE(space_b);
++  EXPECT_EQ(expected_space_a, space_a->pins());
++  EXPECT_EQ(expected_space_b, space_b->pins());
++}
++
+ }  // namespace
+ }  // namespace arcium

@@ -1,0 +1,478 @@
+--- a/chrome/browser/ui/helium/helium_persistent_item_model_unittest.cc
++++ b/chrome/browser/ui/helium/helium_persistent_item_model_unittest.cc
+@@ -4,6 +4,11 @@
+ 
+ #include "chrome/browser/ui/helium/helium_persistent_item_model.h"
+ 
++#include <array>
++#include <random>
++#include <set>
++#include <string>
++
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+ namespace helium {
+@@ -312,5 +317,144 @@ TEST(PersistentGridPackingTest,
+             PackPersistentGridChildren(restored));
+ }
+ 
++
++// Fixed seeds and step traces make a failing sequence reproducible. These
++// checks describe ownership rules, independently of the transition code.
++class PersistentItemInvariantTest : public testing::TestWithParam<uint32_t> {};
++
++TEST_P(PersistentItemInvariantTest, LifecycleOwnershipAcrossActionSequences) {
++  using State = PersistentItemLifecycle::State;
++  PersistentItemLifecycle lifecycle;
++  std::mt19937 random(GetParam());
++  const std::array<std::string, 4> ids = {"a", "b", "c", "d"};
++  std::set<uint64_t> issued_tokens;
++  uint64_t next_token = 1;
++  for (const auto& id : ids) {
++    ASSERT_TRUE(lifecycle.AddDormant(id));
++  }
++  for (int step = 0; step < 512; ++step) {
++    const auto& id = ids[random() % ids.size()];
++    const unsigned action = random() % 9;
++    SCOPED_TRACE(testing::Message() << "seed=" << GetParam()
++                                  << " step=" << step << " id=" << id
++                                  << " action=" << action);
++    const auto token = lifecycle.GetLiveTab(id);
++    switch (action) {
++      case 0:
++        lifecycle.AddDormant(id);
++        break;
++      case 1: {
++        const auto decision = lifecycle.BeginActivation(id);
++        if (decision.action ==
++            PersistentItemLifecycle::ActivationAction::kMaterialize) {
++          const uint64_t fresh = next_token++;
++          issued_tokens.insert(fresh);
++          ASSERT_TRUE(lifecycle.DidMaterialize(id, fresh));
++        } else if (decision.action ==
++                   PersistentItemLifecycle::ActivationAction::kActivateExisting) {
++          EXPECT_EQ(token, decision.live_tab);
++        }
++        break;
++      }
++      case 2:
++        if (token) {
++          lifecycle.BeginClose(*token);
++        }
++        break;
++      case 3:
++        if (token) {
++          lifecycle.CompleteClose(*token);
++        }
++        break;
++      case 4:
++        if (token) {
++          lifecycle.CancelClose(*token);
++        }
++        break;
++      case 5:
++        lifecycle.Forget(id);
++        break;
++      case 6: {
++        const auto before_state = lifecycle.GetState(id);
++        const auto before_token = lifecycle.GetLiveTab(id);
++        const auto& destination = ids[random() % ids.size()];
++        if (lifecycle.Rekey(id, destination)) {
++          EXPECT_FALSE(lifecycle.GetState(id));
++          EXPECT_EQ(before_state, lifecycle.GetState(destination));
++          EXPECT_EQ(before_token, lifecycle.GetLiveTab(destination));
++        } else {
++          EXPECT_EQ(before_state, lifecycle.GetState(id));
++          EXPECT_EQ(before_token, lifecycle.GetLiveTab(id));
++        }
++        break;
++      }
++      case 7: {
++        const uint64_t fresh = next_token++;
++        issued_tokens.insert(fresh);
++        lifecycle.RestoreLive(id, fresh);
++        break;
++      }
++      case 8:
++        lifecycle.RetainOnly({ids[random() % ids.size()], id});
++        break;
++    }
++
++    std::set<uint64_t> owned;
++    for (const auto& item : ids) {
++      const auto state = lifecycle.GetState(item);
++      const auto live = lifecycle.GetLiveTab(item);
++      EXPECT_EQ(state == State::kLive || state == State::kClosing,
++                live.has_value());
++      if (live) {
++        EXPECT_TRUE(owned.insert(*live).second) << "duplicate live tab";
++        EXPECT_EQ(std::optional<std::string_view>(item),
++                  lifecycle.GetItemForLiveTab(*live));
++      }
++    }
++    // Includes retired tokens: removing a record must clear the reverse index.
++    for (uint64_t issued : issued_tokens) {
++      const auto owner = lifecycle.GetItemForLiveTab(issued);
++      EXPECT_EQ(owned.contains(issued), owner.has_value());
++      if (owner) {
++        EXPECT_EQ(issued, lifecycle.GetLiveTab(*owner));
++      }
++    }
++  }
++}
++
++TEST_P(PersistentItemInvariantTest, TreeMovesPreserveIdentityAndPersistence) {
++  std::mt19937 random(GetParam());
++  PersistentNodes nodes = Tree();
++  const std::array<std::string, 4> ids = {"top", "outer", "nested", "empty"};
++  const std::array<std::string, 3> parents = {"", "outer", "empty"};
++  for (int step = 0; step < 128; ++step) {
++    const auto& id = ids[random() % ids.size()];
++    const auto& parent = parents[random() % parents.size()];
++    SCOPED_TRACE(testing::Message() << "seed=" << GetParam()
++                                  << " step=" << step << " id=" << id
++                                  << " parent=" << parent);
++    const auto before = nodes;
++    if (!PersistentItemCodec::MoveNode(nodes, id, parent, {})) {
++      EXPECT_EQ(before, nodes) << "rejected move changed the tree";
++    }
++    const auto restored =
++        PersistentItemCodec::Decode(PersistentItemCodec::Encode(nodes), true);
++    ASSERT_TRUE(restored) << "invalid or duplicate durable identity";
++    EXPECT_EQ(nodes, *restored);
++    for (const char* link_id : {"top", "nested"}) {
++      const auto* link = PersistentItemCodec::FindLink(nodes, link_id);
++      ASSERT_TRUE(link);
++      EXPECT_EQ(GURL(std::string("https://") + link_id + ".test/"), link->url);
++      EXPECT_EQ(u"Link", link->title);
++    }
++    ASSERT_TRUE(PersistentItemCodec::FindFolder(nodes, "outer"));
++    EXPECT_TRUE(PersistentItemCodec::FindFolder(nodes, "outer")->collapsed);
++    EXPECT_TRUE(PersistentItemCodec::FindFolder(nodes, "empty"));
++  }
++}
++
++INSTANTIATE_TEST_SUITE_P(FixedSeeds, PersistentItemInvariantTest,
++                        testing::Values(1u, 42u, 20260927u, 0xC0FFEEu));
++
+ }  // namespace
+ }  // namespace helium
+--- a/chrome/browser/ui/helium/helium_space_service_unittest.cc
++++ b/chrome/browser/ui/helium/helium_space_service_unittest.cc
+@@ -4,6 +4,9 @@
+ 
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ 
++#include <array>
++#include <random>
++#include <set>
+ #include <map>
+ #include <memory>
+ #include <vector>
+@@ -632,5 +635,86 @@ TEST_F(HeliumSpaceServiceTest, LivePinMi
+                         original_pins, original_pref);
+ }
+ 
++
++// Exercise the actual service and collection moves. Expected membership is
++// recorded from the requested action, not inferred from the resulting model.
++TEST_F(HeliumSpaceServiceTest, ActionSequencesPreserveTabOwnership) {
++  enum class Membership { kOrdinary, kPin, kFavorite };
++  struct Item {
++    tabs::TabInterface* tab;
++    content::WebContents* contents;
++    GURL url;
++    Membership membership = Membership::kOrdinary;
++  };
++  std::vector<Item> items;
++  for (const char* url : {"https://one.test/", "https://two.test/",
++                          "https://three.test/", "https://four.test/"}) {
++    auto* tab = AddOrdinaryTab(url);
++    ASSERT_TRUE(tab);
++    items.push_back({tab, tab->GetContents(), GURL(url)});
++  }
++  auto* model = browser()->tab_strip_model();
++  auto* strip = static_cast<tabs::TabStripCollection*>(
++      const_cast<tabs::TabCollection*>(model->Root()));
++  for (uint32_t seed : {1u, 42u, 20260927u, 0xC0FFEEu}) {
++    std::mt19937 random(seed);
++    for (int step = 0; step < 64; ++step) {
++      auto& item = items[random() % items.size()];
++      const unsigned action = random() % 4;
++      SCOPED_TRACE(testing::Message() << "seed=" << seed
++                                    << " step=" << step
++                                    << " action=" << action);
++      auto* selected = model->GetActiveTab();
++      if (action == 0) {
++        model->ActivateTabAt(model->GetIndexOfTab(item.tab));
++        selected = item.tab;
++      } else if (item.membership != Membership::kOrdinary) {
++        ASSERT_TRUE(service_->RemovePersistentItem(item.tab));
++        item.membership = Membership::kOrdinary;
++      } else if (action == 1) {
++        ASSERT_TRUE(service_->ConvertTabToPinInSpace(
++            browser(), space_->id(), item.tab, {}, {}));
++        item.membership = Membership::kPin;
++      } else {
++        ASSERT_TRUE(service_->AddFavoriteFromTab(item.tab));
++        item.membership = Membership::kFavorite;
++      }
++      base::RunLoop().RunUntilIdle();
++      ASSERT_EQ(items.size(), static_cast<size_t>(model->count()));
++      EXPECT_EQ(selected, model->GetActiveTab());
++      std::set<tabs::TabInterface*> unique_tabs;
++      std::set<std::string> unique_records;
++      for (const auto& expected : items) {
++        const int index = model->GetIndexOfTab(expected.tab);
++        ASSERT_NE(TabStripModel::kNoTab, index);
++        EXPECT_TRUE(unique_tabs.insert(model->GetTabAtIndex(index)).second);
++        EXPECT_EQ(expected.contents, model->GetWebContentsAt(index));
++        EXPECT_EQ(expected.url, expected.contents->GetLastCommittedURL());
++        const auto kind = service_->GetPersistentItemKind(expected.tab);
++        const auto id = service_->GetPersistentItemId(expected.tab);
++        EXPECT_EQ(expected.membership == Membership::kPin,
++                  strip->IsPinTab(expected.tab));
++        EXPECT_EQ(expected.membership == Membership::kFavorite,
++                  model->IsTabPinned(index));
++        if (expected.membership == Membership::kOrdinary) {
++          EXPECT_FALSE(kind);
++          EXPECT_FALSE(id);
++          EXPECT_EQ(strip->unpinned_collection(),
++                    expected.tab->GetParentCollection());
++        } else {
++          ASSERT_TRUE(kind);
++          ASSERT_TRUE(id);
++          EXPECT_EQ(expected.membership == Membership::kPin
++                        ? PersistentRecordKind::kPin
++                        : PersistentRecordKind::kFavorite, *kind);
++          EXPECT_TRUE(unique_records.insert(std::string(*id)).second);
++          EXPECT_EQ(expected.tab, service_->GetLiveTabForPersistentItem(
++                                      browser(), *kind, *id));
++        }
++      }
++    }
++  }
++}
++
+ }  // namespace
+ }  // namespace helium
+--- a/chrome/browser/ui/views/tabs/common/tab_view_browsertest.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view_browsertest.cc
+@@ -4,11 +4,15 @@
+ 
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ 
++#include <map>
++#include <string>
++
+ #include "base/functional/callback_helpers.h"
+ #include "base/run_loop.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/metrics/user_action_tester.h"
+ #include "base/test/run_until.h"
++#include "base/time/time.h"
+ #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+ #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
+ #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+@@ -49,7 +53,9 @@
+ #include "media/base/media_switches.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "ui/base/l10n/l10n_util.h"
++#include "ui/events/event.h"
+ #include "ui/events/test/event_generator.h"
++#include "ui/events/types/event_type.h"
+ #include "ui/views/controls/button/button_controller.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/widget/widget_utils.h"
+@@ -145,6 +151,58 @@ class HeliumPersistentTabViewTest : publ
+     ASSERT_TRUE(default_space);
+     service->SetSpaceForBrowser(browser(), default_space->id());
+   }
++
++  // Check actual rendered rows, including retiring native views. Checking only
++  // collection nodes would miss a stale Favorite still parented in the UI.
++  testing::AssertionResult SidebarMatchesModel() {
++    std::map<std::string, int> persistent_rows;
++    int native_rows = 0;
++    auto visit = [&](auto&& self, views::View* view) -> void {
++      if (!view->GetVisible()) {
++        return;
++      }
++      if (auto* persistent = views::AsViewClass<PersistentTabView>(view)) {
++        ++persistent_rows[persistent->stable_id()];
++      } else if (views::IsViewClass<TabView>(view)) {
++        ++native_rows;
++      }
++      for (views::View* child : view->children()) {
++        self(self, child);
++      }
++    };
++    visit(visit, root_node()->view());
++    auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(
++        browser()->profile());
++    int expected_native = 0;
++    std::map<std::string, int> expected_persistent;
++    for (int i = 0; i < tab_strip_model()->count(); ++i) {
++      auto* tab = tab_strip_model()->GetTabAtIndex(i);
++      if (const auto id = service->GetPersistentItemId(tab)) {
++        ++expected_persistent[std::string(*id)];
++      } else {
++        ++expected_native;
++        auto* node = unpinned_collection_node()->GetNodeForHandle(tab->GetHandle());
++        if (!node || !node->view()->GetVisible() ||
++            node->view()->bounds().IsEmpty()) {
++          return testing::AssertionFailure() << "ordinary tab " << i
++                                             << " has no visible row";
++        }
++      }
++    }
++    if (native_rows != expected_native || persistent_rows != expected_persistent) {
++      return testing::AssertionFailure()
++             << "native rows=" << native_rows << " expected=" << expected_native
++             << "; persistent rows=" << testing::PrintToString(persistent_rows)
++             << " expected=" << testing::PrintToString(expected_persistent);
++    }
++    return testing::AssertionSuccess();
++  }
++
++  void WaitForSidebarAgreement() {
++    EXPECT_TRUE(base::test::RunUntil([&] { return SidebarMatchesModel(); }));
++    EXPECT_TRUE(SidebarMatchesModel());
++  }
++
+ };
+ 
+ IN_PROC_BROWSER_TEST_F(TabViewTest, IconDataChanged) {
+@@ -1019,3 +1077,132 @@ IN_PROC_BROWSER_TEST_F(TabViewTest, Aler
+                                   tab_bounds.height() / 2, 0, 0);
+   EXPECT_EQ(expected_bounds, alert_indicator->bounds());
+ }
++
++
++IN_PROC_BROWSER_TEST_F(HeliumPersistentTabViewTest,
++                       InactiveFavoriteIconPreservesPageBeforeReturningHome) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  const GURL home_url = embedded_test_server()->GetURL("/title1.html");
++  const GURL away_url = embedded_test_server()->GetURL("/title2.html");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), home_url));
++
++  auto* favorite = tab_strip_model()->GetActiveTab();
++  content::WebContents* contents = favorite->GetContents();
++  auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(
++      browser()->profile());
++  ASSERT_TRUE(service->AddFavoriteFromTab(favorite));
++  ASSERT_NO_FATAL_FAILURE(WaitForSidebarAgreement());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), away_url));
++  ASSERT_TRUE(content::ExecJs(contents,
++      "document.body.innerHTML = '<input id=unsaved>';"
++      "document.getElementById('unsaved').value = 'keep this';"));
++
++  AppendTab();
++  ASSERT_NO_FATAL_FAILURE(WaitForSidebarAgreement());
++  ASSERT_NE(favorite, tab_strip_model()->GetActiveTab());
++  const int tab_count = tab_strip_model()->count();
++  auto click_favorite_icon = [&]() {
++    RunScheduledLayouts();
++    auto* node = root_node()->GetNodeForHandle(favorite->GetHandle());
++    ASSERT_TRUE(node);
++    auto* view = views::AsViewClass<TabView>(node->view());
++    ASSERT_TRUE(view);
++    auto* icon = views::AsViewClass<TabIcon>(
++        view->GetViewByElementId(kTabIconElementId));
++    ASSERT_TRUE(icon);
++    ASSERT_NO_FATAL_FAILURE(WaitForLayout(view));
++    ASSERT_TRUE(view->GetVisible());
++    ASSERT_FALSE(icon->bounds().IsEmpty());
++    views::View* target = view;
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      RunScheduledLayouts();
++      return !view->needs_layout() &&
++             target->HitTestPoint(icon->bounds().CenterPoint());
++    })) << "tab=" << view->bounds().ToString()
++        << " icon=" << icon->bounds().ToString();
++    const gfx::Point point = icon->bounds().CenterPoint();
++    ui::MouseEvent press(ui::EventType::kMousePressed, point, point,
++                         base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON,
++                         ui::EF_LEFT_MOUSE_BUTTON);
++    ui::MouseEvent release(ui::EventType::kMouseReleased, point, point,
++                           base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON,
++                           ui::EF_LEFT_MOUSE_BUTTON);
++    ASSERT_TRUE(target->OnMousePressed(press));
++    target->OnMouseReleased(release);
++  };
++
++  ASSERT_NO_FATAL_FAILURE(click_favorite_icon());
++  ASSERT_TRUE(content::WaitForLoadStop(contents));
++  EXPECT_EQ(favorite, tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(contents, favorite->GetContents());
++  EXPECT_EQ(tab_count, tab_strip_model()->count());
++  EXPECT_EQ(away_url, contents->GetLastCommittedURL());
++  EXPECT_EQ("keep this", content::EvalJs(contents,
++      "document.getElementById('unsaved')?.value ?? 'missing'"));
++
++  // An explicit second click on the active Favorite retains return-home.
++  ASSERT_EQ(favorite, tab_strip_model()->GetActiveTab());
++  ASSERT_NO_FATAL_FAILURE(click_favorite_icon());
++  ASSERT_TRUE(content::WaitForLoadStop(contents));
++  EXPECT_EQ(home_url, contents->GetLastCommittedURL());
++  EXPECT_EQ(contents, favorite->GetContents());
++  EXPECT_EQ(favorite, tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(tab_count, tab_strip_model()->count());
++}
++
++// These sequences deliberately interleave active and background operations.
++// The page owns a sentinel, so retaining a URL but replacing the WebContents
++// or reloading the document cannot accidentally pass.
++IN_PROC_BROWSER_TEST_F(HeliumPersistentTabViewTest,
++                       ActionSequencesPreserveVisibleTabsAndPageState) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  const GURL url = embedded_test_server()->GetURL("/title1.html");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
++  ui_test_utils::NavigateToURLWithDisposition(
++      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
++  ui_test_utils::NavigateToURLWithDisposition(
++      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
++  std::vector<tabs::TabInterface*> tabs;
++  std::vector<content::WebContents*> contents;
++  for (int i = 0; i < tab_strip_model()->count(); ++i) {
++    auto* tab = tab_strip_model()->GetTabAtIndex(i);
++    tabs.push_back(tab);
++    contents.push_back(tab->GetContents());
++    ASSERT_TRUE(content::ExecJs(tab->GetContents(),
++        "document.body.innerHTML = '<input id=unsaved>';"
++        "document.getElementById('unsaved').value = 'keep this';"));
++  }
++  auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(
++      browser()->profile());
++  for (int round = 0; round < 6; ++round) {
++    for (size_t index = 0; index < tabs.size(); ++index) {
++      auto* target = tabs[index];
++      auto* selected = tabs[(index + round) % tabs.size()];
++      tab_strip_model()->ActivateTabAt(tab_strip_model()->GetIndexOfTab(selected));
++      for (bool favorite : {false, true}) {
++        SCOPED_TRACE(testing::Message() << "round=" << round
++                                      << " tab=" << index
++                                      << " favorite=" << favorite);
++        if (favorite) {
++          ASSERT_TRUE(service->AddFavoriteFromTab(target));
++        } else {
++          ASSERT_TRUE(service->ConvertTabToPinInSpace(
++              browser(), service->GetDefaultSpace()->id(), target, {}, {}));
++        }
++        ASSERT_NO_FATAL_FAILURE(WaitForSidebarAgreement());
++        EXPECT_EQ(selected, tab_strip_model()->GetActiveTab());
++        ASSERT_TRUE(service->RemovePersistentItem(target));
++        ASSERT_NO_FATAL_FAILURE(WaitForSidebarAgreement());
++        EXPECT_EQ(selected, tab_strip_model()->GetActiveTab());
++        ASSERT_EQ(tabs.size(), static_cast<size_t>(tab_strip_model()->count()));
++        for (size_t i = 0; i < tabs.size(); ++i) {
++          ASSERT_EQ(contents[i], tabs[i]->GetContents());
++          EXPECT_EQ("keep this", content::EvalJs(
++              contents[i], "document.getElementById('unsaved').value"));
++        }
++      }
++    }
++  }
++}

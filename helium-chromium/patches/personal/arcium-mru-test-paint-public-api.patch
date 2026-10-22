@@ -1,0 +1,99 @@
+# Requires arcium-mru-tab-switcher and arcium-feature-performance.
+--- a/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
++++ b/chrome/browser/ui/views/frame/mru_tab_preview_cache_unittest.cc
+@@ -14,8 +14,8 @@
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
+ #include "content/public/test/navigation_simulator.h"
++#include "content/public/test/test_renderer_host.h"
+ #include "content/public/test/test_utils.h"
+-#include "content/public/test/web_contents_tester.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkBitmap.h"
+ #include "url/gurl.h"
+@@ -61,6 +61,13 @@
+   bool ReadyToCapture(content::WebContents* contents) {
+     return MRUTabPreviewCache::IsPageReadyForCapture(contents);
+   }
++  void SimulateFirstVisuallyNonEmptyPaint(content::WebContents* contents) {
++    // Simulate the renderer message through the frame host. This updates the
++    // PageImpl paint flag before notifying WebContents observers.
++    content::RenderFrameHostTester::For(contents->GetPrimaryMainFrame())
++        ->SimulateFirstVisuallyNonEmptyPaint();
++  }
++  // Inject a synthetic completed copy to check publication and invalidation.
+   void CompleteCapture(MRUTabPreviewCache& cache, tabs::TabHandle handle,
+                        content::WeakDocumentPtr document) {
+     SkBitmap bitmap;
+@@ -83,7 +90,7 @@
+   const auto handle = AddHandle();
+   SeedThumbnail(handle);
+   auto* contents = handle.Get()->GetContents();
+-  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  SimulateFirstVisuallyNonEmptyPaint(contents);
+   ASSERT_TRUE(ReadyToCapture(contents));
+   auto cache = MakeCache(true);
+   ASSERT_TRUE(cache->Get(handle).isNull());
+@@ -108,7 +115,7 @@
+   const auto handle = AddHandle();
+   SeedThumbnail(handle);
+   auto* contents = handle.Get()->GetContents();
+-  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  SimulateFirstVisuallyNonEmptyPaint(contents);
+   auto document = contents->GetPrimaryMainFrame()->GetWeakDocumentPtr();
+   auto cache = MakeCache(true);
+   int updates = 0;
+@@ -117,7 +124,7 @@
+       &updates));
+   content::NavigationSimulator::NavigateAndCommitFromBrowser(
+       contents, GURL("https://next.test/"));
+-  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  SimulateFirstVisuallyNonEmptyPaint(contents);
+   CompleteCapture(*cache, handle, document);
+   EXPECT_TRUE(cache->Get(handle).isNull());
+   Release(*cache);
+@@ -169,7 +176,7 @@
+                 ->thumbnail()->GetCaptureReadiness());
+   ASSERT_FALSE(contents->CompletedFirstVisuallyNonEmptyPaint());
+   EXPECT_FALSE(ReadyToCapture(contents));
+-  content::WebContentsTester::For(contents)->TestDidFirstVisuallyNonEmptyPaint();
++  SimulateFirstVisuallyNonEmptyPaint(contents);
+   EXPECT_TRUE(ReadyToCapture(contents));
+   auto navigation = content::NavigationSimulator::CreateBrowserInitiated(
+       GURL("https://next.test/"), contents);
+--- a/content/public/test/test_renderer_host.h
++++ b/content/public/test/test_renderer_host.h
+@@ -107,6 +107,10 @@
+   // and ensures internal state of RenderFrameHost is ready for simulating
+   // RenderFrame originated IPCs.
+   virtual void InitializeRenderFrameIfNeeded() = 0;
++
++  // Simulates the main-frame renderer paint message. Updates Page paint state
++  // before notifying WebContents observers.
++  virtual void SimulateFirstVisuallyNonEmptyPaint() = 0;
+ 
+   // Gives tests access to RenderFrameHostImpl::OnCreateChild. The returned
+   // RenderFrameHost is owned by the parent RenderFrameHost.
+--- a/content/test/test_render_frame_host.h
++++ b/content/test/test_render_frame_host.h
+@@ -96,6 +96,7 @@
+ 
+   // RenderFrameHostTester implementation.
+   void InitializeRenderFrameIfNeeded() override;
++  void SimulateFirstVisuallyNonEmptyPaint() override;
+   TestRenderFrameHost* AppendChild(const std::string& frame_name) override;
+   TestRenderFrameHost* AppendChildWithPolicy(
+       const std::string& frame_name,
+--- a/content/test/test_render_frame_host.cc
++++ b/content/test/test_render_frame_host.cc
+@@ -190,6 +190,10 @@
+   }
+ }
+ 
++void TestRenderFrameHost::SimulateFirstVisuallyNonEmptyPaint() {
++  RenderFrameHostImpl::DidFirstVisuallyNonEmptyPaint();
++}
++
+ TestRenderFrameHost* TestRenderFrameHost::AppendChild(
+     const std::string& frame_name) {
+   return AppendChildWithPolicy(frame_name, {});

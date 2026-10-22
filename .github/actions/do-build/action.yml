@@ -1,0 +1,85 @@
+name: Build Helium
+inputs:
+  arch:
+    required: true
+    type: string
+  os:
+    required: true
+    type: string
+  GITHUB_TOKEN:
+    required: true
+    type: string
+  MACOS_CERTIFICATE:
+    type: string
+  MACOS_CERTIFICATE_PWD:
+    type: string
+  MACOS_CERTIFICATE_NAME:
+    type: string
+  MACOS_CI_KEYCHAIN_PWD:
+    type: string
+  PROD_MACOS_NOTARIZATION_APPLE_ID:
+    type: string
+  PROD_MACOS_NOTARIZATION_TEAM_ID:
+    type: string
+  PROD_MACOS_NOTARIZATION_PWD:
+    type: string
+  PROD_MACOS_SPECIAL_ENTITLEMENTS_PROFILE_B64:
+    type: string
+outputs:
+  status:
+    value: ${{ steps.build.outputs.status }}
+runs:
+  using: composite
+  steps:
+    - name: generate timestamp
+      run: echo TS=$(date +%s) >> $GITHUB_ENV
+      shell: bash
+
+    - name: Show sccache stats before build
+      run: sccache --show-stats
+      shell: bash
+
+    - name: Build
+      id: build
+      run: ./github_build.sh ${{ inputs.arch }} 2>&1 | tee -a github_actions_build_${{ inputs.arch }}.log
+      shell: bash
+
+    - name: Show sccache stats after build
+      run: sccache --show-stats
+      shell: bash
+
+    - name: Prepare archive of build as artifact
+      id: bake
+      run: ./github_prepare_artifacts.sh ${{ inputs.arch }} | tee -a github_actions_upload_${{ inputs.arch }}.log
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+        MACOS_CERTIFICATE: ${{ inputs.MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PWD: ${{ inputs.MACOS_CERTIFICATE_PWD }}
+        MACOS_CERTIFICATE_NAME: ${{ inputs.MACOS_CERTIFICATE_NAME }}
+        MACOS_CI_KEYCHAIN_PWD: ${{ inputs.MACOS_CI_KEYCHAIN_PWD }}
+        PROD_MACOS_NOTARIZATION_APPLE_ID: ${{ inputs.PROD_MACOS_NOTARIZATION_APPLE_ID }}
+        PROD_MACOS_NOTARIZATION_TEAM_ID: ${{ inputs.PROD_MACOS_NOTARIZATION_TEAM_ID }}
+        PROD_MACOS_NOTARIZATION_PWD: ${{ inputs.PROD_MACOS_NOTARIZATION_PWD }}
+        PROD_MACOS_SPECIAL_ENTITLEMENTS_PROFILE_B64: ${{ inputs.PROD_MACOS_SPECIAL_ENTITLEMENTS_PROFILE_B64 }}
+    - name: Upload part build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: github_build_artifact_${{ inputs.arch }}
+        path: upload_part_build/
+        overwrite: true
+    - name: Upload logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: github_build_logs_${{ inputs.arch }}
+        path: upload_logs/
+        overwrite: true
+    - name: Upload disk-image and hash file as artifact after build
+      if: ${{ steps.build.outputs.status == 'finished' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.bake.outputs.file_name }}
+        path: |
+          ${{ steps.bake.outputs.deltas }}
+          ./release_asset/${{ steps.bake.outputs.file_name }}
+          ./${{ steps.bake.outputs.file_name }}.hashes.md

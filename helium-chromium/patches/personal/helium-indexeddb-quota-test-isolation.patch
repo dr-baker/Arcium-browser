@@ -1,0 +1,17 @@
+diff --git a/content/browser/indexed_db/indexed_db_quota_client_unittest.cc b/content/browser/indexed_db/indexed_db_quota_client_unittest.cc
+--- a/content/browser/indexed_db/indexed_db_quota_client_unittest.cc
++++ b/content/browser/indexed_db/indexed_db_quota_client_unittest.cc
+@@ -95,9 +95,11 @@
+   IndexedDBQuotaClientTest& operator=(const IndexedDBQuotaClientTest&) = delete;
+ 
+   ~IndexedDBQuotaClientTest() override {
+-    base::RunLoop().RunUntilIdle();
++    task_environment_.RunUntilIdle();
+     idb_context_ = nullptr;
+-    base::RunLoop().RunUntilIdle();
++    quota_manager_ = nullptr;
++    // Drain database tasks before `temp_dir_` is destroyed.
++    task_environment_.RunUntilIdle();
+   }
+ 
+   bool IsSqliteBackingStoreEnabled() { return GetParam(); }

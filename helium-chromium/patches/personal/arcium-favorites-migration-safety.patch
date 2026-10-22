@@ -1,0 +1,100 @@
+--- src.orig/chrome/browser/ui/helium/helium_space_service.cc
++++ src/chrome/browser/ui/helium/helium_space_service.cc
+@@ -409,8 +409,11 @@
+   }
+   prefs->SetDict(kHeliumArcFavoritesByProfilePref, std::move(imported));
+ 
+-  // Native pinned-tab restoration must never rematerialize durable Favorites.
+-  PinnedTabCodec::WritePinnedTabs(profile_, {});
++  if (decoded_favorites) {
++    // Native pinned-tab restoration must never rematerialize durable
++    // Favorites after the normalized collection has been read or migrated.
++    PinnedTabCodec::WritePinnedTabs(profile_, {});
++  }
+ }
+ 
+ void HeliumSpaceService::LoadSpaces() {
+--- a/chrome/browser/ui/helium/helium_space_service_unittest.cc
++++ b/chrome/browser/ui/helium/helium_space_service_unittest.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/ui/helium/helium_space.h"
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
++#include "chrome/browser/ui/tabs/pinned_tab_codec.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+@@ -146,6 +147,73 @@
+   bool saw_removal_ = false;
+   bool association_was_cleared_ = false;
+ };
++
++class HeliumSpaceServiceMigrationTestBase : public BrowserWithTestWindowTest {
++ protected:
++  TestingProfile* CreateProfile(const std::string& profile_name) override {
++    TestingProfile* profile =
++        BrowserWithTestWindowTest::CreateProfile(profile_name);
++    PrepareProfile(profile);
++    return profile;
++  }
++
++  virtual void PrepareProfile(TestingProfile* profile) = 0;
++};
++
++class MalformedFavoritesMigrationTest
++    : public HeliumSpaceServiceMigrationTestBase {
++ protected:
++  void PrepareProfile(TestingProfile* profile) override {
++    base::ListValue malformed_favorites;
++    malformed_favorites.Append("malformed favorite entry");
++    profile->GetPrefs()->SetList(kHeliumFavoritesPref,
++                                 std::move(malformed_favorites));
++
++    StartupTabs legacy_pinned_tabs;
++    legacy_pinned_tabs.emplace_back(GURL("https://legacy-pin.test/"),
++                                    StartupTab::Type::kPinned);
++    PinnedTabCodec::WritePinnedTabs(profile, legacy_pinned_tabs);
++  }
++};
++
++TEST_F(MalformedFavoritesMigrationTest,
++       MalformedFavoritesPreserveLegacyPinnedTabs) {
++  auto service = std::make_unique<HeliumSpaceService>(profile());
++  ASSERT_TRUE(service);
++
++  const StartupTabs preserved = PinnedTabCodec::ReadPinnedTabs(profile());
++  ASSERT_EQ(1u, preserved.size());
++  EXPECT_EQ(GURL("https://legacy-pin.test/"), preserved.front().url);
++  EXPECT_EQ(1u,
++            profile()->GetPrefs()->GetList(kHeliumFavoritesPref).size());
++}
++
++class EmptyFavoritesMigrationTest : public HeliumSpaceServiceMigrationTestBase {
++ protected:
++  void PrepareProfile(TestingProfile* profile) override {
++    profile->GetPrefs()->SetList(kHeliumFavoritesPref, base::ListValue());
++
++    StartupTabs legacy_pinned_tabs;
++    legacy_pinned_tabs.emplace_back(GURL("https://legacy-pin.test/"),
++                                    StartupTab::Type::kPinned);
++    PinnedTabCodec::WritePinnedTabs(profile, legacy_pinned_tabs);
++  }
++};
++
++TEST_F(EmptyFavoritesMigrationTest,
++       EmptyFavoritesMigrateAndClearLegacyPinnedTabs) {
++  auto service = std::make_unique<HeliumSpaceService>(profile());
++  ASSERT_TRUE(service);
++
++  EXPECT_TRUE(PinnedTabCodec::ReadPinnedTabs(profile()).empty());
++  const auto decoded = PersistentItemCodec::Decode(
++      profile()->GetPrefs()->GetList(kHeliumFavoritesPref), false);
++  ASSERT_TRUE(decoded);
++  ASSERT_EQ(1u, decoded->size());
++  const auto* link = std::get_if<PersistentLink>(&decoded->front().data);
++  ASSERT_TRUE(link);
++  EXPECT_EQ(GURL("https://legacy-pin.test/"), link->url);
++}
+ 
+ class HeliumSpaceServiceTest : public BrowserWithTestWindowTest {
+  protected:

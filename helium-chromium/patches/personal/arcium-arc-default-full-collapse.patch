@@ -1,0 +1,332 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -449,6 +449,7 @@
+     "helium/helium_favorites_and_pins.cc",
+     "helium/helium_favorites_and_pins.h",
+     "helium/helium_layout_state_controller.cc",
++    "helium/arcium_appearance_prefs.h",
+     "helium/helium_layout_state_controller.h",
+     "helium/helium_persistent_item_model.cc",
+     "helium/helium_persistent_item_model.h",
+--- a/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.cc
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.cc
+@@ -3,6 +3,8 @@
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h"
++
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ 
+ #include <map>
+ #include <string>
+@@ -273,7 +275,9 @@
+     configuration.push_back(
+         {command_id, std::move(accelerators)});
+   }
+-  return ToPresetResult(service->ApplyConfiguration(configuration));
++  return ToPresetResult(service->ApplyConfiguration(
++      configuration, {{::arcium::kCollapsedSidebarStylePref,
++                       ::arcium::kCollapsedSidebarStyleFullyHidden}}));
+ }
+ 
+ bool CanModifyArcShortcutConfiguration(const BrowserShortcutService& service) {
+--- a/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc
+@@ -3,6 +3,7 @@
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ 
+ #include <optional>
+ #include <string>
+@@ -41,6 +42,8 @@
+                                                 false);
+   pref_service->registry()->RegisterBooleanPref(::prefs::kCtrlTabMru, false);
+   pref_service->registry()->RegisterIntegerPref(::prefs::kHeliumLayout, 0);
++  pref_service->registry()->RegisterIntegerPref(::arcium::kCollapsedSidebarStylePref,
++      ::arcium::kCollapsedSidebarStyleIconRail);
+ }
+ 
+ void UseVerticalSidebar(TestingPrefServiceSimple* pref_service) {
+@@ -393,5 +396,71 @@
+   EXPECT_FALSE(HasPreviousArcShortcutConfiguration(service));
+ }
+ 
++TEST(ArciumShortcutPresetsTest, ArcPresetSelectsFullCollapseAndRestoresOriginal) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  UseVerticalSidebar(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_EQ(pref_service.GetInteger(::arcium::kCollapsedSidebarStylePref),
++            ::arcium::kCollapsedSidebarStyleFullyHidden);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+KeyS"),
++            IDC_TOGGLE_VERTICAL_TABS_COLLAPSE);
++  EXPECT_NE(service.FindCommandForAccelerator("Meta+KeyS"), IDC_SAVE_PAGE);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Shift+KeyS"), IDC_SAVE_PAGE);
++  // A later explicit choice remains authoritative; shortcut edits do not reset it.
++  pref_service.SetInteger(::arcium::kCollapsedSidebarStylePref,
++                         ::arcium::kCollapsedSidebarStyleIconRail);
++  service.ResetAcceleratorsForCommand(IDC_NEW_TAB);
++  EXPECT_EQ(pref_service.GetInteger(::arcium::kCollapsedSidebarStylePref),
++            ::arcium::kCollapsedSidebarStyleIconRail);
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_EQ(RestorePreviousArcShortcutConfiguration(&service),
++            PresetResult::kApplied);
++  EXPECT_EQ(pref_service.GetInteger(::arcium::kCollapsedSidebarStylePref),
++            ::arcium::kCollapsedSidebarStyleIconRail);
++  EXPECT_EQ(pref_service.GetUserPrefValue(::arcium::kCollapsedSidebarStylePref),
++            nullptr);
++}
++
++TEST(ArciumShortcutPresetsTest, ManagedCollapseRejectsArcPresetWithoutChanges) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  const auto original = service.GetAcceleratorMap();
++  pref_service.SetManagedPref(::arcium::kCollapsedSidebarStylePref,
++                             base::Value(0));
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kPreferencesLocked);
++  EXPECT_EQ(service.GetAcceleratorMap(), original);
++  EXPECT_FALSE(service.HasPreviousConfiguration());
++  EXPECT_TRUE(pref_service.GetDict(prefs::kCustomAccelerators).empty());
++}
++
++TEST(ArciumShortcutPresetsTest, InvalidShortcutsDoNotChangeProfilePreferences) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  EXPECT_EQ(service.ApplyConfiguration({{IDC_NEW_TAB, {"invalid binding"}}},
++                {{::arcium::kCollapsedSidebarStylePref, 1}}),
++            ConfigurationResult::kInvalidAccelerator);
++  EXPECT_EQ(pref_service.GetInteger(::arcium::kCollapsedSidebarStylePref), 0);
++  EXPECT_FALSE(service.HasPreviousConfiguration());
++}
++
++TEST(ArciumShortcutPresetsTest, ManagedCollapseBlocksRestoreWithoutConsumingBackup) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  ASSERT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  const auto configured = service.GetAcceleratorMap();
++  pref_service.SetManagedPref(::arcium::kCollapsedSidebarStylePref,
++                             base::Value(1));
++  EXPECT_EQ(RestorePreviousArcShortcutConfiguration(&service),
++            PresetResult::kPreferencesLocked);
++  EXPECT_EQ(service.GetAcceleratorMap(), configured);
++  EXPECT_TRUE(service.HasPreviousConfiguration());
++}
++
++
+ }  // namespace
+ }  // namespace browser_shortcuts::arcium
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm
+@@ -3,6 +3,7 @@
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ 
+ #import <AppKit/AppKit.h>
+ 
+@@ -574,6 +575,8 @@
+     registry->RegisterBooleanPref(::prefs::kTabCyclingMRU, false);
+     registry->RegisterBooleanPref(::prefs::kCtrlTabMru, false);
+     registry->RegisterIntegerPref(::prefs::kHeliumLayout, 0);
++  registry->RegisterIntegerPref(::arcium::kCollapsedSidebarStylePref,
++      ::arcium::kCollapsedSidebarStyleIconRail);
+     BrowserShortcutService service(&preferences);
+     const auto report = arcium::GetArcShortcutPresetReport(service);
+     bool found_native_close = false;
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.cc
+@@ -38,6 +38,7 @@
+ constexpr char kAddedKey[] = "added";
+ constexpr char kRemovedKey[] = "removed";
+ constexpr char kBackupConfigurationKey[] = "configuration";
++constexpr char kBackupProfilePreferencesKey[] = "profile_preferences";
+ constexpr char kBackupVersionKey[] = "version";
+ constexpr int kBackupVersion = 1;
+ 
+@@ -159,9 +160,22 @@
+ }
+ 
+ ConfigurationResult BrowserShortcutService::ApplyConfiguration(
+-    const std::vector<CommandAcceleratorConfiguration>& configuration) {
++    const std::vector<CommandAcceleratorConfiguration>& configuration,
++    const std::map<std::string, int>& profile_preferences) {
+   if (!CanModifyConfiguration()) {
+     return ConfigurationResult::kPreferencesLocked;
++  }
++
++  bool profile_preferences_changed = false;
++  for (const auto& [name, value] : profile_preferences) {
++    const auto* preference = prefs_->FindPreference(name);
++    if (!preference || preference->GetType() != base::Value::Type::INTEGER) {
++      return ConfigurationResult::kInvalidConfiguration;
++    }
++    if (!preference->IsUserModifiable()) {
++      return ConfigurationResult::kPreferencesLocked;
++    }
++    profile_preferences_changed |= prefs_->GetInteger(name) != value;
+   }
+ 
+   std::set<int> configured_commands;
+@@ -213,20 +227,33 @@
+     InsertEntrySorted(candidate[command_id], entry);
+   }
+ 
+-  if (candidate == current_) {
++  if (candidate == current_ && !profile_preferences_changed) {
+     return ConfigurationResult::kNoChange;
+   }
+ 
++  base::DictValue backup = prefs_->GetDict(prefs::kArcShortcutBackup).Clone();
+   if (!HasPreviousConfiguration()) {
+-    base::DictValue backup;
++    backup.clear();
+     backup.Set(kBackupVersionKey, kBackupVersion);
+     backup.Set(kBackupConfigurationKey,
+                prefs_->GetDict(prefs::kCustomAccelerators).Clone());
+-    prefs_->SetDict(prefs::kArcShortcutBackup, std::move(backup));
+-  }
++  }
++  if (!profile_preferences.empty()) {
++    auto* saved_preferences = backup.EnsureDict(kBackupProfilePreferencesKey);
++    for (const auto& [name, value] : profile_preferences) {
++      if (!saved_preferences->contains(name)) {
++        const base::Value* previous = prefs_->GetUserPrefValue(name);
++        saved_preferences->Set(name, previous ? previous->Clone() : base::Value());
++      }
++    }
++  }
++  prefs_->SetDict(prefs::kArcShortcutBackup, std::move(backup));
+ 
+   current_ = std::move(candidate);
+   PersistToPrefs();
++  for (const auto& [name, value] : profile_preferences) {
++    prefs_->SetInteger(name, value);
++  }
+   RebuildCommandCache();
+   NotifyChanged();
+   return ConfigurationResult::kSuccess;
+@@ -348,16 +375,51 @@
+     return ConfigurationResult::kNoPreviousConfiguration;
+   }
+ 
++  const base::DictValue* saved_preferences =
++      backup.FindDict(kBackupProfilePreferencesKey);
++  if (backup.contains(kBackupProfilePreferencesKey) && !saved_preferences) {
++    return ConfigurationResult::kInvalidConfiguration;
++  }
++  if (saved_preferences) {
++    for (const auto [name, value] : *saved_preferences) {
++      const auto* preference = prefs_->FindPreference(name);
++      if (!preference || preference->GetType() != base::Value::Type::INTEGER ||
++          (!value.is_none() && !value.is_int())) {
++        return ConfigurationResult::kInvalidConfiguration;
++      }
++      if (!preference->IsUserModifiable()) {
++        return ConfigurationResult::kPreferencesLocked;
++      }
++    }
++  }
++
++  // Keep the restore values stable across synchronous preference observers.
++  const base::DictValue restore_preferences =
++      saved_preferences ? saved_preferences->Clone() : base::DictValue();
+   const CommandAccelerators previous = current_;
+   prefs_->SetDict(prefs::kCustomAccelerators, saved_configuration->Clone());
+   LoadFromPrefs();
++  bool profile_preferences_changed = false;
++  if (!restore_preferences.empty()) {
++    for (const auto [name, value] : restore_preferences) {
++      const base::Value* current = prefs_->GetUserPrefValue(name);
++      profile_preferences_changed |= value.is_none()
++          ? current != nullptr : (!current || *current != value);
++      if (value.is_none()) {
++        prefs_->ClearPref(name);
++      } else {
++        prefs_->SetInteger(name, value.GetInt());
++      }
++    }
++  }
+   prefs_->ClearPref(prefs::kArcShortcutBackup);
+   RebuildCommandCache();
+   // Consuming the marker changes restore availability even when the saved
+   // bindings already match the current preference.
+   NotifyChanged();
+-  return current_ == previous ? ConfigurationResult::kNoChange
+-                              : ConfigurationResult::kSuccess;
++  return current_ == previous && !profile_preferences_changed
++             ? ConfigurationResult::kNoChange
++             : ConfigurationResult::kSuccess;
+ }
+ 
+ std::optional<int> BrowserShortcutService::FindCommandForAccelerator(
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h
+@@ -87,9 +87,11 @@
+   // Replaces user-modifiable bindings for each specified command and removes
+   // user-modifiable conflicts from other commands. Commands omitted from the
+   // request are preserved, apart from those conflicts. Validation completes
+-  // before either the in-memory map or preferences are changed.
++  // before either the in-memory map or preferences are changed. Optional
++  // integer profile preferences participate in validation and backup/restore.
+   ConfigurationResult ApplyConfiguration(
+-      const std::vector<CommandAcceleratorConfiguration>& configuration);
++      const std::vector<CommandAcceleratorConfiguration>& configuration,
++      const std::map<std::string, int>& profile_preferences = {});
+   bool UnassignAcceleratorFromCommand(int command_id,
+                                       const std::string& serialized);
+   bool ResetAcceleratorsForCommand(int command_id);
+--- /dev/null
++++ b/chrome/browser/ui/helium/arcium_appearance_prefs.h
+@@ -0,0 +1,19 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_HELIUM_ARCIUM_APPEARANCE_PREFS_H_
++#define CHROME_BROWSER_UI_HELIUM_ARCIUM_APPEARANCE_PREFS_H_
++
++namespace arcium {
++inline constexpr char kCollapsedSidebarStylePref[] =
++    "arcium.appearance.collapsed_sidebar_style";
++inline constexpr int kCollapsedSidebarStyleIconRail = 0;
++inline constexpr int kCollapsedSidebarStyleFullyHidden = 1;
++inline constexpr int kCollapsedSidebarStyleMin = kCollapsedSidebarStyleIconRail;
++inline constexpr int kCollapsedSidebarStyleMax =
++    kCollapsedSidebarStyleFullyHidden;
++
++}  // namespace arcium
++
++#endif  // CHROME_BROWSER_UI_HELIUM_ARCIUM_APPEARANCE_PREFS_H_
+--- a/chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h
++++ b/chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h
+@@ -4,6 +4,8 @@
+ 
+ #ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_CHROME_UI_SCALE_H_
+ #define CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_CHROME_UI_SCALE_H_
++
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ 
+ class Profile;
+ class BrowserView;
+@@ -25,14 +27,6 @@
+ inline constexpr int kChromeFrameBorderWidthMin = 0;
+ inline constexpr int kChromeFrameBorderWidthMax = 24;
+ 
+-inline constexpr char kCollapsedSidebarStylePref[] =
+-    "arcium.appearance.collapsed_sidebar_style";
+-inline constexpr int kCollapsedSidebarStyleIconRail = 0;
+-inline constexpr int kCollapsedSidebarStyleFullyHidden = 1;
+-inline constexpr int kCollapsedSidebarStyleMin = kCollapsedSidebarStyleIconRail;
+-inline constexpr int kCollapsedSidebarStyleMax =
+-    kCollapsedSidebarStyleFullyHidden;
+-
+ // Original-profile preference; no display scale or WebContents zoom changes.
+ double GetChromeUIScale(const Profile* profile);
+ double GetChromeUIScale(const views::View* view);

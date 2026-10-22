@@ -1,0 +1,59 @@
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -1568,13 +1568,12 @@ void BrowserCommandController::HandleCom
+         break;
+       }
+ 
+-      if (ShouldToggleVerticalCollapse(prefs)) {
+-        auto* controller =
+-            tabs::VerticalTabStripStateController::From(browser_);
+-        if (controller) {
+-          controller->RequestCollapse(!controller->IsCollapsed());
+-          break;
+-        }
++      if (ShouldToggleVerticalCollapse(prefs) &&
++          tabs::VerticalTabStripStateController::From(browser_)) {
++        // Toggle from the animation's target so a press during a collapse
++        // reverses it instead of restarting it.
++        ToggleCollapseVerticalTabs(browser_);
++        break;
+       }
+ 
+       ExecuteCommandWithDisposition(IDC_SAVE_PAGE, disposition, time_stamp);
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -921,8 +921,15 @@ void VerticalTabStripRegionView::Request
+   }
+   const auto motion =
+       collapse ? TabStripAnimations::kCollapse : TabStripAnimations::kExpand;
+-  BrowserAnimationController::From(browser_view_->browser())
+-      ->Start(TabStripAnimations::kVerticalTabStrip, motion);
++  auto* const animation_controller =
++      BrowserAnimationController::From(browser_view_->browser());
++  // Restarting a motion that is already heading to the same state would
++  // restart its timing and delay the result.
++  if (animation_controller->GetCurrentMotion(
++          TabStripAnimations::kVerticalTabStrip) == motion) {
++    return;
++  }
++  animation_controller->Start(TabStripAnimations::kVerticalTabStrip, motion);
+ }
+ 
+ 
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -1827,13 +1827,7 @@ void ToolbarView::NewTabButtonPressed(co
+ }
+ 
+ void ToolbarView::VerticalTabsCollapseButtonPressed(const ui::Event& event) {
+-  auto* controller =
+-      tabs::VerticalTabStripStateController::From(browser_view_->browser());
+-  if (!controller) {
+-    return;
+-  }
+-
+-  controller->RequestCollapse(!controller->IsCollapsed());
++  chrome::ToggleCollapseVerticalTabs(browser_view_->browser());
+ }
+ 
+ bool ToolbarView::AcceleratorPressed(const ui::Accelerator& accelerator) {

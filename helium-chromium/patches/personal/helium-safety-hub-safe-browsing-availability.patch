@@ -1,0 +1,1010 @@
+--- a/chrome/browser/resources/settings/safety_hub/safety_hub_page.html
++++ b/chrome/browser/resources/settings/safety_hub/safety_hub_page.html
+@@ -63,11 +63,13 @@
+       tabindex="0" on-keydown="onVersionKeyPress_" role="[[versionCardRole_]]"
+       aria-description="[[versionCardAriaDescription_]]">
+   </settings-safety-hub-card>
+-  <settings-safety-hub-card id="safeBrowsing" class="card box"
+-      data="[[safeBrowsingCardData_]]" on-click="onSafeBrowsingClick_"
+-      tabindex="0" on-keydown="onSafeBrowsingKeyPress_" role="link"
+-      aria-description="$i18n{safetyHubSBNavigationAriaLabel}">
+-  </settings-safety-hub-card>
++  <template is="dom-if" if="[[showSafeBrowsingCard_]]">
++    <settings-safety-hub-card id="safeBrowsing" class="card box"
++        data="[[safeBrowsingCardData_]]" on-click="onSafeBrowsingClick_"
++        tabindex="0" on-keydown="onSafeBrowsingKeyPress_" role="link"
++        aria-description="$i18n{safetyHubSBNavigationAriaLabel}">
++    </settings-safety-hub-card>
++  </template>
+ </div>
+ <h2 class="section-header cr-secondary-text">
+   $i18n{safetyHubPageModuleSectionHeader}
+--- a/chrome/browser/resources/settings/safety_hub/safety_hub_page.ts
++++ b/chrome/browser/resources/settings/safety_hub/safety_hub_page.ts
+@@ -23,6 +23,7 @@ import {PrefsMixin} from '/shared/settin
+ import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+ import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+ import {assertNotReached} from 'chrome://resources/js/assert.js';
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+ 
+ import {PasswordManagerImpl, PasswordManagerPage} from '../autofill_page/password_manager_proxy.js';
+@@ -42,7 +43,6 @@ import {getTemplate} from './safety_hub_
+ export interface SettingsSafetyHubPageElement {
+   $: {
+     passwords: HTMLElement,
+-    safeBrowsing: HTMLElement,
+     version: HTMLElement,
+   };
+ }
+@@ -71,6 +71,11 @@ export class SettingsSafetyHubPageElemen
+       // The object that holds data of Safe Browsing card.
+       safeBrowsingCardData_: Object,
+ 
++      showSafeBrowsingCard_: {
++        type: Boolean,
++        value: () => loadTimeData.getBoolean('safeBrowsingAvailable'),
++      },
++
+       // Whether Notification Permissions module should be visible.
+       showNotificationPermissions_: {
+         type: Boolean,
+@@ -133,6 +138,7 @@ export class SettingsSafetyHubPageElemen
+   declare private passwordCardData_: CardInfo;
+   declare private versionCardData_: CardInfo;
+   declare private safeBrowsingCardData_: CardInfo;
++  declare private showSafeBrowsingCard_: boolean;
+   declare private showNotificationPermissions_: boolean;
+   declare private hasDataForNotificationPermissions_: boolean;
+   declare private showUnusedSitePermissions_: boolean;
+@@ -191,9 +197,11 @@ export class SettingsSafetyHubPageElemen
+       this.passwordCardData_ = data;
+     });
+ 
+-    this.browserProxy_.getSafeBrowsingCardData().then((data: CardInfo) => {
+-      this.safeBrowsingCardData_ = data;
+-    });
++    if (this.showSafeBrowsingCard_) {
++      this.browserProxy_.getSafeBrowsingCardData().then((data: CardInfo) => {
++        this.safeBrowsingCardData_ = data;
++      });
++    }
+ 
+     this.browserProxy_.getVersionCardData().then((data: CardInfo) => {
+       this.versionCardData_ = data;
+@@ -228,7 +236,7 @@ export class SettingsSafetyHubPageElemen
+   }
+ 
+   private initializeUserEducation_() {
+-    this.userEducationItemList_ = [
++    const items: SiteInfo[] = [
+       {
+         origin: this.i18n('safetyHubUserEduDataHeader'),
+         detail: this.i18nAdvanced('safetyHubUserEduDataSubheader'),
+@@ -239,12 +247,15 @@ export class SettingsSafetyHubPageElemen
+         detail: this.i18nAdvanced('safetyHubUserEduIncognitoSubheader'),
+         icon: 'settings20:incognito-unfilled',
+       },
+-      {
++    ];
++    if (this.showSafeBrowsingCard_) {
++      items.push({
+         origin: this.i18n('safetyHubUserEduSafeBrowsingHeader'),
+         detail: this.i18nAdvanced('safetyHubUserEduSafeBrowsingSubheader'),
+         icon: 'cr:security',
+-      },
+-    ];
++      });
++    }
++    this.userEducationItemList_ = items;
+   }
+ 
+   private onPasswordsClick_() {
+@@ -312,6 +323,9 @@ export class SettingsSafetyHubPageElemen
+   }
+ 
+   private onSafeBrowsingPrefChanged_() {
++    if (!this.showSafeBrowsingCard_) {
++      return;
++    }
+     this.browserProxy_.getSafeBrowsingCardData().then((data: CardInfo) => {
+       this.safeBrowsingCardData_ = data;
+     });
+@@ -385,8 +399,8 @@ export class SettingsSafetyHubPageElemen
+     }
+ 
+     // Wait till the data of the cards be ready.
+-    if (!this.passwordCardData_ || !this.safeBrowsingCardData_ ||
+-        !this.versionCardData_) {
++    if (!this.passwordCardData_ || !this.versionCardData_ ||
++        (this.showSafeBrowsingCard_ && !this.safeBrowsingCardData_)) {
+       return;
+     }
+ 
+@@ -406,7 +420,8 @@ export class SettingsSafetyHubPageElemen
+       hasAnyWarning = true;
+     }
+ 
+-    if (this.safeBrowsingCardData_.state !== CardState.SAFE) {
++    if (this.showSafeBrowsingCard_ &&
++        this.safeBrowsingCardData_.state !== CardState.SAFE) {
+       this.metricsBrowserProxy_.recordSafetyHubModuleWarningImpression(
+           SafetyHubModuleType.SAFE_BROWSING);
+       hasAnyWarning = true;
+--- a/chrome/browser/ui/safety_hub/menu_notification_service.cc
++++ b/chrome/browser/ui/safety_hub/menu_notification_service.cc
+@@ -21,6 +21,7 @@
+ #include "chrome/browser/ui/safety_hub/safety_hub_service.h"
+ #include "chrome/common/chrome_features.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ 
+ #if BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/safety_hub/password_status_check_result_android.h"
+@@ -43,8 +44,10 @@ const base::TimeDelta kRevokedPermission
+ const base::TimeDelta kNotificationPermissionsNotificationInterval =
+     base::Days(10);
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Interval to show notification for safe browsing in Safety Hub notifications.
+ const base::TimeDelta kSafeBrowsingNotificationInterval = base::Days(90);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ SafetyHubModuleInfoElement::SafetyHubModuleInfoElement() = default;
+ SafetyHubModuleInfoElement::~SafetyHubModuleInfoElement() = default;
+@@ -76,7 +79,9 @@ SafetyHubMenuNotificationService::Safety
+   pref_dict_key_map_ = {
+       {safety_hub::SafetyHubModuleType::UNUSED_SITE_PERMISSIONS,
+        "unused-site-permissions"},
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       {safety_hub::SafetyHubModuleType::SAFE_BROWSING, "safe-browsing"},
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   };
+ 
+   // The Safety Hub services will be available whenever the |GetCachedResult|
+@@ -101,12 +106,14 @@ SafetyHubMenuNotificationService::Safety
+                             base::Unretained(notification_permissions_service)),
+         stored_notifications);
+   }
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   SetInfoElement(safety_hub::SafetyHubModuleType::SAFE_BROWSING,
+                  MenuNotificationPriority::MEDIUM,
+                  kSafeBrowsingNotificationInterval,
+                  base::BindRepeating(&SafetyHubSafeBrowsingResult::GetResult,
+                                      base::Unretained(pref_service)),
+                  stored_notifications);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Extensions are not available on Android, so we cannot fetch any information
+ // about them. Passwords are handled by GMS Core on Android and our
+@@ -271,10 +278,13 @@ void SafetyHubMenuNotificationService::S
+ }
+ 
+ void SafetyHubMenuNotificationService::OnSafeBrowsingPrefUpdate() {
+-  module_info_map_[safety_hub::SafetyHubModuleType::SAFE_BROWSING]
+-      ->notification->SetOnlyShowAfter(base::Time::Now() + base::Days(1));
+-  module_info_map_[safety_hub::SafetyHubModuleType::SAFE_BROWSING]
+-      ->notification->ResetAllTimeNotificationCount();
++  const auto it =
++      module_info_map_.find(safety_hub::SafetyHubModuleType::SAFE_BROWSING);
++  if (it == module_info_map_.end()) {
++    return;
++  }
++  it->second->notification->SetOnlyShowAfter(base::Time::Now() + base::Days(1));
++  it->second->notification->ResetAllTimeNotificationCount();
+   SaveNotificationsToPrefs();
+ }
+ 
+--- a/chrome/browser/ui/safety_hub/menu_notification_service_unittest.cc
++++ b/chrome/browser/ui/safety_hub/menu_notification_service_unittest.cc
+@@ -30,6 +30,7 @@
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/permissions/constants.h"
+ #include "components/permissions/pref_names.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+@@ -153,6 +154,15 @@ TEST_F(SafetyHubMenuNotificationServiceT
+   EXPECT_FALSE(notification.has_value());
+ }
+ 
++#if !BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++TEST_F(SafetyHubMenuNotificationServiceTest,
++       SafeBrowsingUnavailableDoesNotCreateNotification) {
++  AdvanceClockBy(base::Days(2));
++  EXPECT_FALSE(
++      menu_notification_service()->GetNotificationToShow().has_value());
++}
++#endif  // !BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+ TEST_F(SafetyHubMenuNotificationServiceTest, SingleNotificationToShow) {
+   CreateMockUnusedSitePermissionsEntry("https://example1.com:443");
+ 
+@@ -297,6 +307,7 @@ TEST_F(SafetyHubMenuNotificationServiceT
+   EXPECT_FALSE(notification.has_value());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(SafetyHubMenuNotificationServiceTest, SafeBrowsingOverride) {
+   // Create a notification for a module that has low priority notifications.
+   CreateMockUnusedSitePermissionsEntry("https://example1.com:443");
+@@ -357,8 +368,10 @@ TEST_F(SafetyHubMenuNotificationServiceT
+   notification = menu_notification_service()->GetNotificationToShow();
+   EXPECT_TRUE(notification.has_value());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ #if BUILDFLAG(IS_ANDROID)
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(SafetyHubMenuNotificationServiceTest, PasswordOverride) {
+   std::optional<MenuNotificationEntry> notification;
+   // Show Safe Browsing notification.
+@@ -382,6 +395,7 @@ TEST_F(SafetyHubMenuNotificationServiceT
+   notification = menu_notification_service()->GetNotificationToShow();
+   EXPECT_FALSE(notification.has_value());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(SafetyHubMenuNotificationServiceTest, PasswordTrigger) {
+   // If the leaked password count is not yet fetched or the user is signed out,
+--- a/chrome/browser/ui/safety_hub/safe_browsing_result.cc
++++ b/chrome/browser/ui/safety_hub/safe_browsing_result.cc
+@@ -46,14 +46,25 @@ SafetyHubSafeBrowsingResult::~SafetyHubS
+ // static
+ std::optional<std::unique_ptr<SafetyHubResult>>
+ SafetyHubSafeBrowsingResult::GetResult(const PrefService* pref_service) {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   SafeBrowsingState state = SafetyHubSafeBrowsingResult::GetState(pref_service);
+   return std::make_unique<SafetyHubSafeBrowsingResult>(state);
++#else
++  // The feature is not built, so callers must not create a warning result.
++  static_cast<void>(pref_service);
++  return std::nullopt;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ }
+ 
+ // static
+ SafeBrowsingState SafetyHubSafeBrowsingResult::GetState(
+     const PrefService* pref_service) {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   return SafeBrowsingState::kDisabledByUser;
++#else
++  static_cast<void>(pref_service);
++  return SafeBrowsingState::kEnabledStandard;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ }
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+--- a/chrome/browser/ui/safety_hub/safe_browsing_result.h
++++ b/chrome/browser/ui/safety_hub/safe_browsing_result.h
+@@ -10,6 +10,7 @@
+ #include "base/values.h"
+ #include "chrome/browser/ui/safety_hub/safety_hub_result.h"
+ #include "chrome/browser/ui/webui/settings/safety_hub_handler.h"
++#include "components/safe_browsing/buildflags.h"
+ 
+ class PrefService;
+ 
+--- a/chrome/browser/ui/safety_hub/safe_browsing_result_unittest.cc
++++ b/chrome/browser/ui/safety_hub/safe_browsing_result_unittest.cc
+@@ -10,7 +10,10 @@
+ #include "base/values.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/prefs/testing_pref_service.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+@@ -23,6 +26,7 @@ class SafeBrowsingResultTest : public te
+   SafeBrowsingResultTest() = default;
+   ~SafeBrowsingResultTest() override = default;
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void SetPrefsForSafeBrowsing(bool is_enabled,
+                                bool is_enhanced,
+                                SettingManager managed_by) {
+@@ -50,6 +54,7 @@ class SafeBrowsingResultTest : public te
+         NOTREACHED() << "Unexpected value for managed_by argument. \n";
+     }
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+  protected:
+   TestingProfile* profile() { return &profile_; }
+@@ -84,6 +89,7 @@ TEST_F(SafeBrowsingResultTest, ResultIsT
+   }
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(SafeBrowsingResultTest, GetState_EnabledEnhanced) {
+   SetPrefsForSafeBrowsing(true, true, SettingManager::USER);
+   EXPECT_EQ(SafeBrowsingState::kEnabledEnhanced,
+@@ -153,3 +159,13 @@ TEST_F(SafeBrowsingResultTest, GetState_
+             SafetyHubSafeBrowsingResult::GetState(
+                 profile()->GetTestingPrefService()));
+ }
++#else
++TEST_F(SafeBrowsingResultTest, SafeBrowsingUnavailableHasNoResult) {
++  EXPECT_EQ(SafeBrowsingState::kEnabledStandard,
++            SafetyHubSafeBrowsingResult::GetState(
++                profile()->GetTestingPrefService()));
++  EXPECT_FALSE(SafetyHubSafeBrowsingResult::GetResult(
++                   profile()->GetTestingPrefService())
++                   .has_value());
++}
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+--- a/chrome/browser/ui/safety_hub/safety_hub_hats_service.cc
++++ b/chrome/browser/ui/safety_hub/safety_hub_hats_service.cc
+@@ -26,6 +26,7 @@
+ #include "chrome/browser/ui/safety_hub/safety_hub_constants.h"
+ #include "chrome/browser/ui/safety_hub/safety_hub_result.h"
+ #include "chrome/browser/ui/safety_hub/safety_hub_util.h"
++#include "components/safe_browsing/buildflags.h"
+ 
+ SafetyHubHatsService::SafetyHubHatsService(
+     TrustSafetySentimentService* tss_service,
+@@ -77,9 +78,8 @@ SafetyHubHatsService::GetSafetyHubProduc
+   product_specific_data["User interacted with Safety Hub"] =
+       has_interacted_with_module_;
+ 
+-  static constexpr std::array<
+-      std::pair<safety_hub::SafetyHubModuleType, std::string_view>, 5>
+-      modules{
++  const std::vector<
++      std::pair<safety_hub::SafetyHubModuleType, std::string_view>> modules{
+           std::make_pair(safety_hub::SafetyHubModuleType::EXTENSIONS,
+                          "extensions"),
+           {safety_hub::SafetyHubModuleType::NOTIFICATION_PERMISSIONS,
+@@ -87,7 +87,9 @@ SafetyHubHatsService::GetSafetyHubProduc
+           {safety_hub::SafetyHubModuleType::PASSWORDS, "passwords"},
+           {safety_hub::SafetyHubModuleType::UNUSED_SITE_PERMISSIONS,
+            "revoked permissions"},
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+           {safety_hub::SafetyHubModuleType::SAFE_BROWSING, "safe browsing"},
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       };
+   for (const auto& module : modules) {
+     product_specific_data[base::StrCat(
+@@ -152,7 +154,7 @@ safety_hub::SafetyHubCardState SafetyHub
+   }
+ 
+   // Get the card data for all remaining modules (Chrome Version, Password
+-  // Status Check, Safe Browsing).
++  // Status Check, and Safe Browsing when available).
+   std::vector<base::DictValue> cards;
+   cards.push_back(safety_hub_util::GetVersionCardData());
+ 
+@@ -161,8 +163,10 @@ safety_hub::SafetyHubCardState SafetyHub
+   CHECK(psc_service);
+   cards.push_back(psc_service->GetPasswordCardData());
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   cards.push_back(SafetyHubSafeBrowsingResult::GetSafeBrowsingCardData(
+       profile_->GetPrefs()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   // Return the lowest value, which coincides with the "worst" global state.
+   safety_hub::SafetyHubCardState min_value =
+--- a/chrome/browser/ui/safety_hub/safety_hub_hats_service_unittest.cc
++++ b/chrome/browser/ui/safety_hub/safety_hub_hats_service_unittest.cc
+@@ -34,6 +34,7 @@
+ #include "components/password_manager/core/browser/password_store/test_password_store.h"
+ #include "components/password_manager/core/common/password_manager_pref_names.h"
+ #include "components/permissions/constants.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/signin/public/base/consent_level.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+@@ -256,11 +257,20 @@ TEST_F(SafetyHubHatsServiceTest, SafetyH
+ }
+ 
+ TEST_F(SafetyHubHatsServiceTest, GetOverallState_SafeBrowsingInfo) {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // When Safe Browsing is disabled by admin, that card gets into the info
+   // state. The overall state should thus be in the info state.
+   prefs()->SetManagedPref(prefs::kSafeBrowsingEnabled, base::Value(false));
+   EXPECT_EQ(service()->GetOverallState(),
+             safety_hub::SafetyHubCardState::kInfo);
++#else
++  const auto product_data = service()->GetSafetyHubProductSpecificData();
++  EXPECT_EQ(service()->GetOverallState(),
++            safety_hub::SafetyHubCardState::kSafe);
++  EXPECT_TRUE(product_data.at("Global state is safe"));
++  EXPECT_FALSE(product_data.at("Global state is warning"));
++  EXPECT_FALSE(product_data.contains("Is notification module safe browsing"));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ }
+ 
+ TEST_F(SafetyHubHatsServiceTest, GetOverallState_NotificationPermission) {
+--- a/chrome/browser/ui/webui/settings/safety_hub_handler.cc
++++ b/chrome/browser/ui/webui/settings/safety_hub_handler.cc
+@@ -50,6 +50,7 @@
+ #include "components/desktop_to_mobile_promos/features.h"
+ #include "components/password_manager/core/common/password_manager_pref_names.h"
+ #include "components/permissions/constants.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/signin/public/base/consent_level.h"
+ #include "components/signin/public/identity_manager/identity_manager.h"
+@@ -562,12 +563,14 @@ SafetyHubHandler::GetSafetyHubModulesWit
+   if (CardHasRecommendations(safety_hub_util::GetVersionCardData())) {
+     modules.insert(SafetyHubModule::kVersion);
+   }
+-  // SafeBrowsing module
++  // Safe Browsing module
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   if (CardHasRecommendations(
+           SafetyHubSafeBrowsingResult::GetSafeBrowsingCardData(
+               profile_->GetPrefs()))) {
+     modules.insert(SafetyHubModule::kSafeBrowsing);
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // Extensions module
+   if (GetNumberOfExtensionsThatNeedReview() > 0) {
+     modules.insert(SafetyHubModule::kExtensions);
+--- a/chrome/browser/ui/webui/settings/safety_hub_handler_unittest.cc
++++ b/chrome/browser/ui/webui/settings/safety_hub_handler_unittest.cc
+@@ -58,6 +58,7 @@
+ #include "components/password_manager/core/browser/password_manager_test_utils.h"
+ #include "components/password_manager/core/browser/password_store/test_password_store.h"
+ #include "components/permissions/constants.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/sync_preferences/features.h"
+@@ -146,8 +147,10 @@ class SafetyHubHandlerTest : public test
+     hcsm_ = HostContentSettingsMapFactory::GetForProfile(profile());
+     hcsm_->SetClockForTesting(&clock_);
+ 
+-    // Set up safe browsing service.
++    // Set up Safe Browsing only when that service is built.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     SetUpSafeBrowsingService();
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+     handler_ = std::make_unique<SafetyHubHandler>(profile());
+     handler()->set_web_ui(web_ui());
+@@ -163,7 +166,9 @@ class SafetyHubHandlerTest : public test
+     if (partition) {
+       partition->WaitForDeletionTasksForTesting();
+     }
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(nullptr);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   }
+ 
+   void AddNotificationPermissionsForReview() {
+@@ -200,6 +205,7 @@ class SafetyHubHandlerTest : public test
+         base::Value(dict.Clone()), constraint);
+   }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void AddAbusiveNotificationPermission() {
+     mock_database_manager()->SetThreatTypeForUrl(
+         GURL(kAbusiveTestSite),
+@@ -244,6 +250,7 @@ class SafetyHubHandlerTest : public test
+         ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS,
+         base::Value(dict.Clone()), constraint);
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   void CreateLeakedCredential() {
+     profile_store().AddLogin(password_manager::FromPasswordForm(
+@@ -309,6 +316,7 @@ class SafetyHubHandlerTest : public test
+     ASSERT_TRUE(data.arg2()->is_list());
+   }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void SetPrefsForSafeBrowsing(bool is_enabled,
+                                bool is_enhanced,
+                                SettingManager managed_by) {
+@@ -361,6 +369,7 @@ class SafetyHubHandlerTest : public test
+     EXPECT_EQ(static_cast<int>(state),
+               *data.arg3()->GetDict().FindInt("state"));
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   void ValidateEntryPointHasRecommendationsAndHeader(bool hasRecommendations) {
+     base::ListValue args;
+@@ -410,11 +419,13 @@ class SafetyHubHandlerTest : public test
+             : g_browser_process->GetBuildState()->SetUpdate(
+                   BuildState::UpdateType::kNone, base::Version(), std::nullopt);
+         break;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       case SafetyHubHandler::SafetyHubModule::kSafeBrowsing:
+         isModuleRecommended
+             ? SetPrefsForSafeBrowsing(false, false, SettingManager::USER)
+             : SetPrefsForSafeBrowsing(true, true, SettingManager::USER);
+         break;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       case SafetyHubHandler::SafetyHubModule::kExtensions:
+         isModuleRecommended ? AddTriggeringExtension()
+                             : ClearTriggeringExtensions();
+@@ -538,11 +549,14 @@ class SafetyHubHandlerTest : public test
+   password_manager::TestPasswordStore& account_store() {
+     return *account_store_;
+   }
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   MockSafeBrowsingDatabaseManager* mock_database_manager() {
+     return mock_database_manager_.get();
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+  private:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void SetUpSafeBrowsingService() {
+     mock_database_manager_ =
+         base::MakeRefCounted<MockSafeBrowsingDatabaseManager>();
+@@ -553,6 +567,7 @@ class SafetyHubHandlerTest : public test
+     TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(
+         safe_browsing_factory_->CreateSafeBrowsingService());
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   base::test::ScopedFeatureList feature_list_;
+   content::BrowserTaskEnvironment task_environment_;
+@@ -565,9 +580,11 @@ class SafetyHubHandlerTest : public test
+   scoped_refptr<password_manager::TestPasswordStore> account_store_ =
+       CreateAndUseTestAccountPasswordStore(&profile_);
+   std::unique_ptr<SafetyHubHandler> handler_;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   scoped_refptr<MockSafeBrowsingDatabaseManager> mock_database_manager_;
+   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
+       safe_browsing_factory_;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ };
+ 
+ TEST_F(SafetyHubHandlerTest, PopulateUnusedSitePermissionsData) {
+@@ -657,6 +674,7 @@ TEST_F(SafetyHubHandlerTest,
+             handler()->PopulateUnusedSitePermissionsData());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(SafetyHubHandlerTest, PopulateAbusiveAndUnusedSitePermissionsData) {
+   AddAbusiveNotificationPermission();
+   AddRevokedPermission();
+@@ -830,6 +848,7 @@ TEST_F(SafetyHubHandlerTest,
+       safety_hub_util::GetRevokedAbusiveNotificationPermissions(hcsm()).size(),
+       2U);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(SafetyHubHandlerTest,
+        HandleIgnoreOriginsForNotificationPermissionReview) {
+@@ -942,6 +961,7 @@ TEST_F(SafetyHubHandlerTest, HandleReset
+   ValidateNotificationPermissionUpdate();
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(SafetyHubHandlerTest, HandleGetSafeBrowsingCardData_EnabledEnhanced) {
+   SetPrefsForSafeBrowsing(true, true, SettingManager::USER);
+   ValidateHandleSafeBrowsingCardData(
+@@ -1034,6 +1054,7 @@ TEST_F(SafetyHubHandlerTest, HandleGetSa
+       l10n_util::GetStringUTF8(IDS_SETTINGS_SAFETY_HUB_SB_OFF_USER_SUBHEADER),
+       SafetyHubCardState::kWarning);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Test that revocation is happen correctly for all content setting types.
+ TEST_F(SafetyHubHandlerTest, RevokeAllContentSettingTypes) {
+@@ -1154,7 +1175,9 @@ TEST_F(SafetyHubHandlerTest,
+   std::vector<SafetyHubHandler::SafetyHubModule> modules;
+   modules.push_back(SafetyHubHandler::SafetyHubModule::kPasswords);
+   modules.push_back(SafetyHubHandler::SafetyHubModule::kVersion);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   modules.push_back(SafetyHubHandler::SafetyHubModule::kSafeBrowsing);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   modules.push_back(SafetyHubHandler::SafetyHubModule::kExtensions);
+   modules.push_back(SafetyHubHandler::SafetyHubModule::kNotifications);
+   modules.push_back(SafetyHubHandler::SafetyHubModule::kUnusedSitePermissions);
+@@ -1209,10 +1232,12 @@ TEST_F(SafetyHubHandlerTest,
+           IDS_SETTINGS_SAFETY_HUB_VERSION_MODULE_UPPERCASE_NAME),
+       SafetyHubHandler::SafetyHubModule::kVersion);
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   ValidateEntryPointSubheader(
+       l10n_util::GetStringUTF8(
+           IDS_SETTINGS_SAFETY_HUB_SAFE_BROWSING_MODULE_NAME),
+       SafetyHubHandler::SafetyHubModule::kSafeBrowsing);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   ValidateEntryPointSubheader(
+       l10n_util::GetStringUTF8(
+@@ -1244,6 +1269,7 @@ TEST_F(SafetyHubHandlerTest,
+   ValidateEntryPointSubheader(expected_subheader,
+                               SafetyHubHandler::SafetyHubModule::kVersion);
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // The expected subheader should be "Passwords, Safe Browsing"
+   expected_subheader =
+       l10n_util::GetStringUTF8(IDS_SETTINGS_SAFETY_HUB_PASSWORDS_MODULE_NAME) +
+@@ -1253,6 +1279,7 @@ TEST_F(SafetyHubHandlerTest,
+           IDS_SETTINGS_SAFETY_HUB_SAFE_BROWSING_MODULE_NAME);
+   ValidateEntryPointSubheader(expected_subheader,
+                               SafetyHubHandler::SafetyHubModule::kSafeBrowsing);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   // The expected subheader should be "Passwords, extensions"
+   expected_subheader =
+@@ -1290,25 +1317,29 @@ TEST_F(SafetyHubHandlerTest,
+       SafetyHubHandler::SafetyHubModule::kPasswords, true);
+   SetupTestToShowOrHideRecommendationForModule(
+       SafetyHubHandler::SafetyHubModule::kVersion, true);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   SetupTestToShowOrHideRecommendationForModule(
+       SafetyHubHandler::SafetyHubModule::kSafeBrowsing, true);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   SetupTestToShowOrHideRecommendationForModule(
+       SafetyHubHandler::SafetyHubModule::kExtensions, true);
+   SetupTestToShowOrHideRecommendationForModule(
+       SafetyHubHandler::SafetyHubModule::kNotifications, true);
+ 
+-  // The expected subheader should be "Passwords, Chrome update, Safe Browsing,
+-  // extensions, notifications, permissions"
++  // The expected subheader should include every enabled Safety Hub module.
+   std::string expected_subheader =
+       l10n_util::GetStringUTF8(IDS_SETTINGS_SAFETY_HUB_PASSWORDS_MODULE_NAME) +
+       l10n_util::GetStringUTF8(IDS_SETTINGS_SAFETY_HUB_MODULE_NAME_SEPARATOR) +
+       " " +
+       l10n_util::GetStringUTF8(
+-          IDS_SETTINGS_SAFETY_HUB_VERSION_MODULE_LOWERCASE_NAME) +
++          IDS_SETTINGS_SAFETY_HUB_VERSION_MODULE_LOWERCASE_NAME);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  expected_subheader +=
+       l10n_util::GetStringUTF8(IDS_SETTINGS_SAFETY_HUB_MODULE_NAME_SEPARATOR) +
+-      " " +
+-      l10n_util::GetStringUTF8(
+-          IDS_SETTINGS_SAFETY_HUB_SAFE_BROWSING_MODULE_NAME) +
++      " " + l10n_util::GetStringUTF8(
++                IDS_SETTINGS_SAFETY_HUB_SAFE_BROWSING_MODULE_NAME);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  expected_subheader +=
+       l10n_util::GetStringUTF8(IDS_SETTINGS_SAFETY_HUB_MODULE_NAME_SEPARATOR) +
+       " " +
+       l10n_util::GetStringUTF8(
+@@ -1351,6 +1382,7 @@ TEST_F(SafetyHubHandlerTest, ExtensionPr
+   EXPECT_EQ(2u, web_ui()->call_data().size());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(SafetyHubHandlerTest, OnSafeBrowsingEnhancedChanged) {
+   auto* mock_service = static_cast<MockIOSPromoTriggerService*>(
+       IOSPromoTriggerServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+@@ -1367,6 +1399,7 @@ TEST_F(SafetyHubHandlerTest, OnSafeBrows
+                   desktop_to_mobile_promos::PromoType::kEnhancedBrowsing));
+   profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnhanced, true);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class SafetyHubHandlerUnusedPermissionRevocationDisabledTest
+     : public testing::Test,
+@@ -1382,7 +1415,13 @@ class SafetyHubHandlerUnusedPermissionRe
+   // If the test parameter is true, enable safe browsing and expect that abusive
+   // notifications are auto-revoked. Otherwise, disabling safe browsing should
+   // not have any permissions revoked.
+-  bool IsSafeBrowsingEnabled() { return GetParam(); }
++  bool IsSafeBrowsingEnabled() {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++    return GetParam();
++#else
++    return false;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  }
+ 
+   void SetUp() override {
+     // Set clock for HostContentSettingsMap.
+@@ -1396,23 +1435,29 @@ class SafetyHubHandlerUnusedPermissionRe
+     hcsm_ = HostContentSettingsMapFactory::GetForProfile(profile());
+     hcsm_->SetClockForTesting(&clock_);
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     if (IsSafeBrowsingEnabled()) {
+       SetUpSafeBrowsingService();
+     }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+     handler_ = std::make_unique<SafetyHubHandler>(profile());
+     handler()->set_web_ui(web_ui());
+     handler()->AllowJavascript();
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     if (IsSafeBrowsingEnabled()) {
+       AddAbusiveNotificationPermission();
+     }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   }
+ 
+   void TearDown() override {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     if (IsSafeBrowsingEnabled()) {
+       TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(nullptr);
+     }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   }
+ 
+   TestingProfile* profile() { return &profile_; }
+@@ -1420,10 +1465,13 @@ class SafetyHubHandlerUnusedPermissionRe
+   SafetyHubHandler* handler() { return handler_.get(); }
+   HostContentSettingsMap* hcsm() { return hcsm_.get(); }
+   base::SimpleTestClock* clock() { return &clock_; }
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   MockSafeBrowsingDatabaseManager* mock_database_manager() {
+     return mock_database_manager_.get();
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void AddAbusiveNotificationPermission() {
+     mock_database_manager()->SetThreatTypeForUrl(
+         GURL(kAbusiveTestSite),
+@@ -1434,6 +1482,7 @@ class SafetyHubHandlerUnusedPermissionRe
+         base::Value(base::DictValue().Set(safety_hub::kRevokedStatusDictKeyStr,
+                                           safety_hub::kRevokeStr)));
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   void ExpectRevokedAbusiveNotificationPermission(const std::string& url) {
+     EXPECT_EQ(ContentSetting::CONTENT_SETTING_ASK,
+@@ -1441,6 +1490,7 @@ class SafetyHubHandlerUnusedPermissionRe
+                                         ContentSettingsType::NOTIFICATIONS));
+   }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+  private:
+   void SetUpSafeBrowsingService() {
+     mock_database_manager_ =
+@@ -1452,6 +1502,7 @@ class SafetyHubHandlerUnusedPermissionRe
+     TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(
+         safe_browsing_factory_->CreateSafeBrowsingService());
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   base::test::ScopedFeatureList feature_list_;
+   content::BrowserTaskEnvironment task_environment_;
+@@ -1460,9 +1511,11 @@ class SafetyHubHandlerUnusedPermissionRe
+   scoped_refptr<HostContentSettingsMap> hcsm_;
+   base::SimpleTestClock clock_;
+   std::unique_ptr<SafetyHubHandler> handler_;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   scoped_refptr<MockSafeBrowsingDatabaseManager> mock_database_manager_;
+   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
+       safe_browsing_factory_;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ };
+ 
+ TEST_P(SafetyHubHandlerUnusedPermissionRevocationDisabledTest,
+@@ -1590,6 +1643,14 @@ TEST_P(SafetyHubHandlerUnusedPermissionR
+   EXPECT_EQ(0U, revoked_permissions_list.size());
+ }
+ 
+-INSTANTIATE_TEST_SUITE_P(All,
+-                         SafetyHubHandlerUnusedPermissionRevocationDisabledTest,
+-                         testing::Bool());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++INSTANTIATE_TEST_SUITE_P(
++    All,
++    SafetyHubHandlerUnusedPermissionRevocationDisabledTest,
++    testing::Bool());
++#else
++INSTANTIATE_TEST_SUITE_P(
++    All,
++    SafetyHubHandlerUnusedPermissionRevocationDisabledTest,
++    testing::Values(false));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -100,6 +100,7 @@
+ #include "components/plus_addresses/core/browser/plus_address_service.h"
+ #include "components/plus_addresses/core/common/features.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/safe_browsing/core/common/hashprefix_realtime/hash_realtime_utils.h"
+ #include "components/saved_tab_groups/public/features.h"
+@@ -2914,6 +2915,9 @@ void AddPrivacyGuideStrings(content::Web
+ }
+ 
+ void AddSafetyHubStrings(content::WebUIDataSource* html_source) {
++  html_source->AddBoolean("safeBrowsingAvailable",
++                          BUILDFLAG(SAFE_BROWSING_AVAILABLE));
++
+   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+       {"safetyHub", IDS_SETTINGS_SAFETY_HUB},
+       {"safetyHubEntryPointHeader", IDS_SETTINGS_SAFETY_HUB_ENTRY_POINT_HEADER},
+--- a/chrome/test/data/webui/settings/safety_hub_page_test.ts
++++ b/chrome/test/data/webui/settings/safety_hub_page_test.ts
+@@ -6,6 +6,7 @@
+ import 'chrome://settings/lazy_load.js';
+ 
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ import type {CardInfo, SettingsSafetyHubPageElement} from 'chrome://settings/lazy_load.js';
+ import { CardState, ContentSetting, ContentSettingsTypes, SafeBrowsingSetting, SafetyHubBrowserProxyImpl, SafetyHubEvent, PermissionsRevocationType } from 'chrome://settings/lazy_load.js';
+ import type {SettingsPrefsElement} from 'chrome://settings/settings.js';
+@@ -91,6 +92,13 @@ suite('SafetyHubPage', function() {
+     return flushTasks();
+   });
+ 
++  function getSafeBrowsingCard(): HTMLElement {
++    const card = testElement.shadowRoot!.querySelector<HTMLElement>(
++        '#safeBrowsing');
++    assertTrue(!!card);
++    return card;
++  }
++
+   function assertNoRecommendationState(shouldBeVisible: boolean) {
+     assertEquals(
+         shouldBeVisible, isChildVisible(testElement, '#emptyStateModule'));
+@@ -112,11 +120,11 @@ suite('SafetyHubPage', function() {
+         1, safetyHubBrowserProxy.getCallCount('getSafeBrowsingCardData'));
+     assertTrue(isChildVisible(testElement, '#safeBrowsing'));
+     assertEquals(
+-        testElement.$.safeBrowsing.shadowRoot!.querySelector('#header')!
++        getSafeBrowsingCard().shadowRoot!.querySelector('#header')!
+             .textContent.trim(),
+         newCardData.header);
+     assertEquals(
+-        testElement.$.safeBrowsing.shadowRoot!.querySelector('#subheader')!
++        getSafeBrowsingCard().shadowRoot!.querySelector('#subheader')!
+             .textContent.trim(),
+         newCardData.subheader);
+   }
+@@ -403,27 +411,41 @@ suite('SafetyHubPage', function() {
+   });
+ 
+   test('Safe Browsing Card', function() {
++    if (!loadTimeData.getBoolean('safeBrowsingAvailable')) {
++      assertFalse(isChildVisible(testElement, '#safeBrowsing'));
++      assertEquals(
++          0, safetyHubBrowserProxy.getCallCount('getSafeBrowsingCardData'));
++      return;
++    }
++
+     assertTrue(isChildVisible(testElement, '#safeBrowsing'));
+ 
+     // Card header and subheader should be what the browser proxy provides.
+     assertEquals(
+-        testElement.$.safeBrowsing.shadowRoot!.querySelector('#header')!
++        getSafeBrowsingCard().shadowRoot!.querySelector('#header')!
+             .textContent.trim(),
+         safeBrowsingCardMockData.header);
+     assertEquals(
+-        testElement.$.safeBrowsing.shadowRoot!.querySelector('#subheader')!
++        getSafeBrowsingCard().shadowRoot!.querySelector('#subheader')!
+             .textContent.trim(),
+         safeBrowsingCardMockData.subheader);
+ 
+     // Check that the card aria role and description are correct.
+     assertEquals(testElement.$.passwords.getAttribute('role'), 'link');
+     assertEquals(
+-        testElement.$.safeBrowsing.getAttribute('aria-description'),
++        getSafeBrowsingCard().getAttribute('aria-description'),
+         testElement.i18n('safetyHubSBNavigationAriaLabel'));
+   });
+ 
+   test('Safe Browsing Card Clicked', async function() {
+-    testElement.$.safeBrowsing.click();
++    if (!loadTimeData.getBoolean('safeBrowsingAvailable')) {
++      assertFalse(isChildVisible(testElement, '#safeBrowsing'));
++      assertEquals(
++          0, safetyHubBrowserProxy.getCallCount('recordSafetyHubInteraction'));
++      return;
++    }
++
++    getSafeBrowsingCard().click();
+ 
+     // Ensure the Security Settings page is shown.
+     assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
+@@ -438,14 +460,22 @@ suite('SafetyHubPage', function() {
+   });
+ 
+   test('Safe Browsing Card Clicked via Enter', function() {
+-    testElement.$.passwords.dispatchEvent(
++    if (!loadTimeData.getBoolean('safeBrowsingAvailable')) {
++      assertFalse(isChildVisible(testElement, '#safeBrowsing'));
++      return;
++    }
++    getSafeBrowsingCard().dispatchEvent(
+         new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+     // Ensure the Security Settings page is shown.
+     assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
+   });
+ 
+   test('Safe Browsing Card Clicked via Space', function() {
+-    testElement.$.passwords.dispatchEvent(
++    if (!loadTimeData.getBoolean('safeBrowsingAvailable')) {
++      assertFalse(isChildVisible(testElement, '#safeBrowsing'));
++      return;
++    }
++    getSafeBrowsingCard().dispatchEvent(
+         new KeyboardEvent('keydown', {key: ' ', bubbles: true}));
+     // Ensure the Security Settings page is shown.
+     assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
+@@ -454,6 +484,12 @@ suite('SafetyHubPage', function() {
+   test(
+       `Safe Browsing Card updates upon Safe Browsing settings change`,
+       async function() {
++        if (!loadTimeData.getBoolean('safeBrowsingAvailable')) {
++          assertEquals(
++              0, safetyHubBrowserProxy.getCallCount('getSafeBrowsingCardData'));
++          return;
++        }
++
+         const standardCardData: CardInfo = {
+           header: 'Safe Browsing is on',
+           subheader: 'You are getting a standard protection.',
+@@ -562,14 +598,28 @@ suite('SafetyHubPage', function() {
+         'recordSafetyHubModuleWarningImpression');
+     assertEquals(SafetyHubModuleType.VERSION, result);
+ 
+-    // Expect recordSafetyHubModuleWarningImpression is called for safe browsing
+-    // card.
+-    reset();
+-    safetyHubBrowserProxy.setSafeBrowsingCardData(unsafeCardData);
+-    await refresh();
+-    result = await metricsBrowserProxy.whenCalled(
+-        'recordSafetyHubModuleWarningImpression');
+-    assertEquals(SafetyHubModuleType.SAFE_BROWSING, result);
++    if (loadTimeData.getBoolean('safeBrowsingAvailable')) {
++      // Expect recordSafetyHubModuleWarningImpression is called for safe
++      // browsing card.
++      reset();
++      safetyHubBrowserProxy.setSafeBrowsingCardData(unsafeCardData);
++      await refresh();
++      result = await metricsBrowserProxy.whenCalled(
++          'recordSafetyHubModuleWarningImpression');
++      assertEquals(SafetyHubModuleType.SAFE_BROWSING, result);
++    } else {
++      // Unavailable Safe Browsing data must not create a dashboard warning.
++      reset();
++      safetyHubBrowserProxy.setSafeBrowsingCardData(unsafeCardData);
++      await refresh();
++      result = await metricsBrowserProxy.whenCalled(
++          'recordSafetyHubDashboardAnyWarning');
++      assertEquals(false, result);
++      assertEquals(
++          0,
++          metricsBrowserProxy.getCallCount(
++              'recordSafetyHubModuleWarningImpression'));
++    }
+ 
+     // Expect recordSafetyHubModuleWarningImpression is called for unused site
+     // permissions.
+@@ -612,7 +662,9 @@ suite('SafetyHubPage', function() {
+         '#userEducationModule');
+     const links =
+         eduModule!.shadowRoot!.querySelectorAll<HTMLAnchorElement>('a');
+-    assertEquals(3, links.length);
++    const safeBrowsingAvailable =
++        loadTimeData.getBoolean('safeBrowsingAvailable');
++    assertEquals(safeBrowsingAvailable ? 3 : 2, links.length);
+ 
+     // Check clicking the Safety Tools link causes metric recording.
+     assertTrue(!!links[0]);
+@@ -632,13 +684,15 @@ suite('SafetyHubPage', function() {
+         await metricsBrowserProxy.whenCalled('recordAction'));
+     metricsBrowserProxy.reset();
+ 
+-    // Check clicking the Safe Browsing link causes metric recording.
+-    assertTrue(!!links[2]);
+-    links[2].click();
+-    await safetyHubBrowserProxy.whenCalled('recordSafetyHubInteraction');
+-    assertEquals(
+-        'Settings.SafetyHub.SafeBrowsingLinkClicked',
+-        await metricsBrowserProxy.whenCalled('recordAction'));
++    if (safeBrowsingAvailable) {
++      // Check clicking the Safe Browsing link causes metric recording.
++      assertTrue(!!links[2]);
++      links[2].click();
++      await safetyHubBrowserProxy.whenCalled('recordSafetyHubInteraction');
++      assertEquals(
++          'Settings.SafetyHub.SafeBrowsingLinkClicked',
++          await metricsBrowserProxy.whenCalled('recordAction'));
++    }
+   });
+ 
+   test('Record Safety Hub page visit', async function() {

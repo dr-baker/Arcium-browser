@@ -1,0 +1,1192 @@
+{
+  "schema": 2,
+  "generatedBy": "devutils/glassmorphic_lab/render_lab.mjs",
+  "dimensions": {
+    "width": 960,
+    "height": 680
+  },
+  "panel": {
+    "x": 120,
+    "y": 120,
+    "width": 720,
+    "height": 440,
+    "radius": 30
+  },
+  "acceptance": {
+    "minReadableCenterLuma": 0.02,
+    "maxPanelBlackFraction": 0.02,
+    "maxPanelChannelSpread": 0.97,
+    "minEffectEdgeDelta": 0.004,
+    "minAlpha": 0.98,
+    "maxCornerDelta": 0.002,
+    "maxPerDrawP95Ms": 4
+  },
+  "opacityAcceptance": {
+    "maxIntermediateMeanByteDelta": 0.25,
+    "maxIntermediateByteDelta": 1.5
+  },
+  "opacityChecks": [
+    {
+      "scene": "light",
+      "preset": "basic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 155223599,
+      "untouchedHash": 155223599,
+      "oneHash": 2071984063,
+      "presetHash": 2071984063,
+      "blend": {
+        "meanByteDelta": 0.09151654411764706,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "light",
+      "preset": "glassmorphic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 155223599,
+      "untouchedHash": 155223599,
+      "oneHash": 1493846217,
+      "presetHash": 1493846217,
+      "blend": {
+        "meanByteDelta": 0.0920193780637255,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "light",
+      "preset": "spectral",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 155223599,
+      "untouchedHash": 155223599,
+      "oneHash": 2364409046,
+      "presetHash": 2364409046,
+      "blend": {
+        "meanByteDelta": 0.09216777726715686,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "light",
+      "preset": "quiet",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 155223599,
+      "untouchedHash": 155223599,
+      "oneHash": 3593694302,
+      "presetHash": 3593694302,
+      "blend": {
+        "meanByteDelta": 0.09253044577205882,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "light",
+      "preset": "overshifted_lens",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 155223599,
+      "untouchedHash": 155223599,
+      "oneHash": 2173595678,
+      "presetHash": 2173595678,
+      "blend": {
+        "meanByteDelta": 0.07376053155637255,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dark",
+      "preset": "basic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 3048683044,
+      "untouchedHash": 3048683044,
+      "oneHash": 3167286316,
+      "presetHash": 3167286316,
+      "blend": {
+        "meanByteDelta": 0.0931039368872549,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dark",
+      "preset": "glassmorphic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 3048683044,
+      "untouchedHash": 3048683044,
+      "oneHash": 4036583795,
+      "presetHash": 4036583795,
+      "blend": {
+        "meanByteDelta": 0.09201459099264706,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dark",
+      "preset": "spectral",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 3048683044,
+      "untouchedHash": 3048683044,
+      "oneHash": 1596648856,
+      "presetHash": 1596648856,
+      "blend": {
+        "meanByteDelta": 0.0922476256127451,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dark",
+      "preset": "quiet",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 3048683044,
+      "untouchedHash": 3048683044,
+      "oneHash": 636922423,
+      "presetHash": 636922423,
+      "blend": {
+        "meanByteDelta": 0.09227156096813725,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dark",
+      "preset": "overshifted_lens",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 3048683044,
+      "untouchedHash": 3048683044,
+      "oneHash": 1066955697,
+      "presetHash": 1066955697,
+      "blend": {
+        "meanByteDelta": 0.07364755667892157,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dense",
+      "preset": "basic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 1933714504,
+      "untouchedHash": 1933714504,
+      "oneHash": 3485599096,
+      "presetHash": 3485599096,
+      "blend": {
+        "meanByteDelta": 0.09281594669117647,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dense",
+      "preset": "glassmorphic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 1933714504,
+      "untouchedHash": 1933714504,
+      "oneHash": 2613227536,
+      "presetHash": 2613227536,
+      "blend": {
+        "meanByteDelta": 0.09259037990196078,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dense",
+      "preset": "spectral",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 1933714504,
+      "untouchedHash": 1933714504,
+      "oneHash": 950033749,
+      "presetHash": 950033749,
+      "blend": {
+        "meanByteDelta": 0.09205097273284314,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dense",
+      "preset": "quiet",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 1933714504,
+      "untouchedHash": 1933714504,
+      "oneHash": 163397389,
+      "presetHash": 163397389,
+      "blend": {
+        "meanByteDelta": 0.09241249234068627,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "dense",
+      "preset": "overshifted_lens",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 1933714504,
+      "untouchedHash": 1933714504,
+      "oneHash": 2195850243,
+      "presetHash": 2195850243,
+      "blend": {
+        "meanByteDelta": 0.07384976256127451,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "motion",
+      "preset": "basic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 2086558623,
+      "untouchedHash": 2086558623,
+      "oneHash": 1801399250,
+      "presetHash": 1801399250,
+      "blend": {
+        "meanByteDelta": 0.0812057674632353,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "motion",
+      "preset": "glassmorphic",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 2086558623,
+      "untouchedHash": 2086558623,
+      "oneHash": 817712902,
+      "presetHash": 817712902,
+      "blend": {
+        "meanByteDelta": 0.09434914981617647,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "motion",
+      "preset": "spectral",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 2086558623,
+      "untouchedHash": 2086558623,
+      "oneHash": 3996406138,
+      "presetHash": 3996406138,
+      "blend": {
+        "meanByteDelta": 0.09209846047794118,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "motion",
+      "preset": "quiet",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 2086558623,
+      "untouchedHash": 2086558623,
+      "oneHash": 879882515,
+      "presetHash": 879882515,
+      "blend": {
+        "meanByteDelta": 0.09148782169117647,
+        "maxByteDelta": 0.5
+      }
+    },
+    {
+      "scene": "motion",
+      "preset": "overshifted_lens",
+      "intermediate": 0.5,
+      "zeroExact": true,
+      "oneExact": true,
+      "zeroHash": 2086558623,
+      "untouchedHash": 2086558623,
+      "oneHash": 4020981854,
+      "presetHash": 4020981854,
+      "blend": {
+        "meanByteDelta": 0.07372989430147059,
+        "maxByteDelta": 0.5
+      }
+    }
+  ],
+  "records": [
+    {
+      "scene": "light",
+      "preset": "basic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.14901960784313725,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.545349404738095,
+        "lumaStdDev": 0.1789472752654026,
+        "panelMeanLuma": 0.5323330276461596,
+        "centerMeanLuma": 0.4837167498205009,
+        "edgeMeanLuma": 0.5609728510839423,
+        "maxChannelSpread": 0.8313725490196078,
+        "panelMaxChannelSpread": 0.7882352941176471
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.010916077950779179,
+        "panelMeanAbsoluteDelta": 0.0217082054201973,
+        "edgeMeanAbsoluteDelta": 0.02548726106794067,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0009765625,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.125,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "light--basic.png"
+    },
+    {
+      "scene": "light",
+      "preset": "glassmorphic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.1450980392156863,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.5405055574015731,
+        "lumaStdDev": 0.17788901637829505,
+        "panelMeanLuma": 0.5223313750670119,
+        "centerMeanLuma": 0.4727821516946517,
+        "edgeMeanLuma": 0.5556160643210734,
+        "maxChannelSpread": 0.8549019607843137,
+        "panelMaxChannelSpread": 0.8549019607843137
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.016976775759336975,
+        "panelMeanAbsoluteDelta": 0.03417035551596804,
+        "edgeMeanAbsoluteDelta": 0.04098440004930865,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.00048828125,
+        "p95Ms": 0.0007812501862645149,
+        "maxMs": 0.0007812501862645149,
+        "batchMeanMs": 0.0625,
+        "batchP95Ms": 0.10000002384185791
+      },
+      "image": "light--glassmorphic.png"
+    },
+    {
+      "scene": "light",
+      "preset": "spectral",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.1411764705882353,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.531133770575737,
+        "lumaStdDev": 0.17774749788931613,
+        "panelMeanLuma": 0.5030254309940927,
+        "centerMeanLuma": 0.4530518976221199,
+        "edgeMeanLuma": 0.539955494583877,
+        "maxChannelSpread": 0.8588235294117648,
+        "panelMaxChannelSpread": 0.8588235294117648
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.02245042171282509,
+        "panelMeanAbsoluteDelta": 0.04543775170005059,
+        "edgeMeanAbsoluteDelta": 0.05356191885556528,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835936801508069,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.08749999105930328,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "light--spectral.png"
+    },
+    {
+      "scene": "light",
+      "preset": "quiet",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.14901960784313725,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.5452815358900331,
+        "lumaStdDev": 0.1794670384758491,
+        "panelMeanLuma": 0.5321811331554425,
+        "centerMeanLuma": 0.48332672056024456,
+        "edgeMeanLuma": 0.5617959431521719,
+        "maxChannelSpread": 0.8313725490196078,
+        "panelMaxChannelSpread": 0.8274509803921569
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.00993215950595011,
+        "panelMeanAbsoluteDelta": 0.019669530270003524,
+        "edgeMeanAbsoluteDelta": 0.023738475767655857,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "light--quiet.png"
+    },
+    {
+      "scene": "light",
+      "preset": "overshifted_lens",
+      "time": 0.37,
+      "panel": {
+        "x": 220,
+        "y": 90,
+        "width": 520,
+        "height": 520,
+        "radius": 74
+      },
+      "effect": {
+        "minChannel": 0.14901960784313725,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.543740930504532,
+        "lumaStdDev": 0.17788703976377523,
+        "panelMeanLuma": 0.5029100962263586,
+        "centerMeanLuma": 0.48006617257294465,
+        "edgeMeanLuma": 0.522561895978386,
+        "maxChannelSpread": 0.8313725490196078,
+        "panelMaxChannelSpread": 0.8313725490196078
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.01406471269063055,
+        "panelMeanAbsoluteDelta": 0.03369244788644892,
+        "edgeMeanAbsoluteDelta": 0.04647335558335851,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "light--overshifted_lens.png"
+    },
+    {
+      "scene": "dark",
+      "preset": "basic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0.029606311274509804,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.10153736355731602,
+        "lumaStdDev": 0.08446898241613042,
+        "panelMeanLuma": 0.09666665368637982,
+        "centerMeanLuma": 0.11227176599015612,
+        "edgeMeanLuma": 0.10876996644469031,
+        "maxChannelSpread": 0.8588235294117648,
+        "panelMaxChannelSpread": 0.8235294117647058
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.015638448353199823,
+        "panelMeanAbsoluteDelta": 0.03050654420017115,
+        "edgeMeanAbsoluteDelta": 0.034091441608076034,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0015624994412064552,
+        "maxMs": 0.0015624994412064552,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.19999992847442627
+      },
+      "image": "dark--basic.png"
+    },
+    {
+      "scene": "dark",
+      "preset": "glassmorphic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0.029606311274509804,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.10521187857068665,
+        "lumaStdDev": 0.08588365211889235,
+        "panelMeanLuma": 0.10420807112547172,
+        "centerMeanLuma": 0.11561016934047717,
+        "edgeMeanLuma": 0.12323240286349191,
+        "maxChannelSpread": 0.8745098039215686,
+        "panelMaxChannelSpread": 0.8745098039215686
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.02052764361465024,
+        "panelMeanAbsoluteDelta": 0.04054106836340017,
+        "edgeMeanAbsoluteDelta": 0.05477137748178868,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0005859375232830644,
+        "p95Ms": 0.0007812501862645149,
+        "maxMs": 0.0007812501862645149,
+        "batchMeanMs": 0.07500000298023224,
+        "batchP95Ms": 0.10000002384185791
+      },
+      "image": "dark--glassmorphic.png"
+    },
+    {
+      "scene": "dark",
+      "preset": "spectral",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0.029606311274509804,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.1052640617922854,
+        "lumaStdDev": 0.08688498037229248,
+        "panelMeanLuma": 0.10430317739404286,
+        "centerMeanLuma": 0.11250127509778725,
+        "edgeMeanLuma": 0.1286885727709807,
+        "maxChannelSpread": 0.9215686274509804,
+        "panelMaxChannelSpread": 0.9215686274509804
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.024687592112026077,
+        "panelMeanAbsoluteDelta": 0.049085866838351776,
+        "edgeMeanAbsoluteDelta": 0.0729403378961348,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0005859374068677425,
+        "p95Ms": 0.0007812501862645149,
+        "maxMs": 0.0007812501862645149,
+        "batchMeanMs": 0.07499998807907104,
+        "batchP95Ms": 0.10000002384185791
+      },
+      "image": "dark--spectral.png"
+    },
+    {
+      "scene": "dark",
+      "preset": "quiet",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0.029606311274509804,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.10289622040202555,
+        "lumaStdDev": 0.08876295628263661,
+        "panelMeanLuma": 0.09945614371164936,
+        "centerMeanLuma": 0.1146452473107352,
+        "edgeMeanLuma": 0.11258193880135094,
+        "maxChannelSpread": 0.8588235294117648,
+        "panelMaxChannelSpread": 0.8470588235294118
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.013938210864409745,
+        "panelMeanAbsoluteDelta": 0.026991929094861873,
+        "edgeMeanAbsoluteDelta": 0.03349324207668754,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "dark--quiet.png"
+    },
+    {
+      "scene": "dark",
+      "preset": "overshifted_lens",
+      "time": 0.37,
+      "panel": {
+        "x": 220,
+        "y": 90,
+        "width": 520,
+        "height": 520,
+        "radius": 74
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0.04289828431372549,
+        "panelBlackFraction": 0.01687130177514793,
+        "meanLuma": 0.10185713693776778,
+        "lumaStdDev": 0.08425370945693564,
+        "panelMeanLuma": 0.10597132238659376,
+        "centerMeanLuma": 0.11358791780876128,
+        "edgeMeanLuma": 0.10085057176468211,
+        "maxChannelSpread": 0.8588235294117648,
+        "panelMaxChannelSpread": 0.8235294117647058
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.024494935842003997,
+        "panelMeanAbsoluteDelta": 0.058618526897986516,
+        "edgeMeanAbsoluteDelta": 0.07504654429145767,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.00048828125,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.0625,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "dark--overshifted_lens.png"
+    },
+    {
+      "scene": "dense",
+      "preset": "basic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.10196078431372549,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.5529495641085163,
+        "lumaStdDev": 0.18615316798676568,
+        "panelMeanLuma": 0.5557521405450605,
+        "centerMeanLuma": 0.5534636254549347,
+        "edgeMeanLuma": 0.5581489244912959,
+        "maxChannelSpread": 0.7294117647058823,
+        "panelMaxChannelSpread": 0.7294117647058823
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.019815912149189548,
+        "panelMeanAbsoluteDelta": 0.04001578695454456,
+        "edgeMeanAbsoluteDelta": 0.03825068442469996,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0015624994412064552,
+        "maxMs": 0.0015624994412064552,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.19999992847442627
+      },
+      "image": "dense--basic.png"
+    },
+    {
+      "scene": "dense",
+      "preset": "glassmorphic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.10196078431372549,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.5475695646744204,
+        "lumaStdDev": 0.18733886534083657,
+        "panelMeanLuma": 0.544623869728899,
+        "centerMeanLuma": 0.5382573595018685,
+        "edgeMeanLuma": 0.5543796007694931,
+        "maxChannelSpread": 0.7294117647058823,
+        "panelMaxChannelSpread": 0.7294117647058823
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.02364423539025846,
+        "panelMeanAbsoluteDelta": 0.04785709628974215,
+        "edgeMeanAbsoluteDelta": 0.05553428289552265,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0005859375232830644,
+        "p95Ms": 0.0015624994412064552,
+        "maxMs": 0.0015624994412064552,
+        "batchMeanMs": 0.07500000298023224,
+        "batchP95Ms": 0.19999992847442627
+      },
+      "image": "dense--glassmorphic.png"
+    },
+    {
+      "scene": "dense",
+      "preset": "spectral",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.10196078431372549,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.5384827732986528,
+        "lumaStdDev": 0.18872629389726325,
+        "panelMeanLuma": 0.5259135200213738,
+        "centerMeanLuma": 0.5151647460976234,
+        "edgeMeanLuma": 0.5435239254457871,
+        "maxChannelSpread": 0.7294117647058823,
+        "panelMaxChannelSpread": 0.7294117647058823
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.02743491485648934,
+        "panelMeanAbsoluteDelta": 0.05565773337959521,
+        "edgeMeanAbsoluteDelta": 0.07189935873716959,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0007812501862645149,
+        "maxMs": 0.0007812501862645149,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.10000002384185791
+      },
+      "image": "dense--spectral.png"
+    },
+    {
+      "scene": "dense",
+      "preset": "quiet",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0.10196078431372549,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.5528507123397008,
+        "lumaStdDev": 0.1914584703614083,
+        "panelMeanLuma": 0.5555309209646184,
+        "centerMeanLuma": 0.5501880230150848,
+        "edgeMeanLuma": 0.5616432498853108,
+        "maxChannelSpread": 0.7294117647058823,
+        "panelMaxChannelSpread": 0.7294117647058823
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.01245426238304906,
+        "panelMeanAbsoluteDelta": 0.02483079570210082,
+        "edgeMeanAbsoluteDelta": 0.028432593414714543,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0005859375232830644,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.07500000298023224,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "dense--quiet.png"
+    },
+    {
+      "scene": "dense",
+      "preset": "overshifted_lens",
+      "time": 0.37,
+      "panel": {
+        "x": 220,
+        "y": 90,
+        "width": 520,
+        "height": 520,
+        "radius": 74
+      },
+      "effect": {
+        "minChannel": 0.10196078431372549,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.5557980836682537,
+        "lumaStdDev": 0.1840449415398808,
+        "panelMeanLuma": 0.5555468762878578,
+        "centerMeanLuma": 0.5513769500341082,
+        "edgeMeanLuma": 0.5600641647058772,
+        "maxChannelSpread": 0.7294117647058823,
+        "panelMaxChannelSpread": 0.7254901960784313
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.03620065800014747,
+        "panelMeanAbsoluteDelta": 0.08711858974363583,
+        "edgeMeanAbsoluteDelta": 0.08629116951743333,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0005859375232830644,
+        "p95Ms": 0.0015624994412064552,
+        "maxMs": 0.0015624994412064552,
+        "batchMeanMs": 0.07500000298023224,
+        "batchP95Ms": 0.19999992847442627
+      },
+      "image": "dense--overshifted_lens.png"
+    },
+    {
+      "scene": "motion",
+      "preset": "basic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 0.9803921568627451,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.17223714373550478,
+        "lumaStdDev": 0.08883794930296338,
+        "panelMeanLuma": 0.18145915014600786,
+        "centerMeanLuma": 0.1503737754536768,
+        "edgeMeanLuma": 0.18283853576026307,
+        "maxChannelSpread": 0.8784313725490196,
+        "panelMaxChannelSpread": 0.8
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.01358569820902148,
+        "panelMeanAbsoluteDelta": 0.02645326632335001,
+        "edgeMeanAbsoluteDelta": 0.029848809964227677,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "motion--basic.png"
+    },
+    {
+      "scene": "motion",
+      "preset": "glassmorphic",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 0.9803921568627451,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.17414987509002688,
+        "lumaStdDev": 0.09056154146924512,
+        "panelMeanLuma": 0.18537060393636545,
+        "centerMeanLuma": 0.15144059987125988,
+        "edgeMeanLuma": 0.19419556702182358,
+        "maxChannelSpread": 0.8784313725490196,
+        "panelMaxChannelSpread": 0.7803921568627451
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.017598445709988333,
+        "panelMeanAbsoluteDelta": 0.03468779296230836,
+        "edgeMeanAbsoluteDelta": 0.04643101492166985,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835936801508069,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.08749999105930328,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "motion--glassmorphic.png"
+    },
+    {
+      "scene": "motion",
+      "preset": "spectral",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 1,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.17301090807375044,
+        "lumaStdDev": 0.09113303055715176,
+        "panelMeanLuma": 0.18301864290211417,
+        "centerMeanLuma": 0.1478045967951589,
+        "edgeMeanLuma": 0.1973398464224956,
+        "maxChannelSpread": 0.8784313725490196,
+        "panelMaxChannelSpread": 0.8313725490196079
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.022234054610424474,
+        "panelMeanAbsoluteDelta": 0.044219494784477766,
+        "edgeMeanAbsoluteDelta": 0.06281305956341826,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0005859375232830644,
+        "p95Ms": 0.0007812501862645149,
+        "maxMs": 0.0007812501862645149,
+        "batchMeanMs": 0.07500000298023224,
+        "batchP95Ms": 0.10000002384185791
+      },
+      "image": "motion--spectral.png"
+    },
+    {
+      "scene": "motion",
+      "preset": "quiet",
+      "time": 0.37,
+      "panel": {
+        "x": 120,
+        "y": 120,
+        "width": 720,
+        "height": 440,
+        "radius": 30
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 0.9803921568627451,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.17328594291132732,
+        "lumaStdDev": 0.09392490814087677,
+        "panelMeanLuma": 0.18360689847983772,
+        "centerMeanLuma": 0.15176481119405305,
+        "edgeMeanLuma": 0.18613982351461966,
+        "maxChannelSpread": 0.8784313725490196,
+        "panelMaxChannelSpread": 0.8392156862745098
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.012439326220673655,
+        "panelMeanAbsoluteDelta": 0.024078584043024792,
+        "edgeMeanAbsoluteDelta": 0.030169663337021545,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0005859375232830644,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.07500000298023224,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "motion--quiet.png"
+    },
+    {
+      "scene": "motion",
+      "preset": "overshifted_lens",
+      "time": 0.37,
+      "panel": {
+        "x": 220,
+        "y": 90,
+        "width": 520,
+        "height": 520,
+        "radius": 74
+      },
+      "effect": {
+        "minChannel": 0,
+        "maxChannel": 0.9803921568627451,
+        "minAlpha": 1,
+        "maxAlpha": 1,
+        "blackFraction": 0,
+        "panelBlackFraction": 0,
+        "meanLuma": 0.17439135019698224,
+        "lumaStdDev": 0.09270828949471656,
+        "panelMeanLuma": 0.19202978999594836,
+        "centerMeanLuma": 0.1423911008926487,
+        "edgeMeanLuma": 0.2084192031539499,
+        "maxChannelSpread": 0.8784313725490196,
+        "panelMaxChannelSpread": 0.8784313725490196
+      },
+      "deltas": {
+        "meanAbsoluteDelta": 0.025769489699500527,
+        "panelMeanAbsoluteDelta": 0.061768273581684074,
+        "edgeMeanAbsoluteDelta": 0.07461702127658837,
+        "cornerMeanAbsoluteDelta": 0
+      },
+      "timing": {
+        "frames": 1024,
+        "batchSize": 128,
+        "meanMs": 0.0006835937965661287,
+        "p95Ms": 0.0015625003725290298,
+        "maxMs": 0.0015625003725290298,
+        "batchMeanMs": 0.08750000596046448,
+        "batchP95Ms": 0.20000004768371582
+      },
+      "image": "motion--overshifted_lens.png"
+    }
+  ]
+}

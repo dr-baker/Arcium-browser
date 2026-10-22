@@ -1,0 +1,37 @@
+--- a/content/browser/webauth/authenticator_test_base.cc
++++ b/content/browser/webauth/authenticator_test_base.cc
+@@ -5,6 +5,7 @@
+ #include "content/browser/webauth/authenticator_test_base.h"
+ 
+ #include <memory>
++#include <mutex>
+ #include <utility>
+ 
+ #include "base/containers/flat_set.h"
+@@ -381,14 +382,18 @@
+ 
+ void AuthenticatorTestBase::SetUpTestSuite() {
+ #if BUILDFLAG(IS_MAC)
+-  // Load fido_strings, which can be required for exercising the Touch ID
+-  // authenticator.
+-  base::FilePath path;
+-  CHECK(base::PathService::Get(base::DIR_ASSETS, &path));
+-  base::FilePath fido_test_strings =
+-      path.Append(FILE_PATH_LITERAL("fido_test_strings.pak"));
+-  ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
+-      fido_test_strings, ui::kScaleFactorNone);
++  // Multiple inherited test suites use this fixture in one process. Register
++  // the shared resources once so later suites do not collide with the pack
++  // already added to the ResourceBundle.
++  static std::once_flag fido_test_strings_loaded;
++  std::call_once(fido_test_strings_loaded, [] {
++    base::FilePath path;
++    CHECK(base::PathService::Get(base::DIR_ASSETS, &path));
++    base::FilePath fido_test_strings =
++        path.Append(FILE_PATH_LITERAL("fido_test_strings.pak"));
++    ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
++        fido_test_strings, ui::kScaleFactorNone);
++  });
+ #endif
+ }
+ 

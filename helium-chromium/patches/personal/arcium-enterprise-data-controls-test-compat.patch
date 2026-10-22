@@ -1,0 +1,124 @@
+--- a/chrome/browser/enterprise/data_controls/BUILD.gn
++++ b/chrome/browser/enterprise/data_controls/BUILD.gn
+@@ -143,8 +143,11 @@
+ 
+   sources = [
+     "chrome_rules_service_unittest.cc",
+-    "reporting_unittest.cc",
+   ]
++  if (enterprise_cloud_content_analysis || is_android ||
++      safe_browsing_mode == 1) {
++    sources += [ "reporting_unittest.cc" ]
++  }
+   deps = [
+     ":data_controls",
+     ":test_support",
+--- a/chrome/browser/enterprise/watermark/watermark_browsertest.cc
++++ b/chrome/browser/enterprise/watermark/watermark_browsertest.cc
+@@ -7,6 +7,9 @@
+ #include "base/strings/stringprintf.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "base/test/test_future.h"
++#include "build/build_config.h"
++#include "components/enterprise/buildflags/buildflags.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/browser/enterprise/data_protection/data_protection_features.h"
+ #include "chrome/browser/enterprise/data_protection/data_protection_navigation_controller.h"
+ #include "chrome/browser/enterprise/data_protection/data_protection_overlay_view.h"
+@@ -15,7 +18,11 @@
+ #include "chrome/browser/policy/dm_token_utils.h"
+ #include "chrome/browser/preloading/scoped_prewarm_feature_list.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) || \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/safe_browsing/chrome_enterprise_url_lookup_service_factory.h"
++#include "components/safe_browsing/core/browser/realtime/fake_url_lookup_service.h"
++#endif
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+@@ -33,7 +40,6 @@
+ #include "components/keyed_service/content/browser_context_dependency_manager.h"
+ #include "components/policy/core/common/policy_types.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/safe_browsing/core/browser/realtime/fake_url_lookup_service.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "net/dns/mock_host_resolver.h"
+@@ -189,6 +195,8 @@
+   base::test::ScopedFeatureList scoped_feature_list_;
+ };
+ 
++#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) || \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ namespace {
+ 
+ class FakeRealTimeUrlLookupService
+@@ -228,7 +236,10 @@
+ };
+ 
+ }  // namespace
+-
++#endif  // REAL_TIME_URL_LOOKUP_SERVICE_AVAILABLE
++
++#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) || \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ class WatermarkBrowserNavigationTest : public InProcessBrowserTest {
+  public:
+   WatermarkBrowserNavigationTest() = default;
+@@ -544,6 +555,8 @@
+                   ->data_protection_overlay_view()
+                   ->has_text_for_testing());
+ }
++
++#endif  // REAL_TIME_URL_LOOKUP_SERVICE_AVAILABLE
+ 
+ // Test fixture for the dynamic chrome://watermark page tests. This is
+ // parameterized to test various style combinations.
+--- a/chrome/browser/ui/views/frame/browser_view_browsertest.cc
++++ b/chrome/browser/ui/views/frame/browser_view_browsertest.cc
+@@ -15,12 +15,18 @@
+ #include "base/test/values_test_util.h"
+ #include "base/time/time.h"
+ #include "build/build_config.h"
++#include "components/enterprise/buildflags/buildflags.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/browser/devtools/devtools_ui_controller.h"
+ #include "chrome/browser/devtools/devtools_window_testing.h"
+ #include "chrome/browser/policy/dm_token_utils.h"
+ #include "chrome/browser/preloading/scoped_prewarm_feature_list.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) || \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/safe_browsing/chrome_enterprise_url_lookup_service_factory.h"
++#include "components/safe_browsing/core/browser/realtime/fake_url_lookup_service.h"
++#endif
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_commands_mac.h"
+ #include "chrome/browser/ui/browser_tabstrip.h"
+@@ -66,7 +72,6 @@
+ #include "components/keyed_service/content/browser_context_dependency_manager.h"
+ #include "components/policy/core/common/policy_types.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/safe_browsing/core/browser/realtime/fake_url_lookup_service.h"
+ #include "components/search/ntp_features.h"
+ #include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/split_tab_collection.h"
+@@ -1350,6 +1355,8 @@
+ }
+ #endif
+ 
++#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) || \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ namespace {
+ 
+ class FakeRealTimeUrlLookupService
+@@ -1461,6 +1468,8 @@
+ }
+ 
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
++#endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS) ||
++        // BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_ANDROID)
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+ IN_PROC_BROWSER_TEST_F(BrowserViewChromeOSTest, EnsureViewTreeOrder) {

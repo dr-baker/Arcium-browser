@@ -1,0 +1,1126 @@
+--- a/chrome/browser/importer/arcium_arc_import.cc
++++ b/chrome/browser/importer/arcium_arc_import.cc
+@@ -12,6 +12,8 @@
+ 
+ #include "base/containers/span.h"
+ #include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/memory/weak_ptr.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -19,15 +21,20 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_tabrestore.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/helium/helium_space.h"
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+ #include "components/sessions/core/serialized_navigation_entry.h"
+ #include "components/sessions/core/session_types.h"
+ #include "components/tab_groups/tab_group_color.h"
+ #include "components/tab_groups/tab_group_visual_data.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom.h"
++#include "ui/base/base_window.h"
+ #include "url/gurl.h"
+ 
+ namespace arcium {
+@@ -36,6 +43,9 @@ namespace {
+ 
+ constexpr char kArcSource[] = "arc";
+ 
++ScopedBrowserFactoryForTesting::Factory* g_browser_factory_for_testing =
++    nullptr;
++
+ struct ImportedTab {
+   std::string source_id;
+   std::string title;
+@@ -211,23 +221,75 @@ std::optional<Snapshot> ParseSnapshot(st
+   return snapshot;
+ }
+ 
+-Browser* GetOrCreateBrowser(helium::HeliumSpace* space,
+-                            helium::HeliumSpaceService* service) {
+-  if (BrowserWindowInterface* window = space->GetPrimaryBrowser()) {
+-    return window->GetBrowserForMigrationOnly();
+-  }
+-  if (Browser::GetCreationStatusForProfile(space->profile()) !=
++Browser* CreateBrowserForImport(Profile* profile) {
++  if (Browser::GetCreationStatusForProfile(profile) !=
+           Browser::CreationStatus::kOk ||
+-      space->profile()->ShutdownStarted()) {
++      profile->ShutdownStarted()) {
+     return nullptr;
+   }
+-  Browser::CreateParams params(Browser::TYPE_NORMAL, space->profile(), false);
++  if (g_browser_factory_for_testing) {
++    return g_browser_factory_for_testing->Run(profile);
++  }
++  Browser::CreateParams params(Browser::TYPE_NORMAL, profile, false);
+   params.should_trigger_session_restore = false;
+-  Browser* browser = Browser::Create(params);
+-  service->SetSpaceForBrowser(browser, space->id());
+-  return browser;
++  return Browser::Create(params);
+ }
+ 
++class StagedBrowsers {
++ public:
++  StagedBrowsers() = default;
++  StagedBrowsers(const StagedBrowsers&) = delete;
++  StagedBrowsers& operator=(const StagedBrowsers&) = delete;
++
++  ~StagedBrowsers() {
++    if (keep_browsers_) {
++      return;
++    }
++    for (auto it = windows_.rbegin(); it != windows_.rend(); ++it) {
++      BrowserWindowInterface* window = it->get();
++      Browser* browser = window ? window->GetBrowserForMigrationOnly()
++                                : nullptr;
++      if (browser && browser->GetWindow()) {
++        browser->GetWindow()->Close();
++      }
++    }
++  }
++
++  Browser* Create(Profile* profile) {
++    Browser* browser = CreateBrowserForImport(profile);
++    if (!browser || browser->profile() != profile || !browser->GetWindow()) {
++      return nullptr;
++    }
++    BrowserWindowInterface* window = browser;
++    windows_.push_back(window->GetWeakPtr());
++    if (browser->type() != Browser::TYPE_NORMAL ||
++        window->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++        window->GetBrowserForMigrationOnly() != browser ||
++        !window->GetTabStripModel()) {
++      return nullptr;
++    }
++    return browser;
++  }
++
++  void KeepBrowsers() { keep_browsers_ = true; }
++
++ private:
++  std::vector<base::WeakPtr<BrowserWindowInterface>> windows_;
++  bool keep_browsers_ = false;
++};
++
++struct ImportedContentInWindow {
++  base::WeakPtr<BrowserWindowInterface> window;
++  base::WeakPtr<content::WebContents> contents;
++};
++
++struct PlannedSpace {
++  std::vector<ImportedTab> replacement_tabs;
++  std::vector<ImportedContentInWindow> old_tabs;
++  base::WeakPtr<BrowserWindowInterface> destination_window;
++  bool needs_staged_browser = false;
++};
++
+ void AddTabs(Browser* browser,
+              const std::string& source_profile,
+              const std::vector<ImportedTab>& tabs) {
+@@ -260,24 +322,90 @@ void AddTabs(Browser* browser,
+   }
+ }
+ 
+-std::vector<content::WebContents*> ImportedContents(
+-    Browser* browser,
+-    const std::string& source_profile) {
+-  std::vector<content::WebContents*> result;
+-  for (int index = 0; index < browser->tab_strip_model()->count(); ++index) {
+-    content::WebContents* contents =
+-        browser->tab_strip_model()->GetWebContentsAt(index);
+-    const TabProvenance* provenance = TabProvenance::FromWebContents(contents);
+-    if (provenance && provenance->source() == kArcSource &&
+-        provenance->collection_id() == source_profile) {
+-      result.push_back(contents);
+-    }
++bool IsImportedContents(content::WebContents* contents,
++                        const std::string& source_profile) {
++  const TabProvenance* provenance = TabProvenance::FromWebContents(contents);
++  return provenance && provenance->source() == kArcSource &&
++         provenance->collection_id() == source_profile;
++}
++
++bool HasSuddenTerminationHandlers(content::WebContents* contents) {
++  content::RenderFrameHost* primary_main_frame =
++      contents->GetPrimaryMainFrame();
++  if (!primary_main_frame) {
++    return true;
+   }
+-  return result;
++
++  bool has_handlers = false;
++  primary_main_frame->ForEachRenderFrameHostWithAction(
++      [&](content::RenderFrameHost* frame) {
++        if (!frame->IsRenderFrameLive()) {
++          return content::RenderFrameHost::FrameIterationAction::kContinue;
++        }
++
++        using Disabler = blink::mojom::SuddenTerminationDisablerType;
++        if (frame->GetSuddenTerminationDisablerState(
++                Disabler::kBeforeUnloadHandler) ||
++            frame->GetSuddenTerminationDisablerState(
++                Disabler::kUnloadHandler) ||
++            frame->GetSuddenTerminationDisablerState(
++                Disabler::kPageHideHandler) ||
++            frame->GetSuddenTerminationDisablerState(
++                Disabler::kVisibilityChangeHandler)) {
++          has_handlers = true;
++          return content::RenderFrameHost::FrameIterationAction::kStop;
++        }
++        return content::RenderFrameHost::FrameIterationAction::kContinue;
++      });
++  return has_handlers;
++}
++
++bool CanCloseImportedContents(BrowserWindowInterface* window,
++                              Profile* profile,
++                              content::WebContents* contents,
++                              const std::string& source_profile) {
++  Browser* browser = window ? window->GetBrowserForMigrationOnly() : nullptr;
++  TabStripModel* tab_strip_model =
++      window ? window->GetTabStripModel() : nullptr;
++  if (!window || window->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++      !browser || browser->profile() != profile || !tab_strip_model ||
++      !contents) {
++    return false;
++  }
++
++  const int index = tab_strip_model->GetIndexOfWebContents(contents);
++  if (index == TabStripModel::kNoTab) {
++    return false;
++  }
++  // A captured tab may have been destroyed during destination staging. Check
++  // membership before reading its provenance or consulting its close policy.
++  contents = tab_strip_model->GetWebContentsAt(index);
++  if (!IsImportedContents(contents, source_profile)) {
++    return false;
++  }
++  tabs::TabInterface* tab = tab_strip_model->GetTabForWebContents(contents);
++  TabStripModelDelegate* delegate = tab_strip_model->delegate();
++  return tab && tab_strip_model->IsTabClosable(tab) &&
++         !contents->NeedToFireBeforeUnloadOrUnloadEvents() &&
++         !HasSuddenTerminationHandlers(contents) && delegate &&
++         !delegate->ShouldRunUnloadListenerBeforeClosing(contents);
+ }
+ 
+ }  // namespace
+ 
++ScopedBrowserFactoryForTesting::ScopedBrowserFactoryForTesting(
++    Factory factory)
++    : factory_(std::move(factory)),
++      previous_factory_(g_browser_factory_for_testing) {
++  DCHECK(!factory_.is_null());
++  g_browser_factory_for_testing = &factory_;
++}
++
++ScopedBrowserFactoryForTesting::~ScopedBrowserFactoryForTesting() {
++  DCHECK_EQ(g_browser_factory_for_testing, &factory_);
++  g_browser_factory_for_testing = previous_factory_;
++}
++
+ bool ImportArcSidebarSnapshot(Profile* profile,
+                               std::string_view snapshot_json,
+                               ArcSidebarDestination destination) {
+@@ -286,8 +414,13 @@ bool ImportArcSidebarSnapshot(Profile* p
+       profile ? helium::HeliumSpaceServiceFactory::GetForProfile(profile)
+               : nullptr;
+   if (!snapshot || !service) {
++    VLOG(1) << "Arc sidebar reconcile parsed=" << !!snapshot
++            << " service_available=" << !!service << " succeeded=0";
+     return false;
+   }
++  VLOG(1) << "Arc sidebar reconcile parsed=1 favorites="
++          << snapshot->favorites.size()
++          << " spaces=" << snapshot->spaces.size();
+ 
+   if (destination == ArcSidebarDestination::kPins) {
+     std::vector<helium::ImportedPersistentSpace> imported_spaces;
+@@ -305,17 +438,19 @@ bool ImportArcSidebarSnapshot(Profile* p
+         ToPersistentNodes(snapshot->favorites, snapshot->source_profile,
+                           "favorite"),
+         std::move(imported_spaces));
++    VLOG(1) << "Arc sidebar reconcile destination=pins succeeded=1";
+     return true;
+   }
+ 
+   std::map<std::string, std::vector<ImportedNode>> nodes_by_space;
+   for (const ImportedSpace& imported : snapshot->spaces) {
+     nodes_by_space[imported.id] = imported.nodes;
+-    service->GetOrCreateSpace(imported.id, base::UTF8ToUTF16(imported.name));
+   }
+-  const std::string favorites_space_id = snapshot->spaces.empty()
+-                                             ? service->GetDefaultSpace()->id()
+-                                             : snapshot->spaces.front().id;
++
++  const std::vector<helium::HeliumSpace*> current_spaces = service->GetSpaces();
++  const std::string favorites_space_id =
++      snapshot->spaces.empty() ? service->GetDefaultSpace()->id()
++                               : snapshot->spaces.front().id;
+   auto& favorites_destination = nodes_by_space[favorites_space_id];
+   if (!snapshot->favorites.empty()) {
+     ImportedNode favorites{
+@@ -328,37 +463,175 @@ bool ImportArcSidebarSnapshot(Profile* p
+                                  std::move(favorites));
+   }
+ 
+-  for (helium::HeliumSpace* space : service->GetSpaces()) {
+-    BrowserWindowInterface* existing_window = space->GetPrimaryBrowser();
+-    Browser* browser = existing_window
+-                           ? existing_window->GetBrowserForMigrationOnly()
+-                           : nullptr;
+-    std::vector<content::WebContents*> old_tabs =
+-        browser ? ImportedContents(browser, snapshot->source_profile)
+-                : std::vector<content::WebContents*>();
+-    const auto replacement = nodes_by_space.find(space->id());
+-    if (replacement != nodes_by_space.end() && !replacement->second.empty()) {
+-      browser = browser ? browser : GetOrCreateBrowser(space, service);
+-      if (!browser) {
++  std::map<std::string, PlannedSpace> planned_spaces;
++  for (helium::HeliumSpace* space : current_spaces) {
++    planned_spaces.try_emplace(space->id());
++  }
++  for (const auto& [id, nodes] : nodes_by_space) {
++    PlannedSpace& plan = planned_spaces[id];
++    FlattenNodes(nodes, std::string(), false, &plan.replacement_tabs);
++  }
++
++  ProfileBrowserCollection* browser_collection =
++      ProfileBrowserCollection::GetForProfile(profile);
++  if (!browser_collection) {
++    VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
++    return false;
++  }
++  bool all_windows_inspectable = true;
++  browser_collection->ForEach([&](BrowserWindowInterface* window) {
++    Browser* browser = window->GetBrowserForMigrationOnly();
++    if (window->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++        !browser || browser->profile() != profile) {
++      return true;
++    }
++    const std::string space_id(service->GetSpaceIdForBrowser(browser));
++    auto plan = planned_spaces.find(space_id);
++    TabStripModel* tab_strip_model = window->GetTabStripModel();
++    if (plan == planned_spaces.end()) {
++      return true;
++    }
++    if (!tab_strip_model) {
++      all_windows_inspectable = false;
++      return false;
++    }
++    for (int index = 0; index < tab_strip_model->count(); ++index) {
++      content::WebContents* contents =
++          tab_strip_model->GetWebContentsAt(index);
++      if (IsImportedContents(contents, snapshot->source_profile)) {
++        plan->second.old_tabs.push_back(
++            {window->GetWeakPtr(), contents->GetWeakPtr()});
++      }
++    }
++    return true;
++  });
++  if (!all_windows_inspectable) {
++    VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
++    return false;
++  }
++
++  for (const auto& [id, plan] : planned_spaces) {
++    for (const ImportedContentInWindow& old_tab : plan.old_tabs) {
++      BrowserWindowInterface* window = old_tab.window.get();
++      Browser* browser =
++          window ? window->GetBrowserForMigrationOnly() : nullptr;
++      if (!browser || service->GetSpaceIdForBrowser(browser) != id ||
++          !CanCloseImportedContents(window, profile, old_tab.contents.get(),
++                                    snapshot->source_profile)) {
++        VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
+         return false;
+       }
+     }
+-    if (browser && !old_tabs.empty()) {
+-      for (content::WebContents* contents : old_tabs) {
+-        const int index =
+-            browser->tab_strip_model()->GetIndexOfWebContents(contents);
+-        if (index != TabStripModel::kNoTab) {
+-          browser->tab_strip_model()->CloseWebContentsAt(index, CLOSE_NONE);
+-        }
++  }
++
++  StagedBrowsers staged_browsers;
++  for (auto& [id, plan] : planned_spaces) {
++    if (plan.replacement_tabs.empty()) {
++      continue;
++    }
++    if (helium::HeliumSpace* space = service->GetSpaceById(id)) {
++      if (BrowserWindowInterface* window = space->GetPrimaryBrowser()) {
++        plan.destination_window = window->GetWeakPtr();
++      }
++    }
++    plan.needs_staged_browser = !plan.destination_window;
++  }
++  for (auto& [id, plan] : planned_spaces) {
++    if (!plan.needs_staged_browser) {
++      continue;
++    }
++    Browser* browser = staged_browsers.Create(profile);
++    if (!browser) {
++      VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
++      return false;
++    }
++    plan.destination_window = browser->GetWeakPtr();
++  }
++
++  // Browser creation notifies HeliumSpaceService and can assign staged windows
++  // to the active Space. Confirm every destination is still usable before any
++  // imported Space record or tab is changed.
++  for (const auto& entry : planned_spaces) {
++    const PlannedSpace& plan = entry.second;
++    if (plan.replacement_tabs.empty()) {
++      continue;
++    }
++    BrowserWindowInterface* window = plan.destination_window.get();
++    Browser* browser = window ? window->GetBrowserForMigrationOnly() : nullptr;
++    if (!window || window->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++        !browser || browser->profile() != profile ||
++        browser->type() != Browser::TYPE_NORMAL ||
++        !window->GetTabStripModel()) {
++      VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
++      return false;
++    }
++  }
++
++  for (const auto& [id, plan] : planned_spaces) {
++    for (const ImportedContentInWindow& old_tab : plan.old_tabs) {
++      BrowserWindowInterface* window = old_tab.window.get();
++      Browser* browser =
++          window ? window->GetBrowserForMigrationOnly() : nullptr;
++      if (!browser || service->GetSpaceIdForBrowser(browser) != id ||
++          !CanCloseImportedContents(window, profile, old_tab.contents.get(),
++                                    snapshot->source_profile)) {
++        VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
++        return false;
+       }
+     }
+-    if (browser && replacement != nodes_by_space.end() &&
+-        !replacement->second.empty()) {
+-      std::vector<ImportedTab> tabs;
+-      FlattenNodes(replacement->second, std::string(), false, &tabs);
+-      AddTabs(browser, snapshot->source_profile, tabs);
++  }
++
++  for (const ImportedSpace& imported : snapshot->spaces) {
++    service->GetOrCreateSpace(imported.id,
++                              base::UTF8ToUTF16(imported.name));
++  }
++  for (auto& [id, plan] : planned_spaces) {
++    if (!plan.needs_staged_browser) {
++      continue;
++    }
++    BrowserWindowInterface* window = plan.destination_window.get();
++    Browser* browser = window->GetBrowserForMigrationOnly();
++    service->SetSpaceForBrowser(browser, id);
++  }
++  for (auto& entry : planned_spaces) {
++    PlannedSpace& plan = entry.second;
++    if (plan.replacement_tabs.empty()) {
++      continue;
++    }
++    BrowserWindowInterface* window = plan.destination_window.get();
++    Browser* browser = window->GetBrowserForMigrationOnly();
++    AddTabs(browser, snapshot->source_profile, plan.replacement_tabs);
++  }
++  for (auto& [id, plan] : planned_spaces) {
++    for (const ImportedContentInWindow& old_tab : plan.old_tabs) {
++      BrowserWindowInterface* window = old_tab.window.get();
++      Browser* browser =
++          window ? window->GetBrowserForMigrationOnly() : nullptr;
++      content::WebContents* contents = old_tab.contents.get();
++      if (!browser || service->GetSpaceIdForBrowser(browser) != id ||
++          !CanCloseImportedContents(window, profile, contents,
++                                    snapshot->source_profile)) {
++        // The import is already committed at this point. Retain staged windows
++        // and leave every remaining old tab open if its close policy changed.
++        staged_browsers.KeepBrowsers();
++        VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
++        return false;
++      }
++
++      TabStripModel* tab_strip_model = window->GetTabStripModel();
++      const int index = tab_strip_model
++                            ? tab_strip_model->GetIndexOfWebContents(contents)
++                            : TabStripModel::kNoTab;
++      if (index == TabStripModel::kNoTab) {
++        staged_browsers.KeepBrowsers();
++        VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=0";
++        return false;
++      }
++      tab_strip_model->CloseWebContentsAt(index, CLOSE_NONE);
+     }
+   }
++  staged_browsers.KeepBrowsers();
++  VLOG(1) << "Arc sidebar reconcile destination=tabs succeeded=1";
+   return true;
+ }
+ 
+--- a/chrome/browser/importer/arcium_arc_import_browsertest.cc
++++ b/chrome/browser/importer/arcium_arc_import_browsertest.cc
+@@ -5,23 +5,39 @@
+ #include "chrome/browser/importer/arcium_arc_import.h"
+ 
+ #include <map>
++#include <memory>
++#include <optional>
+ #include <string>
+ #include <utility>
+ 
++#include "base/test/bind.h"
++#include "base/values.h"
++#include "chrome/browser/importer/profile_writer.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/arcium/tab_provenance.h"
+ #include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_tabstrip.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/helium/helium_space.h"
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+ #include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_group.h"
+ #include "components/tab_groups/tab_group_visual_data.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom.h"
+ #include "url/gurl.h"
+ 
+ namespace arcium {
+@@ -58,6 +74,23 @@ constexpr char kSnapshot[] = R"json({
+   ]
+ })json";
+ 
++constexpr char kLateStageFailureSnapshot[] = R"json({
++  "version": 1,
++  "source_profile": "arc-profile",
++  "favorites": [],
++  "spaces": [
++    {"id":"space-a","name":"Renamed Space A", "source_profile":"arc-profile",
++     "pins":[{"type":"tab","source_id":"replacement-a","title":"A",
++              "url":"https://replacement-a.test/"}]},
++    {"id":"space-c","name":"Space C", "source_profile":"arc-profile",
++     "pins":[{"type":"tab","source_id":"space-c-tab","title":"C",
++              "url":"https://space-c.test/"}]},
++    {"id":"space-d","name":"Space D", "source_profile":"arc-profile",
++     "pins":[{"type":"tab","source_id":"space-d-tab","title":"D",
++              "url":"https://space-d.test/"}]}
++  ]
++})json";
++
+ Browser* BrowserForSpace(helium::HeliumSpaceService* service,
+                          std::string_view id) {
+   helium::HeliumSpace* space = service->GetSpaceById(id);
+@@ -81,6 +114,34 @@ std::map<std::string, content::WebConten
+   return result;
+ }
+ 
++std::map<std::string, int> ArcTabCountsForSpace(
++    helium::HeliumSpaceService* service,
++    Profile* profile,
++    std::string_view space_id) {
++  std::map<std::string, int> result;
++  ProfileBrowserCollection::GetForProfile(profile)->ForEach(
++      [&](BrowserWindowInterface* window) {
++        Browser* browser = window->GetBrowserForMigrationOnly();
++        if (window->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++            !browser || browser->profile() != profile ||
++            service->GetSpaceIdForBrowser(browser) != space_id ||
++            !window->GetTabStripModel()) {
++          return true;
++        }
++        for (int index = 0; index < browser->tab_strip_model()->count();
++             ++index) {
++          const TabProvenance* provenance = TabProvenance::FromWebContents(
++              browser->tab_strip_model()->GetWebContentsAt(index));
++          if (provenance && provenance->source() == "arc") {
++            EXPECT_EQ("arc-profile", provenance->collection_id());
++            ++result[provenance->item_id()];
++          }
++        }
++        return true;
++      });
++  return result;
++}
++
+ std::map<std::u16string, bool> GroupCollapseState(Browser* browser) {
+   std::map<std::u16string, bool> result;
+   for (const tab_groups::TabGroupId& group_id :
+@@ -96,6 +157,21 @@ std::map<std::u16string, bool> GroupColl
+ class ArciumArcImportBrowserTest : public InProcessBrowserTest {};
+ 
+ IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
++                       ProfileWriterReportsArcSnapshotResult) {
++  scoped_refptr<ProfileWriter> failed_writer =
++      base::MakeRefCounted<ProfileWriter>(browser()->profile());
++  failed_writer->AddArcSidebarSnapshot("{}");
++  EXPECT_TRUE(failed_writer->arc_sidebar_snapshot_received());
++  EXPECT_FALSE(failed_writer->arc_sidebar_snapshot_import_succeeded());
++
++  scoped_refptr<ProfileWriter> successful_writer =
++      base::MakeRefCounted<ProfileWriter>(browser()->profile());
++  successful_writer->AddArcSidebarSnapshot(kSnapshot);
++  EXPECT_TRUE(successful_writer->arc_sidebar_snapshot_received());
++  EXPECT_TRUE(successful_writer->arc_sidebar_snapshot_import_succeeded());
++}
++
++IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
+                        ImportsNestedFoldersAsTabsWithoutPins) {
+   helium::HeliumSpaceService* service =
+       helium::HeliumSpaceServiceFactory::GetForProfile(browser()->profile());
+@@ -132,6 +208,286 @@ IN_PROC_BROWSER_TEST_F(ArciumArcImportBr
+   EXPECT_NE(-1, browser()->tab_strip_model()->GetIndexOfWebContents(unrelated));
+ }
+ 
++IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
++                       RefreshFindsTabsMovedIntoAnotherSpaceWindow) {
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot));
++  Browser* original_primary = BrowserForSpace(service, "space-a");
++  ASSERT_TRUE(original_primary);
++
++  Browser::CreateParams params(Browser::TYPE_NORMAL, browser()->profile(),
++                               false);
++  params.should_trigger_session_restore = false;
++  Browser* secondary = Browser::Create(params);
++  ASSERT_TRUE(secondary);
++  service->SetSpaceForBrowser(secondary, "space-a");
++  content::WebContents* unrelated = chrome::AddAndReturnTabAt(
++      secondary, GURL("https://unrelated.test/"), -1, true);
++  ASSERT_TRUE(unrelated);
++
++  const auto imported_tabs = ArcTabs(original_primary);
++  ASSERT_TRUE(imported_tabs.contains("root"));
++  content::WebContents* moved_tab = imported_tabs.at("root");
++  const int source_index =
++      original_primary->tab_strip_model()->GetIndexOfWebContents(moved_tab);
++  ASSERT_NE(TabStripModel::kNoTab, source_index);
++  std::unique_ptr<content::WebContents> detached =
++      original_primary->tab_strip_model()->DetachWebContentsAtForInsertion(
++          source_index);
++  ASSERT_TRUE(detached);
++  secondary->tab_strip_model()->InsertWebContentsAt(
++      secondary->tab_strip_model()->count(), std::move(detached),
++      ADD_ACTIVE);
++  EXPECT_EQ(3u, ArcTabs(original_primary).size());
++  EXPECT_FALSE(ArcTabs(original_primary).contains("root"));
++  EXPECT_EQ(1u, ArcTabs(secondary).size());
++  EXPECT_TRUE(ArcTabs(secondary).contains("root"));
++
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot));
++
++  const std::map<std::string, int> expected = {
++      {"favorite", 1}, {"root", 1}, {"outer-tab", 1}, {"inner-tab", 1}};
++  EXPECT_EQ(expected,
++            ArcTabCountsForSpace(service, browser()->profile(), "space-a"));
++  EXPECT_NE(TabStripModel::kNoTab,
++            secondary->tab_strip_model()->GetIndexOfWebContents(unrelated));
++  EXPECT_EQ("space-a", service->GetSpaceIdForBrowser(secondary));
++  CloseBrowserSynchronously(secondary);
++}
++
++IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
++                       BeforeUnloadTabRejectsRefreshBeforeStaging) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot));
++  Browser* space_a = BrowserForSpace(service, "space-a");
++  ASSERT_TRUE(space_a);
++  const auto imported_tabs = ArcTabs(space_a);
++  ASSERT_TRUE(imported_tabs.contains("root"));
++  content::WebContents* root_tab = imported_tabs.at("root");
++  TabStripModel* tab_strip_model = space_a->tab_strip_model();
++  const int root_index = tab_strip_model->GetIndexOfWebContents(root_tab);
++  ASSERT_NE(TabStripModel::kNoTab, root_index);
++  tab_strip_model->ActivateTabAt(root_index);
++  const GURL loaded_url = embedded_test_server()->GetURL("/title1.html");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(space_a, loaded_url));
++  ASSERT_EQ(loaded_url, root_tab->GetLastCommittedURL());
++  ASSERT_TRUE(content::ExecJs(root_tab,
++                              "window.onbeforeunload = () => '';"));
++
++  tabs::TabInterface* tab = tab_strip_model->GetTabForWebContents(root_tab);
++  ASSERT_TRUE(tab);
++  EXPECT_TRUE(tab_strip_model->IsTabClosable(tab));
++  EXPECT_TRUE(root_tab->NeedToFireBeforeUnloadOrUnloadEvents());
++  PrefService* prefs = browser()->profile()->GetPrefs();
++  const base::ListValue spaces_before =
++      prefs->GetList(helium::kHeliumSpacesPref).Clone();
++  const std::string active_space_before =
++      prefs->GetString(helium::kHeliumActiveSpaceIdPref);
++  const std::map<std::string, int> space_a_tabs_before =
++      ArcTabCountsForSpace(service, browser()->profile(), "space-a");
++  const std::map<std::string, int> space_b_tabs_before =
++      ArcTabCountsForSpace(service, browser()->profile(), "space-b");
++  ProfileBrowserCollection* browsers =
++      ProfileBrowserCollection::GetForProfile(browser()->profile());
++  const size_t browser_count_before = browsers->GetSize();
++
++  int factory_calls = 0;
++  {
++    ScopedBrowserFactoryForTesting browser_factory(base::BindLambdaForTesting(
++        [&](Profile*) -> Browser* {
++          ++factory_calls;
++          return nullptr;
++        }));
++    EXPECT_FALSE(ImportArcSidebarSnapshot(browser()->profile(),
++                                          kLateStageFailureSnapshot));
++  }
++
++  EXPECT_EQ(0, factory_calls);
++  EXPECT_EQ(spaces_before, prefs->GetList(helium::kHeliumSpacesPref));
++  EXPECT_EQ(active_space_before,
++            prefs->GetString(helium::kHeliumActiveSpaceIdPref));
++  EXPECT_EQ(space_a_tabs_before,
++            ArcTabCountsForSpace(service, browser()->profile(), "space-a"));
++  EXPECT_EQ(space_b_tabs_before,
++            ArcTabCountsForSpace(service, browser()->profile(), "space-b"));
++  EXPECT_EQ(browser_count_before, browsers->GetSize());
++  EXPECT_NE(TabStripModel::kNoTab,
++            tab_strip_model->GetIndexOfWebContents(root_tab));
++  EXPECT_EQ(loaded_url, root_tab->GetLastCommittedURL());
++  EXPECT_EQ(nullptr, service->GetSpaceById("space-c"));
++  EXPECT_EQ(nullptr, service->GetSpaceById("space-d"));
++  EXPECT_TRUE(content::ExecJs(root_tab, "window.onbeforeunload = null;"));
++}
++
++IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
++                       HiddenVisibilityChangeTabRejectsRefreshBeforeStaging) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot));
++  Browser* space_a = BrowserForSpace(service, "space-a");
++  ASSERT_TRUE(space_a);
++  const auto imported_tabs = ArcTabs(space_a);
++  ASSERT_TRUE(imported_tabs.contains("root"));
++  ASSERT_TRUE(imported_tabs.contains("outer-tab"));
++
++  TabStripModel* tab_strip_model = space_a->tab_strip_model();
++  content::WebContents* root_tab = imported_tabs.at("root");
++  content::WebContents* visibility_tab = imported_tabs.at("outer-tab");
++  const GURL loaded_url = embedded_test_server()->GetURL("/title1.html");
++  const int visibility_index =
++      tab_strip_model->GetIndexOfWebContents(visibility_tab);
++  ASSERT_NE(TabStripModel::kNoTab, visibility_index);
++  tab_strip_model->ActivateTabAt(visibility_index);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(space_a, loaded_url));
++  ASSERT_EQ(loaded_url, visibility_tab->GetLastCommittedURL());
++  ASSERT_TRUE(content::ExecJs(
++      visibility_tab,
++      "document.addEventListener('visibilitychange', () => {});"));
++
++  content::RenderFrameHost* main_frame =
++      visibility_tab->GetPrimaryMainFrame();
++  ASSERT_TRUE(main_frame);
++  EXPECT_FALSE(main_frame->GetSuddenTerminationDisablerState(
++      blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler));
++  EXPECT_FALSE(main_frame->GetSuddenTerminationDisablerState(
++      blink::mojom::SuddenTerminationDisablerType::kUnloadHandler));
++  EXPECT_FALSE(main_frame->GetSuddenTerminationDisablerState(
++      blink::mojom::SuddenTerminationDisablerType::kPageHideHandler));
++  EXPECT_TRUE(main_frame->GetSuddenTerminationDisablerState(
++      blink::mojom::SuddenTerminationDisablerType::kVisibilityChangeHandler));
++
++  const int root_index = tab_strip_model->GetIndexOfWebContents(root_tab);
++  ASSERT_NE(TabStripModel::kNoTab, root_index);
++  tab_strip_model->ActivateTabAt(root_index);
++  const int hidden_index =
++      tab_strip_model->GetIndexOfWebContents(visibility_tab);
++  ASSERT_NE(TabStripModel::kNoTab, hidden_index);
++  EXPECT_FALSE(tab_strip_model->IsTabInForeground(hidden_index));
++  EXPECT_EQ("hidden", content::EvalJs(visibility_tab,
++                                      "document.visibilityState"));
++  EXPECT_FALSE(visibility_tab->NeedToFireBeforeUnloadOrUnloadEvents());
++  tabs::TabInterface* visibility_interface =
++      tab_strip_model->GetTabForWebContents(visibility_tab);
++  ASSERT_TRUE(visibility_interface);
++  EXPECT_TRUE(tab_strip_model->IsTabClosable(visibility_interface));
++  ASSERT_TRUE(tab_strip_model->delegate());
++  EXPECT_FALSE(tab_strip_model->delegate()->ShouldRunUnloadListenerBeforeClosing(
++      visibility_tab));
++
++  PrefService* prefs = browser()->profile()->GetPrefs();
++  const base::ListValue spaces_before =
++      prefs->GetList(helium::kHeliumSpacesPref).Clone();
++  const std::string active_space_before =
++      prefs->GetString(helium::kHeliumActiveSpaceIdPref);
++  const std::map<std::string, int> space_a_tabs_before =
++      ArcTabCountsForSpace(service, browser()->profile(), "space-a");
++  const std::map<std::string, int> space_b_tabs_before =
++      ArcTabCountsForSpace(service, browser()->profile(), "space-b");
++  ProfileBrowserCollection* browsers =
++      ProfileBrowserCollection::GetForProfile(browser()->profile());
++  const size_t browser_count_before = browsers->GetSize();
++
++  int factory_calls = 0;
++  {
++    ScopedBrowserFactoryForTesting browser_factory(base::BindLambdaForTesting(
++        [&](Profile*) -> Browser* {
++          ++factory_calls;
++          return nullptr;
++        }));
++    EXPECT_FALSE(ImportArcSidebarSnapshot(browser()->profile(),
++                                          kLateStageFailureSnapshot));
++  }
++
++  EXPECT_EQ(0, factory_calls);
++  EXPECT_EQ(spaces_before, prefs->GetList(helium::kHeliumSpacesPref));
++  EXPECT_EQ(active_space_before,
++            prefs->GetString(helium::kHeliumActiveSpaceIdPref));
++  EXPECT_EQ(space_a_tabs_before,
++            ArcTabCountsForSpace(service, browser()->profile(), "space-a"));
++  EXPECT_EQ(space_b_tabs_before,
++            ArcTabCountsForSpace(service, browser()->profile(), "space-b"));
++  EXPECT_EQ(browser_count_before, browsers->GetSize());
++  EXPECT_NE(TabStripModel::kNoTab,
++            tab_strip_model->GetIndexOfWebContents(visibility_tab));
++  EXPECT_EQ(loaded_url, visibility_tab->GetLastCommittedURL());
++  EXPECT_EQ(nullptr, service->GetSpaceById("space-c"));
++  EXPECT_EQ(nullptr, service->GetSpaceById("space-d"));
++}
++
++IN_PROC_BROWSER_TEST_F(ArciumArcImportBrowserTest,
++                       FailedDestinationPreflightPreservesExistingImports) {
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser()->profile());
++  ASSERT_TRUE(service);
++  ASSERT_TRUE(ImportArcSidebarSnapshot(browser()->profile(), kSnapshot));
++
++  PrefService* prefs = browser()->profile()->GetPrefs();
++  const base::ListValue spaces_before =
++      prefs->GetList(helium::kHeliumSpacesPref).Clone();
++  const std::string active_space_before =
++      prefs->GetString(helium::kHeliumActiveSpaceIdPref);
++  const std::map<std::string, int> space_a_tabs_before =
++      ArcTabCountsForSpace(service, browser()->profile(), "space-a");
++  const std::map<std::string, int> space_b_tabs_before =
++      ArcTabCountsForSpace(service, browser()->profile(), "space-b");
++  ProfileBrowserCollection* browsers =
++      ProfileBrowserCollection::GetForProfile(browser()->profile());
++  const size_t browser_count_before = browsers->GetSize();
++
++  int factory_calls = 0;
++  Browser* staged_browser = nullptr;
++  std::optional<SessionID> staged_session_id;
++  std::unique_ptr<ui_test_utils::BrowserDestroyedObserver> destroyed_observer;
++  {
++    ScopedBrowserFactoryForTesting browser_factory(base::BindLambdaForTesting(
++        [&](Profile* profile) -> Browser* {
++          ++factory_calls;
++          if (factory_calls == 2) {
++            return nullptr;
++          }
++          Browser::CreateParams params(Browser::TYPE_NORMAL, profile, false);
++          params.should_trigger_session_restore = false;
++          staged_browser = Browser::Create(params);
++          if (staged_browser) {
++            staged_session_id = staged_browser->session_id();
++            destroyed_observer =
++                std::make_unique<ui_test_utils::BrowserDestroyedObserver>(
++                    staged_browser);
++          }
++          return staged_browser;
++        }));
++    EXPECT_FALSE(ImportArcSidebarSnapshot(browser()->profile(),
++                                          kLateStageFailureSnapshot));
++  }
++
++  ASSERT_EQ(2, factory_calls);
++  ASSERT_TRUE(staged_browser);
++  ASSERT_TRUE(staged_session_id);
++  ASSERT_TRUE(destroyed_observer);
++  destroyed_observer->Wait();
++
++  EXPECT_EQ(spaces_before, prefs->GetList(helium::kHeliumSpacesPref));
++  ASSERT_TRUE(service->GetSpaceById("space-a"));
++  EXPECT_EQ(u"Space A", service->GetSpaceById("space-a")->name());
++  EXPECT_EQ(active_space_before,
++            prefs->GetString(helium::kHeliumActiveSpaceIdPref));
++  EXPECT_EQ(space_a_tabs_before,
++            ArcTabCountsForSpace(service, browser()->profile(), "space-a"));
++  EXPECT_EQ(space_b_tabs_before,
++            ArcTabCountsForSpace(service, browser()->profile(), "space-b"));
++  EXPECT_EQ(browser_count_before, browsers->GetSize());
++  EXPECT_EQ(nullptr, browsers->FindBrowserWithID(*staged_session_id));
++  EXPECT_EQ(nullptr, service->GetSpaceById("space-c"));
++  EXPECT_EQ(nullptr, service->GetSpaceById("space-d"));
++}
++
+ helium::PersistentNode Link(std::string id,
+                             std::u16string title,
+                             const char* url) {
+--- a/chrome/browser/importer/external_process_importer_client.cc
++++ b/chrome/browser/importer/external_process_importer_client.cc
+@@ -189,6 +189,8 @@ void ExternalProcessImporterClient::OnBo
+ void ExternalProcessImporterClient::OnArcSidebarSnapshotReady(
+     const std::string& snapshot_json) {
+   if (!cancelled_) {
++    VLOG(1) << "Arc sidebar snapshot browser_received=1 bytes="
++            << snapshot_json.size();
+     bridge_->AddArcSidebarSnapshot(snapshot_json);
+   }
+ }
+--- a/chrome/browser/importer/profile_writer.cc
++++ b/chrome/browser/importer/profile_writer.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/importer/profile_writer.h"
+ 
++#include "base/logging.h"
+ #include "chrome/browser/importer/arcium_arc_import.h"
+ 
+ #include <stddef.h>
+@@ -272,8 +273,12 @@ void ProfileWriter::AddBookmarks(
+ 
+ void ProfileWriter::AddArcSidebarSnapshot(
+     const std::string& snapshot_json) {
+-  arcium::ImportArcSidebarSnapshot(profile_, snapshot_json,
+-                                   arc_sidebar_destination_);
++  arc_sidebar_snapshot_received_ = true;
++  arc_sidebar_snapshot_import_succeeded_ =
++      arcium::ImportArcSidebarSnapshot(profile_, snapshot_json,
++                                       arc_sidebar_destination_);
++  VLOG(1) << "Arc sidebar writer received=1 import_succeeded="
++          << arc_sidebar_snapshot_import_succeeded_;
+ }
+ 
+ void ProfileWriter::AddFavicons(
+--- a/chrome/browser/importer/profile_writer.h
++++ b/chrome/browser/importer/profile_writer.h
+@@ -80,6 +80,13 @@ class ProfileWriter : public base::RefCo
+       const std::u16string& top_level_folder_name);
+   virtual void AddArcSidebarSnapshot(const std::string& snapshot_json);
+ 
++  bool arc_sidebar_snapshot_received() const {
++    return arc_sidebar_snapshot_received_;
++  }
++  bool arc_sidebar_snapshot_import_succeeded() const {
++    return arc_sidebar_snapshot_import_succeeded_;
++  }
++
+   virtual void AddFavicons(const favicon_base::FaviconUsageDataList& favicons);
+ 
+   // Adds the TemplateURLs in |template_urls| to the local store.
+@@ -105,6 +112,8 @@ class ProfileWriter : public base::RefCo
+  private:
+   const raw_ptr<Profile> profile_;
+   const arcium::ArcSidebarDestination arc_sidebar_destination_;
++  bool arc_sidebar_snapshot_received_ = false;
++  bool arc_sidebar_snapshot_import_succeeded_ = false;
+ };
+ 
+ #endif  // CHROME_BROWSER_IMPORTER_PROFILE_WRITER_H_
+--- a/chrome/browser/ui/webui/settings/import_data_handler.cc
++++ b/chrome/browser/ui/webui/settings/import_data_handler.cc
+@@ -23,6 +23,7 @@
+ #include "chrome/browser/importer/external_process_importer_host.h"
+ #include "chrome/browser/importer/importer_list.h"
+ #include "chrome/browser/importer/importer_uma.h"
++#include "chrome/browser/importer/profile_writer.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -106,18 +107,22 @@ void ImportDataHandler::StartImport(
+   FireWebUIListener("import-data-status-changed",
+                     base::Value(kImportStatusInProgress));
+   import_did_succeed_ = false;
++  arc_favorites_import_ =
++      source_profile.importer_type == user_data_importer::TYPE_ARC &&
++      (imported_items & user_data_importer::FAVORITES);
++  Profile* profile = Profile::FromWebUI(web_ui());
++  profile_writer_ = base::MakeRefCounted<ProfileWriter>(
++      profile, arc_sidebar_destination_);
+ 
+   importer_host_ = new ExternalProcessImporterHost();
+   importer_host_->set_observer(this);
+-  Profile* profile = Profile::FromWebUI(web_ui());
+ 
+   importer_host_->set_parent_window(
+       web_ui()->GetWebContents()->GetTopLevelNativeWindow());
+   importer_host_->set_parent_view(web_ui()->GetWebContents()->GetNativeView());
+ 
+   importer_host_->StartImportSettings(source_profile, profile, imported_items,
+-                                      new ProfileWriter(
+-                                          profile, arc_sidebar_destination_));
++                                      profile_writer_.get());
+ 
+   importer::LogImporterUseToMetrics("ImportDataHandler",
+                                     source_profile.importer_type);
+@@ -276,8 +281,22 @@ void ImportDataHandler::ImportItemEnded(
+ void ImportDataHandler::ImportEnded() {
+   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+ 
++  if (arc_favorites_import_) {
++    import_did_succeed_ =
++        profile_writer_ && profile_writer_->arc_sidebar_snapshot_received() &&
++        profile_writer_->arc_sidebar_snapshot_import_succeeded();
++  }
++  VLOG(1) << "Arc import ended selected_favorites=" << arc_favorites_import_
++          << " writer_received="
++          << (profile_writer_ &&
++              profile_writer_->arc_sidebar_snapshot_received())
++          << " writer_succeeded="
++          << (profile_writer_ &&
++              profile_writer_->arc_sidebar_snapshot_import_succeeded());
+   importer_host_->set_observer(nullptr);
+   importer_host_ = nullptr;
++  profile_writer_ = nullptr;
++  arc_favorites_import_ = false;
+ 
+   FireWebUIListener("import-data-status-changed",
+                     base::Value(import_did_succeed_ ? kImportStatusSucceeded
+--- a/chrome/browser/ui/webui/settings/import_data_handler.h
++++ b/chrome/browser/ui/webui/settings/import_data_handler.h
+@@ -10,8 +10,10 @@
+ #include <memory>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "base/memory/scoped_refptr.h"
+ #include "chrome/browser/importer/arcium_arc_import.h"
+ #include "chrome/browser/importer/importer_progress_observer.h"
++#include "chrome/browser/importer/profile_writer.h"
+ #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
+ #include "components/user_data_importer/common/importer_data_types.h"
+ #include "ui/shell_dialogs/select_file_dialog.h"
+@@ -80,6 +82,8 @@ class ImportDataHandler : public Setting
+ 
+   bool import_did_succeed_{false};
+   bool importer_list_loaded_{false};
++  bool arc_favorites_import_{false};
++  scoped_refptr<ProfileWriter> profile_writer_;
+   arcium::ArcSidebarDestination arc_sidebar_destination_ =
+       arcium::ArcSidebarDestination::kTabs;
+ 
+--- a/chrome/utility/importer/arc_sidebar_importer.cc
++++ b/chrome/utility/importer/arc_sidebar_importer.cc
+@@ -43,17 +43,21 @@ std::optional<base::DictValue> ArcSideba
+     LOG(WARNING) << "failed to read Arc sidebar data";
+     return std::nullopt;
+   }
++  VLOG(1) << "Arc sidebar read succeeded=1 bytes=" << sidebar_content.size();
+   std::optional<base::DictValue> root = base::JSONReader::ReadDict(
+       sidebar_content, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+   if (!root || !root->FindDict("sidebar")) {
+     LOG(WARNING) << "failed to parse Arc sidebar data";
+     return std::nullopt;
+   }
++  VLOG(1) << "Arc sidebar parse succeeded=1";
+   return root;
+ }
+ 
+ void ArcSidebarImporter::ImportBookmarksImpl() {
+   const base::FilePath path = GetStorableSidebarPath();
++  VLOG(1) << "Arc sidebar import entered=1 path_found=" << !path.empty()
++          << " cancelled=" << cancelled();
+   if (path.empty()) {
+     return;
+   }
+@@ -65,14 +69,19 @@ void ArcSidebarImporter::ImportBookmarks
+       arcium::ParseArcSidebarSnapshot(*root,
+                                       source_path_.BaseName().AsUTF8Unsafe());
+   if (!snapshot) {
++    VLOG(1) << "Arc sidebar snapshot conversion succeeded=0";
+     return;
+   }
++  VLOG(1) << "Arc sidebar snapshot conversion succeeded=1 favorites="
++          << snapshot->favorites.size()
++          << " spaces=" << snapshot->spaces.size();
+   std::string snapshot_json;
+   if (!base::JSONWriter::Write(snapshot->ToDict(), &snapshot_json)) {
+     LOG(WARNING) << "failed to serialize Arc sidebar snapshot";
+     return;
+   }
+   bridge_->AddArcSidebarSnapshot(snapshot_json);
++  VLOG(1) << "Arc sidebar snapshot sent=1 bytes=" << snapshot_json.size();
+ }
+ 
+ void ArcSidebarImporter::ImportAdditionalBookmarks() {
+--- a/chrome/utility/importer/external_process_importer_bridge.cc
++++ b/chrome/utility/importer/external_process_importer_bridge.cc
+@@ -10,6 +10,7 @@
+ #include "base/check_op.h"
+ #include "base/debug/dump_without_crashing.h"
+ #include "base/functional/bind.h"
++#include "base/logging.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/task_runner.h"
+@@ -59,6 +60,7 @@ void ExternalProcessImporterBridge::AddB
+ 
+ void ExternalProcessImporterBridge::AddArcSidebarSnapshot(
+     const std::string& snapshot_json) {
++  VLOG(1) << "Arc sidebar snapshot received=1 bytes=" << snapshot_json.size();
+   observer_->OnArcSidebarSnapshotReady(snapshot_json);
+ }
+ 
+--- a/chrome/browser/importer/arcium_arc_import.h
++++ b/chrome/browser/importer/arcium_arc_import.h
+@@ -7,6 +7,9 @@
+ 
+ #include <string_view>
+ 
++#include "base/functional/callback.h"
++
++class Browser;
+ class Profile;
+ 
+ namespace arcium {
+@@ -16,9 +19,27 @@ enum class ArcSidebarDestination {
+   kPins,
+ };
+ 
++// Replaces browser creation during Arc tab-import tests. The callback must
++// return a newly created normal browser for the supplied profile, or nullptr.
++class ScopedBrowserFactoryForTesting {
++ public:
++  using Factory = base::RepeatingCallback<Browser*(Profile*)>;
++
++  explicit ScopedBrowserFactoryForTesting(Factory factory);
++  ScopedBrowserFactoryForTesting(const ScopedBrowserFactoryForTesting&) =
++      delete;
++  ScopedBrowserFactoryForTesting& operator=(
++      const ScopedBrowserFactoryForTesting&) = delete;
++  ~ScopedBrowserFactoryForTesting();
++
++ private:
++  Factory factory_;
++  Factory* previous_factory_ = nullptr;
++};
++
+ // Validates and reconciles an Arc sidebar snapshot as unloaded normal tabs
+ // with native groups, or as dormant lightweight Pins. Returns false without
+-// mutation for malformed input.
++// mutation for malformed input or unsafe imported tabs.
+ bool ImportArcSidebarSnapshot(
+     Profile* profile,
+     std::string_view snapshot_json,

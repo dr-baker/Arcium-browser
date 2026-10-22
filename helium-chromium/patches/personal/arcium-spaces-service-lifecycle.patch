@@ -1,0 +1,1187 @@
+# Requires arcium-spaces, arcium-pins and arcium-persistent-item-transition-fixes.
+# Release borrowed collection and tab state during keyed-service shutdown.
+--- a/chrome/browser/ui/helium/helium_space_service.cc
++++ b/chrome/browser/ui/helium/helium_space_service.cc
+@@ -410,8 +410,28 @@ HeliumSpaceService::HeliumSpaceService(P
+ }
+ 
+ HeliumSpaceService::~HeliumSpaceService() {
++  Shutdown();
++}
++
++void HeliumSpaceService::Shutdown() {
++  // Profile services first release borrowed state while their dependencies are
++  // alive. Repeating this cleanup from destruction must not dereference them.
++  weak_factory_.InvalidateWeakPtrs();
++  browser_collection_observation_.Reset();
+   TabStripModelObserver::StopObservingAll(this);
+   observed_tab_strip_models_.clear();
++  live_associations_.clear();
++  live_token_by_tab_.clear();
++  persistent_item_drags_.clear();
++  live_pin_space_transfers_.clear();
++  items_changed_callbacks_.Clear();
++  pin_to_tab_conversion_hook_for_testing_.Reset();
++  pin_space_transfer_hook_for_testing_.Reset();
++  pin_space_transfer_browser_factory_for_testing_.Reset();
++  session_space_ids_.clear();
++  empty_tab_strip_close_deferrals_.clear();
++  // The profile owns this service and outlives it. Keep the owned durable model
++  // intact; shutdown neither rewrites preferences nor changes live tabs.
+ }
+ 
+ void HeliumSpaceService::LoadAndMigrateFavorites() {
+--- a/chrome/browser/ui/helium/helium_space_service.h
++++ b/chrome/browser/ui/helium/helium_space_service.h
+@@ -161,6 +161,9 @@ class HeliumSpaceService : public KeyedS
+   HeliumSpaceService& operator=(const HeliumSpaceService&) = delete;
+   ~HeliumSpaceService() override;
+ 
++  // Release borrowed observations and live associations in phase-one shutdown.
++  void Shutdown() override;
++
+   HeliumSpace* GetDefaultSpace();
+   const HeliumSpace* GetDefaultSpace() const;
+   HeliumSpace* GetActiveSpace();
+--- a/chrome/browser/ui/helium/helium_space_service_factory.cc
++++ b/chrome/browser/ui/helium/helium_space_service_factory.cc
+@@ -5,11 +5,18 @@
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ 
+ #include "base/no_destructor.h"
++#include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ 
++#if BUILDFLAG(IS_ANDROID)
++#include "chrome/browser/ui/android/android_profile_browser_collection_service_factory.h"
++#else
++#include "chrome/browser/ui/browser_manager_service_factory.h"
++#endif
++
+ namespace helium {
+ 
+ // static
+@@ -38,7 +45,14 @@ HeliumSpaceServiceFactory::HeliumSpaceSe
+               .WithRegular(ProfileSelection::kOriginalOnly)
+               .WithGuest(ProfileSelection::kOriginalOnly)
+               .WithAshInternals(ProfileSelection::kOriginalOnly)
+-              .Build()) {}
++              .Build()) {
++  // Observe the profile collection only while its owning service is alive.
++#if BUILDFLAG(IS_ANDROID)
++  DependsOn(AndroidProfileBrowserCollectionServiceFactory::GetInstance());
++#else
++  DependsOn(BrowserManagerServiceFactory::GetInstance());
++#endif
++}
+ 
+ HeliumSpaceServiceFactory::~HeliumSpaceServiceFactory() = default;
+ 
+--- a/chrome/browser/ui/helium/helium_space_service_unittest.cc
++++ b/chrome/browser/ui/helium/helium_space_service_unittest.cc
+@@ -4,18 +4,23 @@
+ 
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ 
++#include <algorithm>
+ #include <array>
+-#include <random>
+-#include <set>
+ #include <map>
+ #include <memory>
++#include <random>
++#include <set>
+ #include <vector>
+ 
+ #include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/run_loop.h"
+ #include "base/test/bind.h"
++#include "base/test/scoped_feature_list.h"
+ #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
++#include "chrome/browser/browser_features.h"
++#include "chrome/browser/lifetime/browser_shutdown.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+@@ -24,15 +29,20 @@
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
++#include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
++#include "chrome/test/base/test_browser_window.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "components/prefs/pref_service.h"
++#include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_strip_collection.h"
+ #include "components/tabs/public/unpinned_tab_collection.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/test/navigation_simulator.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+ 
+@@ -219,8 +229,25 @@ TEST_F(EmptyFavoritesMigrationTest,
+   EXPECT_EQ(GURL("https://legacy-pin.test/"), link->url);
+ }
+ 
++class PinTransferTestBrowserWindow : public TestBrowserWindow {
++ public:
++  void Close() override {
++    ++close_count;
++    TestBrowserWindow::Close();
++  }
++  void Show() override { ++show_count; }
++  void Activate() override { ++activate_count; }
++
++  int close_count = 0;
++  int show_count = 0;
++  int activate_count = 0;
++};
++
+ class HeliumSpaceServiceTest : public BrowserWithTestWindowTest {
+  protected:
++  std::unique_ptr<BrowserWindow> CreateBrowserWindow() override {
++    return std::make_unique<PinTransferTestBrowserWindow>();
++  }
+   void SetUp() override {
+     BrowserWithTestWindowTest::SetUp();
+     service_ =
+@@ -316,6 +343,976 @@ class HeliumSpaceServiceTest : public Br
+   raw_ptr<HeliumSpace> space_ = nullptr;
+ };
+ 
++TEST_F(HeliumSpaceServiceTest, EmptyStripCloseDeferralWaitsForOutermostGuard) {
++  ASSERT_TRUE(AddOrdinaryTab("https://deferred.test/"));
++  auto* test_window = static_cast<PinTransferTestBrowserWindow*>(window());
++  std::unique_ptr<tabs::TabModel> detached;
++  {
++    HeliumSpaceService::ScopedTabStripEmptyCloseDeferral outer(service_,
++                                                               browser());
++    {
++      HeliumSpaceService::ScopedTabStripEmptyCloseDeferral inner(service_,
++                                                                 browser());
++      detached = browser()->tab_strip_model()->DetachTabAtForInsertion(0);
++      EXPECT_EQ(0, test_window->close_count);
++      EXPECT_FALSE(browser()->IsAttemptingToCloseBrowser());
++    }
++    EXPECT_EQ(0, test_window->close_count);
++  }
++  EXPECT_EQ(1, test_window->close_count);
++}
++
++TEST_F(HeliumSpaceServiceTest, EmptyStripCloseDeferralCancelsAfterReinsertion) {
++  tabs::TabInterface* tab = AddOrdinaryTab("https://restored.test/");
++  ASSERT_TRUE(tab);
++  auto* test_window = static_cast<PinTransferTestBrowserWindow*>(window());
++  {
++    HeliumSpaceService::ScopedTabStripEmptyCloseDeferral outer(service_,
++                                                               browser());
++    {
++      HeliumSpaceService::ScopedTabStripEmptyCloseDeferral inner(service_,
++                                                                 browser());
++      auto detached = browser()->tab_strip_model()->DetachTabAtForInsertion(0);
++      EXPECT_FALSE(browser()->IsAttemptingToCloseBrowser());
++      browser()->tab_strip_model()->InsertDetachedTabAt(0, std::move(detached),
++                                                        AddTabTypes::ADD_NONE);
++    }
++    EXPECT_EQ(0, test_window->close_count);
++  }
++  EXPECT_EQ(0, test_window->close_count);
++  EXPECT_FALSE(browser()->IsAttemptingToCloseBrowser());
++  EXPECT_EQ(tab, browser()->tab_strip_model()->GetActiveTab());
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       EmptyStripCloseDeferralDoesNotCloseInitiallyEmptyWindow) {
++  auto* test_window = static_cast<PinTransferTestBrowserWindow*>(window());
++  ASSERT_TRUE(browser()->tab_strip_model()->empty());
++  {
++    HeliumSpaceService::ScopedTabStripEmptyCloseDeferral guard(service_,
++                                                               browser());
++  }
++  EXPECT_EQ(0, test_window->close_count);
++  {
++    HeliumSpaceService::ScopedTabStripEmptyCloseDeferral guard(service_,
++                                                               browser());
++    browser()->TabStripEmpty();
++    guard.CancelPendingClose();
++  }
++  EXPECT_EQ(0, test_window->close_count);
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       EmptyStripCloseDeferralDoesNotBlockExplicitClose) {
++  ASSERT_TRUE(AddOrdinaryTab("https://explicit-close.test/"));
++  auto* test_window = static_cast<PinTransferTestBrowserWindow*>(window());
++  {
++    HeliumSpaceService::ScopedTabStripEmptyCloseDeferral guard(service_,
++                                                               browser());
++    window()->Close();
++    EXPECT_EQ(1, test_window->close_count);
++  }
++  EXPECT_EQ(1, test_window->close_count);
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       EmptyStripCloseDeferralSurvivesExplicitBrowserDestruction) {
++  Browser* secondary = CreateSecondaryBrowser();
++  const base::WeakPtr<Browser> weak = secondary->AsWeakPtr();
++  {
++    HeliumSpaceService::ScopedTabStripEmptyCloseDeferral guard(service_,
++                                                               secondary);
++    DestroySecondaryBrowser(secondary);
++    EXPECT_FALSE(weak);
++  }
++}
++
++TEST_F(HeliumSpaceServiceTest, SolePinSpaceTransferCreatesAndFollowsSamePage) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  content::WebContents* contents = pin->GetContents();
++  auto* source_window = static_cast<PinTransferTestBrowserWindow*>(window());
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("new-primary-target", u"Target");
++  Browser* target_browser = nullptr;
++  int creations = 0;
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting([&](std::string_view space_id) -> Browser* {
++        EXPECT_EQ(target->id(), space_id);
++        ++creations;
++        target_browser = CreateSecondaryBrowser();
++        return target_browser;
++      }));
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting) {
++        EXPECT_EQ(0, source_window->close_count);
++      }));
++
++  ASSERT_TRUE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  ASSERT_TRUE(target_browser);
++  auto* target_window =
++      static_cast<PinTransferTestBrowserWindow*>(target_browser->window());
++  EXPECT_EQ(1, creations);
++  EXPECT_EQ(1, source_window->close_count);
++  EXPECT_EQ(1, target_window->show_count);
++  EXPECT_EQ(1, target_window->activate_count);
++  EXPECT_EQ(target->id(), service_->GetActiveSpace()->id());
++  EXPECT_TRUE(browser()->tab_strip_model()->empty());
++  EXPECT_EQ(1, target_browser->tab_strip_model()->count());
++  EXPECT_EQ(contents, pin->GetContents());
++  EXPECT_EQ(pin, target_browser->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     target_browser, PersistentRecordKind::kPin, id));
++}
++
++TEST_F(HeliumSpaceServiceTest, SolePinRollbackKeepsOriginalFrameAndSelection) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  auto* source_window = static_cast<PinTransferTestBrowserWindow*>(window());
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("sole-rollback-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  auto* target_window =
++      static_cast<PinTransferTestBrowserWindow*>(target_browser->window());
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase == PinSpaceTransferPhaseForTesting::kAfterPlacement) {
++          service_->SetSpaceForBrowser(target_browser, space_->id());
++        }
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(0, source_window->close_count);
++  EXPECT_EQ(0, target_window->close_count);
++  EXPECT_EQ(0, target_window->show_count);
++  EXPECT_EQ(0, target_window->activate_count);
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(pin, browser()->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     browser(), PersistentRecordKind::kPin, id));
++  EXPECT_TRUE(target_browser->tab_strip_model()->empty());
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       DestroyedSourceFrameRollbackPreservesPageInExistingOwner) {
++  AddOrdinaryTab("https://context.test/");
++  HeliumSpace* source =
++      service_->GetOrCreateSpace("destroyed-source", u"Source");
++  Browser* source_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(source_browser, source->id());
++  AddTab(source_browser, GURL("https://preserved.test/"));
++  tabs::TabInterface* pin = source_browser->tab_strip_model()->GetActiveTab();
++  ASSERT_TRUE(pin);
++  const auto id = service_->ConvertTabToPinInSpace(source_browser, source->id(),
++                                                   pin, {}, {});
++  ASSERT_TRUE(id);
++  const tabs::TabHandle handle = pin->GetHandle();
++  content::WebContents* contents = pin->GetContents();
++  Browser* recovery_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(recovery_browser, source->id());
++  AddTab(recovery_browser, GURL("https://existing-owner.test/"));
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("destroyed-source-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  const base::WeakPtr<Browser> destroyed_source = source_browser->AsWeakPtr();
++  int creations = 0;
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting([&](std::string_view) -> Browser* {
++        ++creations;
++        return nullptr;
++      }));
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase == PinSpaceTransferPhaseForTesting::kAfterDetach) {
++          DestroySecondaryBrowser(source_browser);
++          EXPECT_TRUE(handle.Get());
++        }
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), *id, source->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_FALSE(destroyed_source);
++  EXPECT_EQ(0, creations);
++  ASSERT_EQ(pin, handle.Get());
++  EXPECT_EQ(contents, pin->GetContents());
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(recovery_browser,
++            pin->GetBrowserWindowInterface()->GetBrowserForMigrationOnly());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     recovery_browser, PersistentRecordKind::kPin, *id));
++  EXPECT_TRUE(target_browser->tab_strip_model()->empty());
++}
++
++TEST_F(HeliumSpaceServiceTest, ShutdownAfterDetachDoesNotCreateRecoveryWindow) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  const tabs::TabHandle handle = pin->GetHandle();
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("shutdown-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  int creations = 0;
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting([&](std::string_view) -> Browser* {
++        ++creations;
++        return nullptr;
++      }));
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase == PinSpaceTransferPhaseForTesting::kAfterDetach) {
++          service_->Shutdown();
++        }
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++
++  EXPECT_EQ(0, creations);
++  EXPECT_FALSE(handle.Get());
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_TRUE(PersistentItemCodec::FindLink(space_->pins(), id));
++  EXPECT_TRUE(target_browser->tab_strip_model()->empty());
++}
++
++TEST_F(HeliumSpaceServiceTest, PinSpaceTransferKeepsPageStateAndSelection) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  content::WebContents* contents = pin->GetContents();
++  ASSERT_TRUE(service_->ActivatePersistentItem(browser(),
++                                               PersistentRecordKind::kPin, id));
++  const auto original_items = service_->GetOmniboxItemsForBrowser(browser());
++  ASSERT_EQ(1u, original_items.size());
++  ASSERT_GT(original_items.front().use_count, 0);
++  ASSERT_TRUE(content::NavigationSimulator::NavigateAndCommitFromBrowser(
++      contents, GURL("https://pin.test/unsaved-form")));
++  const auto* navigation_entry =
++      contents->GetController().GetLastCommittedEntry();
++  const int navigation_count = contents->GetController().GetEntryCount();
++  tabs::TabInterface* source_selected = AddOrdinaryTab("https://source.test/");
++  ASSERT_TRUE(source_selected);
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("transfer-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  AddTab(target_browser, GURL("https://target.test/"));
++  tabs::TabInterface* target_selected =
++      target_browser->tab_strip_model()->GetActiveTab();
++  ASSERT_TRUE(target_selected);
++  base::RunLoop().RunUntilIdle();
++  const std::string original_active_space = service_->GetActiveSpace()->id();
++  std::vector<std::string> changed_spaces;
++  auto changed = service_->RegisterItemsChanged(
++      base::BindLambdaForTesting([&](const PersistentItemChange& change) {
++        EXPECT_EQ(PersistentItemChangeScope::kSpace, change.scope());
++        changed_spaces.push_back(change.space_id());
++      }));
++  int durable_publications = 0;
++  PrefChangeRegistrar pref_changes;
++  pref_changes.Init(profile()->GetPrefs());
++  pref_changes.Add(
++      kHeliumSpacesPref, base::BindLambdaForTesting([&]() {
++        ++durable_publications;
++        EXPECT_FALSE(PersistentItemCodec::FindLink(space_->pins(), id));
++        EXPECT_TRUE(PersistentItemCodec::FindLink(target->pins(), id));
++        EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                           target_browser, PersistentRecordKind::kPin, id));
++        const auto items = service_->GetOmniboxItemsForBrowser(browser());
++        ASSERT_EQ(1u, items.size());
++        EXPECT_EQ(original_items.front().use_count, items.front().use_count);
++      }));
++
++  ASSERT_TRUE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(1, durable_publications);
++  EXPECT_EQ((std::vector<std::string>{space_->id(), target->id()}),
++            changed_spaces);
++  EXPECT_EQ(1, browser()->tab_strip_model()->count());
++  EXPECT_EQ(2, target_browser->tab_strip_model()->count());
++  EXPECT_EQ(source_selected, browser()->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(target_selected, target_browser->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(original_active_space, service_->GetActiveSpace()->id());
++  EXPECT_EQ(contents, pin->GetContents());
++  EXPECT_EQ(navigation_entry,
++            contents->GetController().GetLastCommittedEntry());
++  EXPECT_EQ(navigation_count, contents->GetController().GetEntryCount());
++  EXPECT_EQ(GURL("https://pin.test/unsaved-form"),
++            contents->GetLastCommittedURL());
++  EXPECT_EQ(target_browser,
++            pin->GetBrowserWindowInterface()->GetBrowserForMigrationOnly());
++  EXPECT_TRUE(TabUIHelper::From(pin)->HasAnchoredPinnedTabHome());
++  GURL home;
++  std::u16string title;
++  ASSERT_TRUE(service_->GetPersistentItemHome(pin, &home, &title));
++  EXPECT_EQ(GURL("https://pin.test/"), home);
++  EXPECT_FALSE(service_->GetLiveTabForPersistentItem(
++      browser(), PersistentRecordKind::kPin, id));
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     target_browser, PersistentRecordKind::kPin, id));
++  const auto moved_items = service_->GetOmniboxItemsForBrowser(browser());
++  ASSERT_EQ(1u, moved_items.size());
++  EXPECT_EQ(target->id(), moved_items.front().space_id);
++  EXPECT_EQ(original_items.front().use_count, moved_items.front().use_count);
++  EXPECT_EQ(original_items.front().last_used_internal_value,
++            moved_items.front().last_used_internal_value);
++  const auto& usage =
++      profile()->GetPrefs()->GetDict(kHeliumPersistentItemUsagePref);
++  EXPECT_FALSE(usage.Find("p:" + space_->id() + ":" + id));
++  EXPECT_TRUE(usage.Find("p:" + target->id() + ":" + id));
++  std::map<std::string, std::string> extra_data;
++  service_->AddPersistentItemToSessionExtraData(pin, &extra_data);
++  EXPECT_EQ("p:" + target->id() + ":" + id,
++            extra_data[kHeliumPersistentItemTabExtraDataKey]);
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       DormantPinSpaceTransferDoesNotCreateWindowOrTab) {
++  tabs::TabInterface* selected = AddOrdinaryTab("https://context.test/");
++  HeliumSpace* source = service_->GetOrCreateSpaceReplacingPins(
++      "closed-source", u"Closed source",
++      {LinkNode("closed-pin", u"Closed", "https://closed.test/")});
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("closed-target", u"Closed target");
++  int creations = 0;
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting([&](std::string_view) -> Browser* {
++        ++creations;
++        return nullptr;
++      }));
++  const std::string active_space = service_->GetActiveSpace()->id();
++
++  ASSERT_TRUE(service_->MovePinToSpace(browser(), "closed-pin", source->id(),
++                                       target->id()));
++
++  EXPECT_EQ(0, creations);
++  EXPECT_EQ(1, browser()->tab_strip_model()->count());
++  EXPECT_EQ(selected, browser()->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(active_space, service_->GetActiveSpace()->id());
++  EXPECT_FALSE(source->GetPrimaryBrowser());
++  EXPECT_FALSE(target->GetPrimaryBrowser());
++  EXPECT_FALSE(PersistentItemCodec::FindLink(source->pins(), "closed-pin"));
++  EXPECT_TRUE(PersistentItemCodec::FindLink(target->pins(), "closed-pin"));
++  const auto items = service_->GetOmniboxItemsForBrowser(browser());
++  ASSERT_EQ(1u, items.size());
++  EXPECT_FALSE(items.front().is_live);
++  EXPECT_EQ(target->id(), items.front().space_id);
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferRejectsUnavailableDestinationAtomically) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  content::WebContents* contents = pin->GetContents();
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("unavailable-target", u"Target");
++  const PersistentNodes original_pins = space_->pins();
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  const base::DictValue original_usage =
++      profile()->GetPrefs()->GetDict(kHeliumPersistentItemUsagePref).Clone();
++  int detachments = 0;
++  service_->SetPinSpaceTransferHookForTesting(base::BindLambdaForTesting(
++      [&](PinSpaceTransferPhaseForTesting) { ++detachments; }));
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting(
++          [](std::string_view) -> Browser* { return nullptr; }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++
++  EXPECT_EQ(0, detachments);
++  EXPECT_EQ(original_pins, space_->pins());
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(original_usage,
++            profile()->GetPrefs()->GetDict(kHeliumPersistentItemUsagePref));
++  EXPECT_EQ(contents, pin->GetContents());
++  EXPECT_EQ(pin, browser()->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     browser(), PersistentRecordKind::kPin, id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferRestoresSourceWhenDestinationClosesAfterDetach) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  auto [second_id, second_pin] = AddLivePin();
++  ASSERT_TRUE(second_pin);
++  tabs::TabInterface* selected = AddOrdinaryTab("https://selected.test/");
++  ASSERT_TRUE(selected);
++  TabStripModel* source_model = browser()->tab_strip_model();
++  source_model->SelectTabAt(source_model->GetIndexOfTab(pin));
++  const auto original_selection = source_model->selection_model();
++  const int original_index = source_model->GetIndexOfTab(pin);
++  auto* original_parent =
++      const_cast<tabs::TabCollection*>(pin->GetParentCollection());
++  const auto original_parent_index = original_parent->GetIndexOfTab(pin);
++  ASSERT_TRUE(original_parent_index);
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("destroyed-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  const PersistentNodes original_pins = space_->pins();
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  content::WebContents* contents = pin->GetContents();
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase == PinSpaceTransferPhaseForTesting::kAfterDetach) {
++          DestroySecondaryBrowser(target_browser);
++        }
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(original_pins, space_->pins());
++  EXPECT_EQ(contents, pin->GetContents());
++  EXPECT_EQ(original_index, source_model->GetIndexOfTab(pin));
++  EXPECT_EQ(original_parent, pin->GetParentCollection());
++  EXPECT_EQ(original_parent_index, original_parent->GetIndexOfTab(pin));
++  EXPECT_EQ(original_selection, source_model->selection_model());
++  EXPECT_EQ(selected, source_model->GetActiveTab());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     browser(), PersistentRecordKind::kPin, id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferRestoresSourceWhenDestinationSpaceChanges) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  tabs::TabInterface* selected = AddOrdinaryTab("https://selected.test/");
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("reassigned-target", u"Target");
++  HeliumSpace* other = service_->GetOrCreateSpace("reassigned-other", u"Other");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  AddTab(target_browser, GURL("https://target-selected.test/"));
++  tabs::TabInterface* target_selected =
++      target_browser->tab_strip_model()->GetActiveTab();
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  const int original_index = browser()->tab_strip_model()->GetIndexOfTab(pin);
++  content::WebContents* contents = pin->GetContents();
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase == PinSpaceTransferPhaseForTesting::kAfterPlacement) {
++          service_->SetSpaceForBrowser(target_browser, other->id());
++        }
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(original_index, browser()->tab_strip_model()->GetIndexOfTab(pin));
++  EXPECT_EQ(selected, browser()->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(target_selected, target_browser->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(1, target_browser->tab_strip_model()->count());
++  EXPECT_EQ(contents, pin->GetContents());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     browser(), PersistentRecordKind::kPin, id));
++  std::map<std::string, std::string> extra_data;
++  service_->AddPersistentItemToSessionExtraData(pin, &extra_data);
++  EXPECT_EQ("p:" + space_->id() + ":" + id,
++            extra_data[kHeliumPersistentItemTabExtraDataKey]);
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferUsesQualifiedIdentityAcrossWindows) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  AddOrdinaryTab("https://source-selected.test/");
++  HeliumSpace* duplicate_owner = service_->GetOrCreateSpaceReplacingPins(
++      "duplicate-owner", u"Duplicate",
++      {LinkNode(id, u"Duplicate", "https://duplicate.test/")});
++  Browser* context_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(context_browser, duplicate_owner->id());
++  AddTab(context_browser, GURL("https://context.test/"));
++  tabs::TabInterface* context_selected =
++      context_browser->tab_strip_model()->GetActiveTab();
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("qualified-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  const std::string active_space = service_->GetActiveSpace()->id();
++
++  ASSERT_TRUE(service_->MovePinToSpace(context_browser, id, space_->id(),
++                                       target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_TRUE(PersistentItemCodec::FindLink(duplicate_owner->pins(), id));
++  EXPECT_EQ(GURL("https://duplicate.test/"),
++            PersistentItemCodec::FindLink(duplicate_owner->pins(), id)->url);
++  EXPECT_EQ(context_selected,
++            context_browser->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(active_space, service_->GetActiveSpace()->id());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     target_browser, PersistentRecordKind::kPin, id));
++  EXPECT_FALSE(service_->IsPersistentItemLive(context_browser,
++                                              PersistentRecordKind::kPin, id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferRejectsLinkAndFolderIdCollisions) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  HeliumSpace* target = service_->GetOrCreateSpaceReplacingPins(
++      "collision-target", u"Target",
++      {LinkNode(id, u"Duplicate", "https://duplicate.test/")});
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  target = service_->GetOrCreateSpaceReplacingPins(
++      "collision-target", u"Target",
++      {PersistentNode{.data = PersistentFolder{.id = id, .title = u"Folder"}}});
++  const base::ListValue folder_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  EXPECT_EQ(folder_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     browser(), PersistentRecordKind::kPin, id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferRejectsCrossProfileContextAndDestination) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  HeliumSpace* target = service_->GetOrCreateSpace("foreign-target", u"Target");
++  TestingProfile* foreign_profile = CreateProfile("foreign-pin-transfer");
++  Browser* foreign_browser = CreateSecondaryBrowser(foreign_profile);
++  AddTab(foreign_browser, GURL("https://foreign.test/"));
++  tabs::TabInterface* foreign_selected =
++      foreign_browser->tab_strip_model()->GetActiveTab();
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  EXPECT_FALSE(service_->MovePinToSpace(foreign_browser, id, space_->id(),
++                                        target->id()));
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting(
++          [&](std::string_view) -> Browser* { return foreign_browser; }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     browser(), PersistentRecordKind::kPin, id));
++  EXPECT_EQ(foreign_selected,
++            foreign_browser->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(1, foreign_browser->tab_strip_model()->count());
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       ActivePinSpaceTransferWithOtherSourceTabsPreservesDestinationSelection) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  tabs::TabInterface* source_other =
++      AddOrdinaryTab("https://source-other.test/");
++  browser()->tab_strip_model()->ActivateTabAt(
++      browser()->tab_strip_model()->GetIndexOfTab(pin));
++  HeliumSpace* target = service_->GetOrCreateSpace("active-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  AddTab(target_browser, GURL("https://target-other.test/"));
++  tabs::TabInterface* target_selected =
++      target_browser->tab_strip_model()->GetActiveTab();
++  const std::string original_active_space = service_->GetActiveSpace()->id();
++
++  ASSERT_TRUE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(source_other, browser()->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(target_selected, target_browser->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(original_active_space, service_->GetActiveSpace()->id());
++  auto* target_window =
++      static_cast<PinTransferTestBrowserWindow*>(target_browser->window());
++  EXPECT_EQ(0, target_window->show_count);
++  EXPECT_EQ(0, target_window->activate_count);
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       QuittingDoesNotResurrectExplicitlyDestroyedSource) {
++  AddOrdinaryTab("https://context.test/");
++  HeliumSpace* source =
++      service_->GetOrCreateSpace("quitting-source", u"Source");
++  Browser* source_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(source_browser, source->id());
++  AddTab(source_browser, GURL("https://quitting-pin.test/"));
++  tabs::TabInterface* pin = source_browser->tab_strip_model()->GetActiveTab();
++  const auto id = service_->ConvertTabToPinInSpace(source_browser, source->id(),
++                                                   pin, {}, {});
++  ASSERT_TRUE(id);
++  const tabs::TabHandle handle = pin->GetHandle();
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("quitting-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  int creations = 0;
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting([&](std::string_view) -> Browser* {
++        ++creations;
++        return nullptr;
++      }));
++  base::ScopedClosureRunner reset_quit(
++      base::BindOnce([]() { browser_shutdown::SetTryingToQuit(false); }));
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase == PinSpaceTransferPhaseForTesting::kAfterDetach) {
++          browser_shutdown::SetTryingToQuit(true);
++          DestroySecondaryBrowser(source_browser);
++        }
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), *id, source->id(), target->id()));
++
++  EXPECT_EQ(0, creations);
++  EXPECT_FALSE(handle.Get());
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_TRUE(PersistentItemCodec::FindLink(source->pins(), *id));
++  EXPECT_TRUE(target_browser->tab_strip_model()->empty());
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       QualifiedDormantPinMutationsDoNotCreateOwningWindow) {
++  tabs::TabInterface* selected = AddOrdinaryTab("https://context.test/");
++  PersistentNode folder{
++      .data = PersistentFolder{.id = "folder", .title = u"Folder"}};
++  HeliumSpace* owner = service_->GetOrCreateSpaceReplacingPins(
++      "closed-mutation-owner", u"Closed",
++      {LinkNode("pin", u"Pin", "https://closed.test/"), folder});
++  int creations = 0;
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting([&](std::string_view) -> Browser* {
++        ++creations;
++        return nullptr;
++      }));
++
++  ASSERT_TRUE(
++      service_->MovePinInSpace(browser(), owner->id(), "pin", "folder", {}));
++  ASSERT_TRUE(service_->TogglePinFolderCollapsedInSpace(browser(), owner->id(),
++                                                        "folder"));
++  ASSERT_TRUE(
++      service_->RemovePersistentItemInSpace(browser(), owner->id(), "pin"));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(0, creations);
++  EXPECT_FALSE(owner->GetPrimaryBrowser());
++  EXPECT_EQ(1, browser()->tab_strip_model()->count());
++  EXPECT_EQ(selected, browser()->tab_strip_model()->GetActiveTab());
++  const PersistentFolder* remaining =
++      PersistentItemCodec::FindFolder(owner->pins(), "folder");
++  ASSERT_TRUE(remaining);
++  EXPECT_TRUE(remaining->collapsed);
++  EXPECT_TRUE(remaining->children.empty());
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       SavedPinSplitRejectsSingleMemberMutationsBeforeDurableChanges) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  PersistentNodes pins;
++  pins.push_back(
++      PersistentNode{.data = PersistentFolder{.id = "split-folder",
++                                              .title = u"Split",
++                                              .children = space_->pins()}});
++  pins.push_back(PersistentNode{
++      .data = PersistentFolder{.id = "other-folder", .title = u"Other"}});
++  space_->SetPins(std::move(pins));
++  tabs::TabInterface* companion = AddOrdinaryTab("https://companion.test/");
++  ASSERT_TRUE(companion);
++  TabStripModel* model = browser()->tab_strip_model();
++  model->ActivateTabAt(model->GetIndexOfTab(pin));
++  const auto split = model->AddToNewSplit(
++      {model->GetIndexOfTab(companion)}, split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kToolbarButton);
++  ASSERT_TRUE(model->GetSplitData(split));
++  ASSERT_TRUE(pin->IsSplit());
++  ASSERT_TRUE(companion->IsSplit());
++  const tabs::TabCollection* original_parent = pin->GetParentCollection();
++  const PersistentNodes original_pins = space_->pins();
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("split-move-target", u"Target");
++  const PersistentNodes original_target_pins = target->pins();
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  const base::ListValue original_favorites =
++      profile()->GetPrefs()->GetList(kHeliumFavoritesPref).Clone();
++  int creations = 0;
++  service_->SetPinSpaceTransferBrowserFactoryForTesting(
++      base::BindLambdaForTesting([&](std::string_view) -> Browser* {
++        ++creations;
++        return nullptr;
++      }));
++
++  ASSERT_FALSE(service_->MovePinInSpace(browser(), space_->id(), id,
++                                        "other-folder", {}));
++  ASSERT_FALSE(service_->MovePinInSpace(browser(), space_->id(), "split-folder",
++                                        "other-folder", {}));
++  ASSERT_FALSE(service_->ConvertPinToTabInSpace(browser(), space_->id(), id,
++                                                std::nullopt));
++  ASSERT_FALSE(service_->PromotePinToFavorite(browser(), space_->id(), id));
++  ASSERT_FALSE(service_->CreatePinFolderForTab(pin));
++  ASSERT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  ASSERT_FALSE(
++      service_->RemovePersistentItemInSpace(browser(), space_->id(), id));
++
++  EXPECT_EQ(0, creations);
++  EXPECT_EQ(original_pins, space_->pins());
++  EXPECT_EQ(original_target_pins, target->pins());
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(original_favorites,
++            profile()->GetPrefs()->GetList(kHeliumFavoritesPref));
++  EXPECT_EQ(2, model->count());
++  EXPECT_TRUE(model->GetSplitData(split));
++  EXPECT_TRUE(pin->IsSplit());
++  EXPECT_TRUE(companion->IsSplit());
++  EXPECT_EQ(original_parent, pin->GetParentCollection());
++  EXPECT_EQ(pin, model->GetActiveTab());
++  EXPECT_EQ(pin, service_->GetLiveTabForPersistentItem(
++                     browser(), PersistentRecordKind::kPin, id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       FavoriteSplitRemovalRejectsBeforeDurableOrNativeMutation) {
++  tabs::TabInterface* favorite = AddOrdinaryTab("https://favorite-split.test/");
++  ASSERT_TRUE(favorite);
++  ASSERT_TRUE(service_->AddFavoriteFromTab(favorite));
++  const auto id = service_->GetPersistentItemId(favorite);
++  ASSERT_TRUE(id);
++  tabs::TabInterface* companion = AddOrdinaryTab("https://companion.test/");
++  ASSERT_TRUE(companion);
++  TabStripModel* model = browser()->tab_strip_model();
++  model->ActivateTabAt(model->GetIndexOfTab(favorite));
++  const auto split = model->AddToNewSplit(
++      {model->GetIndexOfTab(companion)}, split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kToolbarButton);
++  ASSERT_TRUE(model->GetSplitData(split));
++  ASSERT_TRUE(favorite->IsSplit());
++  ASSERT_TRUE(companion->IsSplit());
++  ASSERT_EQ(favorite, service_->GetLiveTabForPersistentItem(
++                          browser(), PersistentRecordKind::kFavorite, *id));
++  const tabs::TabCollection* original_parent = favorite->GetParentCollection();
++  content::WebContents* contents = favorite->GetContents();
++  const base::ListValue original_favorites =
++      profile()->GetPrefs()->GetList(kHeliumFavoritesPref).Clone();
++  const base::ListValue original_spaces =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++
++  EXPECT_FALSE(service_->RemovePersistentItem(
++      browser(), PersistentRecordKind::kFavorite, *id));
++
++  EXPECT_EQ(original_favorites,
++            profile()->GetPrefs()->GetList(kHeliumFavoritesPref));
++  EXPECT_EQ(original_spaces, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_EQ(2, model->count());
++  EXPECT_TRUE(model->GetSplitData(split));
++  EXPECT_TRUE(favorite->IsSplit());
++  EXPECT_TRUE(companion->IsSplit());
++  EXPECT_EQ(original_parent, favorite->GetParentCollection());
++  EXPECT_EQ(contents, favorite->GetContents());
++  EXPECT_EQ(favorite, model->GetActiveTab());
++  EXPECT_EQ(favorite, service_->GetLiveTabForPersistentItem(
++                          browser(), PersistentRecordKind::kFavorite, *id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferRevalidatesAfterHomeReseedClosesTab) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  const tabs::TabHandle handle = pin->GetHandle();
++  AddOrdinaryTab("https://source-other.test/");
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("home-close-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  AddTab(target_browser, GURL("https://target-other.test/"));
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  std::vector<int> notification_order;
++  base::CallbackListSubscription before_delete;
++  base::CallbackListSubscription ui_change;
++  base::CallbackListSubscription after_delete;
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase != PinSpaceTransferPhaseForTesting::kAfterPlacement) {
++          return;
++        }
++        TabUIHelper* helper = TabUIHelper::From(handle.Get());
++        ASSERT_TRUE(helper);
++        helper->ClearAnchoredPinnedTabHome();
++        before_delete =
++            helper->AddTabUIChangeCallback(base::BindLambdaForTesting(
++                [&]() { notification_order.push_back(1); }));
++        ui_change =
++            helper->AddTabUIChangeCallback(base::BindLambdaForTesting([&]() {
++              notification_order.push_back(2);
++              tabs::TabInterface* current = handle.Get();
++              ASSERT_TRUE(current);
++              const int index =
++                  target_browser->tab_strip_model()->GetIndexOfTab(current);
++              ASSERT_NE(TabStripModel::kNoTab, index);
++              target_browser->tab_strip_model()->DetachAndDeleteWebContentsAt(
++                  index);
++            }));
++        after_delete =
++            helper->AddTabUIChangeCallback(base::BindLambdaForTesting(
++                [&]() { notification_order.push_back(3); }));
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_FALSE(handle.Get());
++  EXPECT_EQ((std::vector<int>{1, 2}), notification_order);
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_TRUE(PersistentItemCodec::FindLink(space_->pins(), id));
++  EXPECT_FALSE(PersistentItemCodec::FindLink(target->pins(), id));
++  EXPECT_EQ(1, target_browser->tab_strip_model()->count());
++  EXPECT_FALSE(service_->IsPersistentItemLive(browser(),
++                                              PersistentRecordKind::kPin, id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       PinSpaceTransferRevalidatesAfterHomeReseedShutsDownService) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  const tabs::TabHandle handle = pin->GetHandle();
++  content::WebContents* contents = pin->GetContents();
++  AddOrdinaryTab("https://source-other.test/");
++  HeliumSpace* target =
++      service_->GetOrCreateSpace("home-shutdown-target", u"Target");
++  Browser* target_browser = CreateSecondaryBrowser();
++  service_->SetSpaceForBrowser(target_browser, target->id());
++  AddTab(target_browser, GURL("https://target-other.test/"));
++  const base::ListValue original_pref =
++      profile()->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  base::CallbackListSubscription ui_change;
++  service_->SetPinSpaceTransferHookForTesting(
++      base::BindLambdaForTesting([&](PinSpaceTransferPhaseForTesting phase) {
++        if (phase != PinSpaceTransferPhaseForTesting::kAfterPlacement) {
++          return;
++        }
++        TabUIHelper* helper = TabUIHelper::From(handle.Get());
++        ASSERT_TRUE(helper);
++        helper->ClearAnchoredPinnedTabHome();
++        ui_change = helper->AddTabUIChangeCallback(
++            base::BindLambdaForTesting([&]() { service_->Shutdown(); }));
++      }));
++
++  EXPECT_FALSE(
++      service_->MovePinToSpace(browser(), id, space_->id(), target->id()));
++
++  ASSERT_TRUE(handle.Get());
++  EXPECT_EQ(contents, handle.Get()->GetContents());
++  EXPECT_EQ(original_pref, profile()->GetPrefs()->GetList(kHeliumSpacesPref));
++  EXPECT_TRUE(PersistentItemCodec::FindLink(space_->pins(), id));
++  EXPECT_FALSE(PersistentItemCodec::FindLink(target->pins(), id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       QualifiedPinRemovalRevalidatesAfterHomeClearClosesTab) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  const tabs::TabHandle handle = pin->GetHandle();
++  AddOrdinaryTab("https://source-other.test/");
++  auto ui_change = TabUIHelper::From(pin)->AddTabUIChangeCallback(
++      base::BindLambdaForTesting([&]() {
++        tabs::TabInterface* current = handle.Get();
++        ASSERT_TRUE(current);
++        const int index = browser()->tab_strip_model()->GetIndexOfTab(current);
++        ASSERT_NE(TabStripModel::kNoTab, index);
++        browser()->tab_strip_model()->DetachAndDeleteWebContentsAt(index);
++      }));
++
++  ASSERT_TRUE(
++      service_->RemovePersistentItemInSpace(browser(), space_->id(), id));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_FALSE(handle.Get());
++  EXPECT_FALSE(PersistentItemCodec::FindLink(space_->pins(), id));
++  EXPECT_EQ(1, browser()->tab_strip_model()->count());
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       QualifiedPinRemovalRevalidatesAfterHomeClearShutsDownService) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  const tabs::TabHandle handle = pin->GetHandle();
++  content::WebContents* contents = pin->GetContents();
++  const tabs::TabCollection* original_parent = pin->GetParentCollection();
++  auto ui_change = TabUIHelper::From(pin)->AddTabUIChangeCallback(
++      base::BindLambdaForTesting([&]() { service_->Shutdown(); }));
++
++  ASSERT_TRUE(
++      service_->RemovePersistentItemInSpace(browser(), space_->id(), id));
++
++  ASSERT_TRUE(handle.Get());
++  EXPECT_EQ(contents, handle.Get()->GetContents());
++  EXPECT_EQ(original_parent, handle.Get()->GetParentCollection());
++  EXPECT_FALSE(PersistentItemCodec::FindLink(space_->pins(), id));
++}
++
++TEST_F(HeliumSpaceServiceTest,
++       QualifiedLivePinRemovalPreservesPageInOwningWindow) {
++  auto [id, pin] = AddLivePin();
++  ASSERT_TRUE(pin);
++  content::WebContents* contents = pin->GetContents();
++  ASSERT_TRUE(content::NavigationSimulator::NavigateAndCommitFromBrowser(
++      contents, GURL("https://pin.test/unsaved-form")));
++  Browser* context_browser = CreateSecondaryBrowser();
++  HeliumSpace* context_space =
++      service_->GetOrCreateSpace("remove-context", u"Context");
++  service_->SetSpaceForBrowser(context_browser, context_space->id());
++  AddTab(context_browser, GURL("https://context.test/"));
++  tabs::TabInterface* context_selected =
++      context_browser->tab_strip_model()->GetActiveTab();
++
++  ASSERT_TRUE(
++      service_->RemovePersistentItemInSpace(context_browser, space_->id(), id));
++  base::RunLoop().RunUntilIdle();
++
++  EXPECT_EQ(contents, pin->GetContents());
++  EXPECT_EQ(GURL("https://pin.test/unsaved-form"),
++            contents->GetLastCommittedURL());
++  EXPECT_EQ(browser(),
++            pin->GetBrowserWindowInterface()->GetBrowserForMigrationOnly());
++  EXPECT_EQ(pin, browser()->tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(context_selected,
++            context_browser->tab_strip_model()->GetActiveTab());
++  EXPECT_FALSE(service_->IsPersistentItemTab(pin));
++  EXPECT_FALSE(TabUIHelper::From(pin)->HasAnchoredPinnedTabHome());
++  EXPECT_FALSE(PersistentItemCodec::FindLink(space_->pins(), id));
++}
++
+ TEST_F(HeliumSpaceServiceTest, OmniboxCurrentMeansSelectedInSourceWindow) {
+   auto* favorite = AddOrdinaryTab("https://favorite.test/");
+   browser()->tab_strip_model()->ActivateTabAt(
+@@ -868,5 +1865,52 @@ TEST_F(HeliumSpaceServiceTest, ActionSeq
+   }
+ }
+ 
++TEST_F(HeliumSpaceServiceTest,
++       ProfileDestructionCancelsPendingPinCloseCallbacks) {
++  // This fixture deletes profiles directly. Release Browser's keepalive
++  // synchronously so its inherited task cannot outlive the profile.
++  base::test::ScopedFeatureList feature_list;
++  feature_list.InitAndDisableFeature(features::kDestroyProfileOnBrowserClose);
++
++  // Destroy an actual keyed-service profile with close bookkeeping still
++  // queued. The manager collection must outlive Spaces' phase-one observation
++  // cleanup.
++  constexpr char kRetiringProfile[] = "space-shutdown";
++  TestingProfile* retiring_profile = CreateProfile(kRetiringProfile);
++  auto retiring_profile_weak = retiring_profile->GetWeakPtr();
++  auto* retiring_service =
++      HeliumSpaceServiceFactory::GetInstance()->SetTestingSubclassFactoryAndUse(
++          retiring_profile,
++          base::BindOnce([](content::BrowserContext* context) {
++            return std::make_unique<HeliumSpaceService>(
++                static_cast<Profile*>(context));
++          }));
++  ASSERT_TRUE(retiring_service);
++  auto retiring_browser = CreateBrowser(retiring_profile, Browser::TYPE_NORMAL,
++                                        /*hosted_app=*/false);
++  AddTab(retiring_browser.get(), GURL("https://shutdown.test/"));
++  ASSERT_TRUE(retiring_service->AddPinFromTab(
++      retiring_browser->tab_strip_model()->GetActiveTab()));
++  const auto durable_spaces =
++      retiring_profile->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  int shutdown_updates = 0;
++  auto shutdown_subscription =
++      retiring_service->RegisterItemsChanged(base::BindRepeating(
++          [](int* updates, const PersistentItemChange&) { ++*updates; },
++          &shutdown_updates));
++  // Closing a live Pin posts deferred lifecycle work. Do not drain it before
++  // deleting the profile, and keep the subscription alive across that deletion.
++  retiring_browser->tab_strip_model()->CloseAllTabs();
++  retiring_browser->GetFeatures().TearDownPreBrowserWindowDestruction();
++  retiring_browser.reset();
++  EXPECT_EQ(durable_spaces,
++            retiring_profile->GetPrefs()->GetList(kHeliumSpacesPref));
++  const int updates_before_destruction = shutdown_updates;
++  DeleteProfile(kRetiringProfile);
++  ASSERT_FALSE(retiring_profile_weak);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(updates_before_destruction, shutdown_updates);
++}
++
+ }  // namespace
+ }  // namespace helium

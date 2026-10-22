@@ -1,0 +1,32 @@
+# Keep Chrome unit-test profile directories in suite-owned temporary storage.
+--- a/chrome/test/base/chrome_unit_test_suite.cc
++++ b/chrome/test/base/chrome_unit_test_suite.cc
+@@ -151,6 +151,8 @@ void ChromeUnitTestSuite::Initialize() {
+     ChromeContentClient content_client;
+     RegisterContentSchemes(&content_client);
+   }
++  // Keep test profiles in suite-owned temporary storage through shutdown.
++  user_data_dir_override_.emplace(chrome::DIR_USER_DATA);
+   InitializeProviders();
+   RegisterInProcessThreads();
+ 
+--- a/chrome/test/base/chrome_unit_test_suite.h
++++ b/chrome/test/base/chrome_unit_test_suite.h
+@@ -5,6 +5,9 @@
+ #ifndef CHROME_TEST_BASE_CHROME_UNIT_TEST_SUITE_H_
+ #define CHROME_TEST_BASE_CHROME_UNIT_TEST_SUITE_H_
+ 
++#include <optional>
++
++#include "base/test/scoped_path_override.h"
+ #include "base/test/test_discardable_memory_allocator.h"
+ #include "chrome/test/base/chrome_test_suite.h"
+ 
+@@ -28,6 +31,7 @@ class ChromeUnitTestSuite : public Chrom
+   static void InitializeResourceBundle();
+ 
+  private:
++  std::optional<base::ScopedPathOverride> user_data_dir_override_;
+   base::TestDiscardableMemoryAllocator discardable_memory_allocator_;
+ };
+ 

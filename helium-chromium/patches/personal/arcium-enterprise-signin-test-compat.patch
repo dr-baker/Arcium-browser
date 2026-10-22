@@ -1,0 +1,103 @@
+--- a/chrome/browser/enterprise/signin/profile_management_disclaimer_service_browsertest.cc
++++ b/chrome/browser/enterprise/signin/profile_management_disclaimer_service_browsertest.cc
+@@ -942,81 +942,6 @@
+ // be disabled while waiting for the policy registration to complete. In this
+ // case, it should not crash.
+ IN_PROC_BROWSER_TEST_F(ProfileManagementDisclaimerServiceBrowserTest,
+-                       BrowserSigninDisabledProfileSeparationSuggested) {
+-  auto* disclaimer_service = GetDisclaimerService();
+-
+-  // User accepts the disclaimer.
+-  disclaimer_service->SetUserChoiceForTesting(
+-      signin::SigninChoice::SIGNIN_CHOICE_CONTINUE);
+-  disclaimer_service->SetProfileSeparationPoliciesForTesting(
+-      policy::ProfileSeparationPolicies());
+-
+-  // Ensure registration succeeds.
+-  static_cast<policy::FakeUserPolicySigninService*>(
+-      policy::UserPolicySigninServiceFactory::GetForProfile(GetProfile()))
+-      ->UpdateDMTokenAndClientId("dm_token", "client_id");
+-
+-  // This should trigger the failure to register.
+-  AccountInfo account_info =
+-      MakeValidAccountInfoForAccount("bob@example.com", "example.com");
+-  base::RunLoop().RunUntilIdle();
+-  GetProfile()->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
+-
+-  {
+-    base::test::TestFuture<Profile*, bool> future;
+-    disclaimer_service->EnsureManagedProfileForAccount(
+-        account_info.account_id,
+-        signin_metrics::AccessPoint::kEnterpriseManagementDisclaimerAtStartup,
+-        future.GetCallback());
+-
+-    ASSERT_TRUE(future.Wait());
+-    Profile* new_profile = future.Get<Profile*>();
+-    ASSERT_FALSE(new_profile);
+-    EXPECT_TRUE(GetIdentityManager(GetProfile())
+-                    ->HasAccountWithRefreshToken(account_info.account_id));
+-  }
+-}
+-
+-IN_PROC_BROWSER_TEST_F(ProfileManagementDisclaimerServiceBrowserTest,
+-                       BrowserSigninDisabledProfileSeparationEnforced) {
+-  auto* disclaimer_service = GetDisclaimerService();
+-
+-  // User accepts the disclaimer.
+-  disclaimer_service->SetUserChoiceForTesting(
+-      signin::SigninChoice::SIGNIN_CHOICE_CONTINUE);
+-  disclaimer_service->SetProfileSeparationPoliciesForTesting(
+-      policy::ProfileSeparationPolicies(
+-          /*profile_separation_settings=*/policy::ProfileSeparationSettings::
+-              ENFORCED,
+-          /*profile_separation_data_migration_settings=*/std::nullopt));
+-
+-  // Ensure registration succeeds.
+-  static_cast<policy::FakeUserPolicySigninService*>(
+-      policy::UserPolicySigninServiceFactory::GetForProfile(GetProfile()))
+-      ->UpdateDMTokenAndClientId("dm_token", "client_id");
+-
+-  // This should trigger the failure to register.
+-  AccountInfo account_info =
+-      MakeValidAccountInfoForAccount("bob@example.com", "example.com");
+-  base::RunLoop().RunUntilIdle();
+-  GetProfile()->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
+-
+-  {
+-    base::test::TestFuture<Profile*, bool> future;
+-    disclaimer_service->EnsureManagedProfileForAccount(
+-        account_info.account_id,
+-        signin_metrics::AccessPoint::kEnterpriseManagementDisclaimerAtStartup,
+-        future.GetCallback());
+-
+-    ASSERT_TRUE(future.Wait());
+-    Profile* new_profile = future.Get<Profile*>();
+-    ASSERT_FALSE(new_profile);
+-    EXPECT_FALSE(GetIdentityManager(GetProfile())
+-                     ->HasAccountWithRefreshToken(account_info.account_id));
+-  }
+-}
+-
+-IN_PROC_BROWSER_TEST_F(ProfileManagementDisclaimerServiceBrowserTest,
+                        CancelFlowOnAccountRemoval) {
+   auto* disclaimer_service = GetDisclaimerService();
+ 
+--- a/chrome/browser/enterprise/signin/token_managed_profile_creation_delegate_unittest.cc
++++ b/chrome/browser/enterprise/signin/token_managed_profile_creation_delegate_unittest.cc
+@@ -22,7 +22,6 @@
+ #include "chrome/test/base/testing_profile.h"
+ #include "chrome/test/base/testing_profile_manager.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/signin/public/base/signin_pref_names.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "services/network/public/mojom/cookie_manager.mojom.h"
+@@ -110,8 +109,6 @@
+     CreateCookies(profile_.get(), {{"https://google.com", "newgoogle2"},
+                                    {"https://example.com", "newexample2"}});
+ 
+-    profile_->GetPrefs()->SetString(prefs::kSigninInterceptionIDPCookiesUrl,
+-                                    "https://www.google.com/");
+   }
+ 
+   void VerifyCookiesMoved() {

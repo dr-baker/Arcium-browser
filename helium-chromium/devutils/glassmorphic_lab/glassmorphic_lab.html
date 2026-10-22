@@ -1,0 +1,1455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arcium glassmorphic glass lab</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "SF Pro Display", sans-serif;
+      background: #080a10;
+      color: #edf1ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(69, 92, 182, .22), transparent 38%),
+        radial-gradient(circle at 92% 10%, rgba(161, 58, 173, .16), transparent 34%),
+        #080a10;
+    }
+
+    main {
+      width: min(1120px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 36px 0 52px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 28px;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 46px);
+      letter-spacing: -.045em;
+      line-height: 1;
+    }
+
+    .eyebrow {
+      margin: 0 0 9px;
+      color: #8da7ff;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .lede {
+      max-width: 590px;
+      margin: 12px 0 0;
+      color: #9da6bf;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .badge {
+      flex: none;
+      padding: 9px 13px;
+      border: 1px solid rgba(161, 178, 255, .25);
+      border-radius: 999px;
+      background: rgba(31, 40, 77, .46);
+      color: #b9c6ff;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid rgba(153, 167, 216, .18);
+      border-radius: 10px;
+      background: rgba(17, 21, 36, .82);
+      color: #aeb6cb;
+      font-size: 12px;
+    }
+
+    select, button {
+      border: 0;
+      border-radius: 7px;
+      background: #202845;
+      color: #f1f4ff;
+      font: inherit;
+      font-size: 12px;
+      outline: none;
+    }
+
+    select { padding: 5px 8px; }
+
+    button {
+      cursor: pointer;
+      padding: 9px 13px;
+      background: #5877ff;
+      font-weight: 700;
+    }
+
+    button:hover { background: #6d89ff; }
+
+    .readout {
+      margin-left: auto;
+      color: #8f99b2;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+    }
+
+    .playground {
+      display: grid;
+      grid-template-columns: minmax(252px, 306px) minmax(0, 1fr);
+      align-items: start;
+      gap: 14px;
+    }
+
+    .controls {
+      min-width: 0;
+      padding: 15px;
+      border: 1px solid rgba(163, 175, 224, .20);
+      border-radius: 17px;
+      background: rgba(14, 18, 31, .88);
+      box-shadow: 0 18px 54px rgba(0, 0, 0, .24);
+    }
+
+    .controls-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 13px;
+    }
+
+    .controls h2 {
+      margin: 0;
+      color: #eff2ff;
+      font-size: 17px;
+      letter-spacing: -.02em;
+    }
+
+    .control-status {
+      flex: none;
+      max-width: 114px;
+      overflow: hidden;
+      padding: 5px 8px;
+      border: 1px solid rgba(143, 167, 255, .28);
+      border-radius: 999px;
+      color: #aebdff;
+      font: 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preset-block {
+      padding-bottom: 14px;
+    }
+
+    .control-caption {
+      display: block;
+      margin-bottom: 7px;
+      color: #7f8aa8;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .preset-buttons {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .preset-button {
+      overflow: hidden;
+      padding: 8px 7px;
+      border: 1px solid rgba(153, 167, 216, .20);
+      border-radius: 9px;
+      background: rgba(32, 40, 69, .62);
+      color: #aeb6cb;
+      font-size: 11px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preset-button:hover { background: rgba(82, 105, 184, .58); }
+
+    .preset-button.active {
+      border-color: rgba(139, 164, 255, .75);
+      background: rgba(77, 103, 210, .72);
+      color: #fff;
+      box-shadow: 0 0 0 2px rgba(92, 122, 255, .14);
+    }
+
+    .control-group {
+      padding: 13px 0 4px;
+      border-top: 1px solid rgba(153, 167, 216, .14);
+    }
+
+    .control-group h3 {
+      margin: 0 0 11px;
+      color: #dce3ff;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .controls .control-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    .controls .control-main {
+      min-width: 0;
+    }
+
+    .controls .control-label {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+    }
+
+    .control-row + .control-row { margin-top: 11px; }
+
+    .control-label {
+      display: block;
+      margin-bottom: 5px;
+      color: #aeb6cb;
+      font-size: 11px;
+    }
+
+    .control-value {
+      min-width: 47px;
+      padding: 3px 5px;
+      border: 1px solid rgba(153, 167, 216, .18);
+      border-radius: 5px;
+      color: #d9e1ff;
+      font: 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-align: right;
+    }
+
+    .controls input[type="range"] {
+      display: block;
+      width: 100%;
+      height: 17px;
+      margin: 0;
+      accent-color: #7c98ff;
+      cursor: ew-resize;
+    }
+
+    .controls input[type="color"] {
+      width: 42px;
+      height: 27px;
+      padding: 2px;
+      border: 1px solid rgba(153, 167, 216, .30);
+      border-radius: 7px;
+      background: #202845;
+      cursor: pointer;
+    }
+
+    .control-help {
+      margin: 2px 0 0;
+      color: #65708c;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .control-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-top: 15px;
+    }
+
+    .control-actions button {
+      padding: 8px 7px;
+      border: 1px solid rgba(153, 167, 216, .25);
+      background: rgba(32, 40, 69, .86);
+      font-size: 11px;
+    }
+
+    .control-actions button:hover { background: #334273; }
+
+    #parameter-json {
+      display: block;
+      width: 100%;
+      min-height: 116px;
+      margin-top: 10px;
+      padding: 8px;
+      resize: vertical;
+      border: 1px solid rgba(153, 167, 216, .18);
+      border-radius: 8px;
+      outline: none;
+      background: rgba(7, 10, 18, .72);
+      color: #aebeff;
+      font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .copy-status {
+      min-height: 15px;
+      margin: 6px 0 0;
+      color: #8f99b2;
+      font-size: 10px;
+    }
+
+    .stage {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(163, 175, 224, .22);
+      border-radius: 20px;
+      background: #0d101b;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .3);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 960 / 680;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      padding: 13px 17px;
+      border-top: 1px solid rgba(163, 175, 224, .14);
+      background: rgba(10, 13, 23, .86);
+      color: #7f8aa8;
+      font-size: 11px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .legend i { display: block; width: 8px; height: 8px; border-radius: 50%; }
+    .legend .edge i { background: #8da8ff; box-shadow: 0 0 9px #8da8ff; }
+    .legend .dispersion i { background: #ff9cd7; box-shadow: 0 0 9px #ff9cd7; }
+    .legend .grain i { background: #e4edff; box-shadow: 0 0 9px #e4edff; }
+
+    #error {
+      display: none;
+      padding: 18px;
+      color: #ff9aab;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 860px) {
+      .playground { grid-template-columns: 1fr; }
+      .stage { order: 1; }
+      .controls { order: 2; }
+    }
+
+    @media (max-width: 720px) {
+      main { width: min(100vw - 24px, 1120px); padding-top: 24px; }
+      header { display: block; }
+      .badge { display: inline-block; margin-top: 16px; }
+      .readout { width: 100%; margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Arcium / compositor lab</p>
+        <h1>Glassmorphic glass</h1>
+        <p class="lede">A fast, deterministic stand-in for Chromium's live backdrop. The effect shader is authored in SkSL; this page only supplies a WebGL adapter and deliberately hostile reference scenes.</p>
+      </div>
+      <div class="badge">SkSL source of truth</div>
+    </header>
+
+    <div class="toolbar">
+      <label>Backdrop <select id="scene">
+        <option value="light">Light / geometry</option>
+        <option value="dark">Dark / neon</option>
+        <option value="dense">Dense / type-like</option>
+        <option value="motion">Motion / video-like</option>
+      </select></label>
+      <label>Preset <select id="preset">
+        <option value="basic">Basic blur</option>
+        <option value="glassmorphic" selected>Glassmorphic</option>
+        <option value="spectral">Spectral edge</option>
+        <option value="quiet">Quiet / low cost</option>
+        <option value="overshifted_lens">OverShifted lens</option>
+      </select></label>
+      <button id="render" type="button">Render frame</button>
+      <span class="readout" id="readout">loading shader…</span>
+    </div>
+
+    <div class="playground">
+      <aside class="controls" aria-label="Glass material controls">
+        <div class="controls-header">
+          <div>
+            <p class="eyebrow">Material playground</p>
+            <h2>Live controls</h2>
+          </div>
+          <span class="control-status" id="control-status">Glassmorphic</span>
+        </div>
+        <div class="preset-block">
+          <span class="control-caption">Presets</span>
+          <div class="preset-buttons" id="preset-buttons" role="group" aria-label="Material presets">
+            <button class="preset-button" type="button" data-preset="basic">Basic</button>
+            <button class="preset-button" type="button" data-preset="quiet">Quiet</button>
+            <button class="preset-button active" type="button" data-preset="glassmorphic">Glassmorphic</button>
+            <button class="preset-button" type="button" data-preset="spectral">Spectral</button>
+            <button class="preset-button" type="button" data-preset="overshifted_lens">OverShifted Lens</button>
+          </div>
+        </div>
+        <div id="control-groups"></div>
+        <div class="control-actions">
+          <button id="reset-controls" type="button">Reset to Glassmorphic</button>
+          <button id="copy-parameters" type="button">Copy JSON</button>
+        </div>
+        <textarea id="parameter-json" readonly aria-label="Current material parameter JSON"></textarea>
+        <p class="copy-status" id="copy-status" aria-live="polite"></p>
+      </aside>
+
+      <section class="stage">
+        <canvas id="glass-canvas" width="960" height="680"></canvas>
+        <div id="error"></div>
+        <div class="legend">
+          <span class="edge"><i></i>SDF edge refraction + specular rim</span>
+          <span class="dispersion"><i></i>bounded RGB dispersion</span>
+          <span class="grain"><i></i>subtle procedural grain</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const WIDTH = 960;
+      const HEIGHT = 680;
+      const PANEL = { x: 120, y: 120, width: 720, height: 440, radius: 30 };
+      let activePanel = { ...PANEL };
+      const SHADER_URL = './glassmorphic.sksl';
+      const scenes = ['light', 'dark', 'dense', 'motion'];
+      const presets = {
+        basic: {
+          opacity: 1, blur: 13, edge: 28, refraction: 0.6, dispersion: 0,
+          tintStrength: 0.10, saturation: 1.03, specular: 0.08,
+          grain: 0.004, tint: [0.76, 0.84, 1.0]
+        },
+        glassmorphic: {
+          opacity: 1, blur: 10, edge: 30, refraction: 7.0, dispersion: 0.15,
+          tintStrength: 0.17, saturation: 1.10, specular: 0.42,
+          grain: 0.012, tint: [0.50, 0.69, 1.0]
+        },
+        spectral: {
+          opacity: 1, blur: 8, edge: 34, refraction: 12.0, dispersion: 0.33,
+          tintStrength: 0.21, saturation: 1.16, specular: 0.62,
+          grain: 0.018, tint: [0.62, 0.47, 1.0]
+        },
+        quiet: {
+          opacity: 1, blur: 5, edge: 20, refraction: 2.2, dispersion: 0.03,
+          tintStrength: 0.12, saturation: 1.04, specular: 0.20,
+          grain: 0.006, tint: [0.68, 0.82, 1.0]
+        },
+        overshifted_lens: {
+          opacity: 1, blur: 16, edge: 44, refraction: 5.0, bulge: 0.22, dispersion: 0.0,
+          tintStrength: 0.07, saturation: 0.91, specular: 0.30,
+          grain: 0.032, shapePower: 4.3, tint: [0.93, 0.96, 1.0],
+          borderColor: [0.93, 0.96, 1.0], borderAlpha: 0.21,
+          panel: { x: 220, y: 90, width: 520, height: 520, radius: 74 }
+        }
+      };
+
+      const DEFAULT_PARAMETERS = {
+        opacity: 1,
+        blur: 10,
+        edge: 30,
+        refraction: 7.0,
+        bulge: 0.0,
+        dispersion: 0.15,
+        tintStrength: 0.17,
+        saturation: 1.10,
+        specular: 0.42,
+        borderAlpha: 0.30,
+        grain: 0.012,
+        shapePower: 0.0,
+        cornerRadius: PANEL.radius,
+        tint: [0.50, 0.69, 1.0],
+        borderColor: [0.63, 0.75, 1.0],
+        lightX: -0.65,
+        lightY: -0.75,
+        lightElevation: 0.85,
+        lightIntensity: 1.0,
+        panel: { ...PANEL }
+      };
+
+      const presetLabels = {
+        basic: 'Basic',
+        quiet: 'Quiet',
+        glassmorphic: 'Glassmorphic',
+        spectral: 'Spectral',
+        overshifted_lens: 'OverShifted Lens'
+      };
+
+      // Lab-only migration for a page Daniel may already have open from the
+      // earlier internal spelling. New state is always written canonically.
+      const presetAliases = { plasmorphic: 'glassmorphic' };
+
+      const controlGroups = [
+        {
+          title: 'Surface',
+          controls: [
+            { key: 'opacity', label: 'Glass opacity', min: 0, max: 1, step: 0.01, digits: 2 },
+            { key: 'blur', label: 'Blur radius', min: 0, max: 32, step: 0.5, digits: 1, unit: 'px' },
+            { key: 'edge', label: 'Edge width', min: 0, max: 80, step: 1, digits: 0, unit: 'px' },
+            { key: 'refraction', label: 'Refraction strength', min: 0, max: 20, step: 0.1, digits: 1 },
+            { key: 'bulge', label: 'Inward bulge', min: 0, max: 0.6, step: 0.01, digits: 2 }
+          ]
+        },
+        {
+          title: 'Tone + texture',
+          controls: [
+            { key: 'tint', label: 'Tint color', type: 'color' },
+            { key: 'tintStrength', label: 'Tint strength', min: 0, max: 1, step: 0.01, digits: 2 },
+            { key: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, digits: 2 },
+            { key: 'grain', label: 'Fine grain', min: 0, max: 0.08, step: 0.001, digits: 3 }
+          ]
+        },
+        {
+          title: 'Rim + shape',
+          controls: [
+            { key: 'specular', label: 'Specular intensity', min: 0, max: 1, step: 0.01, digits: 2 },
+            { key: 'borderAlpha', label: 'Rim intensity', min: 0, max: 1, step: 0.01, digits: 2 },
+            { key: 'dispersion', label: 'Dispersion', min: 0, max: 0.5, step: 0.01, digits: 2 },
+            {
+              key: 'shapePower',
+              label: 'Shape power',
+              min: 0,
+              max: 8,
+              step: 0.1,
+              digits: 1,
+              help: '0 rounded box · 2 ellipse · 4 squircle · 8 square'
+            },
+            { key: 'cornerRadius', label: 'Corner radius', min: 0, max: 160, step: 1, digits: 0, unit: 'px' }
+          ]
+        },
+        {
+          title: 'Lighting',
+          controls: [
+            { key: 'lightX', label: 'Direction X', min: -1, max: 1, step: 0.01, digits: 2 },
+            { key: 'lightY', label: 'Direction Y', min: -1, max: 1, step: 0.01, digits: 2 },
+            { key: 'lightElevation', label: 'Elevation', min: 0.05, max: 2, step: 0.01, digits: 2 },
+            { key: 'lightIntensity', label: 'Intensity', min: 0, max: 2, step: 0.01, digits: 2 }
+          ]
+        }
+      ];
+
+      function cloneParameters(source = {}) {
+        const parameters = { ...DEFAULT_PARAMETERS, ...source };
+        parameters.tint = [...(source.tint || DEFAULT_PARAMETERS.tint)];
+        parameters.borderColor = [...(source.borderColor || DEFAULT_PARAMETERS.borderColor)];
+        parameters.panel = { ...PANEL, ...(source.panel || {}) };
+        parameters.cornerRadius = source.cornerRadius === undefined
+          ? parameters.panel.radius
+          : source.cornerRadius;
+        return parameters;
+      }
+
+      function parametersForPreset(name) {
+        return cloneParameters(presets[name]);
+      }
+
+      function panelForParameters(parameters) {
+        return {
+          ...PANEL,
+          ...(parameters.panel || {}),
+          radius: parameters.cornerRadius === undefined
+            ? (parameters.panel && parameters.panel.radius) || PANEL.radius
+            : parameters.cornerRadius
+        };
+      }
+
+      function clamp(value, minimum = 0, maximum = 1) {
+        return Math.min(maximum, Math.max(minimum, value));
+      }
+
+      function rgbToHex(rgb) {
+        return `#${rgb.map(channel => Math.round(clamp(channel) * 255)
+          .toString(16).padStart(2, '0')).join('')}`;
+      }
+
+      function hexToRgb(hex) {
+        const normalized = String(hex || '').replace('#', '');
+        if (!/^[0-9a-f]{6}$/i.test(normalized)) return [...DEFAULT_PARAMETERS.tint];
+        return [0, 2, 4].map(offset => parseInt(normalized.slice(offset, offset + 2), 16) / 255);
+      }
+
+      function formatControlValue(control, value) {
+        if (control.type === 'color') return rgbToHex(value);
+        const digits = control.digits === undefined ? 2 : control.digits;
+        return `${Number(value).toFixed(digits)}${control.unit ? ` ${control.unit}` : ''}`;
+      }
+
+      const canvas = document.getElementById('glass-canvas');
+      const sceneSelect = document.getElementById('scene');
+      const presetSelect = document.getElementById('preset');
+      const renderButton = document.getElementById('render');
+      const readout = document.getElementById('readout');
+      const errorOutput = document.getElementById('error');
+      const controlStatus = document.getElementById('control-status');
+      const presetButtons = [...document.querySelectorAll('.preset-button')];
+      const controlGroupsOutput = document.getElementById('control-groups');
+      const resetControlsButton = document.getElementById('reset-controls');
+      const copyParametersButton = document.getElementById('copy-parameters');
+      const parameterJson = document.getElementById('parameter-json');
+      const copyStatus = document.getElementById('copy-status');
+      const gl = canvas.getContext('webgl2', {
+        alpha: false,
+        antialias: false,
+        preserveDrawingBuffer: true,
+        powerPreference: 'high-performance'
+      });
+
+      if (!gl) {
+        throw new Error('WebGL2 is required for the fast shader lab.');
+      }
+
+      function showError(error) {
+        errorOutput.style.display = 'block';
+        errorOutput.textContent = String(error && error.stack || error);
+        readout.textContent = 'shader failed';
+      }
+
+      function compile(type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          const log = gl.getShaderInfoLog(shader);
+          gl.deleteShader(shader);
+          throw new Error(log || 'shader compile failed');
+        }
+        return shader;
+      }
+
+      function link(vertexSource, fragmentSource) {
+        const program = gl.createProgram();
+        gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSource));
+        gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSource));
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          throw new Error(gl.getProgramInfoLog(program) || 'program link failed');
+        }
+        return program;
+      }
+
+      // SkSL and GLSL ES share the vector/math vocabulary used by the effect.
+      // Keep this adapter deliberately boring so the .sksl file remains the
+      // authoritative source for production porting.
+      function adaptSkSL(source) {
+        return source
+          .replace(/uniform shader backdrop;\s*/g, '')
+          .replace(/\bhalf4\b/g, 'vec4')
+          .replace(/\bhalf3\b/g, 'vec3')
+          .replace(/\bhalf2\b/g, 'vec2')
+          .replace(/\bhalf\b/g, 'float')
+          .replace(/\bfloat4\b/g, 'vec4')
+          .replace(/\bfloat3\b/g, 'vec3')
+          .replace(/\bfloat2\b/g, 'vec2')
+          .replace(/backdrop\.eval/g, 'labBackdrop');
+      }
+
+      const vertexSource = `#version 300 es
+        in vec2 aPosition;
+        out vec2 vUV;
+        void main() {
+          vUV = aPosition * 0.5 + 0.5;
+          gl_Position = vec4(aPosition, 0.0, 1.0);
+        }`;
+
+      function fragmentSource(effectSource) {
+        return `#version 300 es
+          precision highp float;
+          uniform vec3 uBorderColor;
+          uniform float uBorderAlpha;
+          uniform float uScene;
+          uniform float uTime;
+          uniform bool uEffectEnabled;
+          in vec2 vUV;
+          out vec4 outColor;
+
+          float sceneRoundedBox(vec2 point, vec2 halfSize, float radius) {
+            vec2 q = abs(point) - halfSize + radius;
+            return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+          }
+
+          float sceneCircle(vec2 point, vec2 center, float radius) {
+            return length(point - center) - radius;
+          }
+
+          vec3 sceneColor(vec2 uv) {
+            float t = uTime;
+            vec2 p = uv;
+            vec3 color;
+            if (uScene < 0.5) {
+              color = mix(vec3(0.95, 0.97, 1.0), vec3(0.65, 0.73, 0.87), p.y);
+              vec2 checker = floor(p * vec2(32.0, 24.0));
+              float check = mod(checker.x + checker.y, 2.0);
+              color += (check - 0.5) * 0.075;
+              float grid = smoothstep(0.95, 1.0, max(
+                  fract(p.x * 16.0), fract(p.y * 12.0)));
+              color = mix(color, vec3(0.48, 0.57, 0.76), grid * 0.16);
+              for (int row = 0; row < 11; ++row) {
+                float y = 0.10 + float(row) * 0.075;
+                float lengthFactor = 0.18 + mod(float(row) * 0.173, 0.30);
+                float line = 1.0 - smoothstep(0.006, 0.012,
+                    abs(p.y - y)) *
+                    (1.0 - smoothstep(0.0, 0.015,
+                    max(p.x - (0.04 + mod(float(row), 3.0) * 0.22 + lengthFactor), 0.0)));
+                color = mix(color, vec3(0.26, 0.34, 0.52), line * 0.25);
+              }
+              float c1 = 1.0 - smoothstep(0.0, 0.012,
+                  abs(sceneCircle(p, vec2(0.18, 0.74), 0.12)));
+              float c2 = 1.0 - smoothstep(0.0, 0.012,
+                  abs(sceneCircle(p, vec2(0.84, 0.25), 0.17)));
+              float c3 = 1.0 - smoothstep(0.0, 0.012,
+                  abs(sceneCircle(p, vec2(0.75, 0.82), 0.07)));
+              color = mix(color, vec3(0.97, 0.27, 0.48), c1);
+              color = mix(color, vec3(0.15, 0.60, 0.98), c2);
+              color = mix(color, vec3(0.98, 0.67, 0.18), c3);
+            } else if (uScene < 1.5) {
+              color = mix(vec3(0.025, 0.035, 0.09), vec3(0.10, 0.035, 0.18), p.y);
+              vec2 checker = floor(p * vec2(28.0, 20.0));
+              color += mod(checker.x + checker.y, 2.0) * 0.025;
+              float stripe = smoothstep(0.45, 0.5,
+                  abs(fract((p.x + p.y) * 5.0) - 0.5));
+              color += vec3(0.05, 0.12, 0.22) * stripe;
+              float c1 = 1.0 - smoothstep(0.0, 0.018,
+                  abs(sceneCircle(p, vec2(0.20, 0.30), 0.19)));
+              float c2 = 1.0 - smoothstep(0.0, 0.018,
+                  abs(sceneCircle(p, vec2(0.76, 0.70), 0.15)));
+              float c3 = 1.0 - smoothstep(0.0, 0.018,
+                  abs(sceneCircle(p, vec2(0.55, 0.12), 0.08)));
+              color = mix(color, vec3(0.14, 0.74, 1.0), c1);
+              color = mix(color, vec3(0.95, 0.12, 0.56), c2);
+              color = mix(color, vec3(0.55, 0.30, 1.0), c3);
+              color += vec3(0.08, 0.04, 0.12) * sin(p.xyx * 14.0 + t).x;
+            } else if (uScene < 2.5) {
+              color = mix(vec3(0.90, 0.89, 0.85), vec3(0.25, 0.29, 0.39), p.y);
+              float scan = smoothstep(0.47, 0.5,
+                  abs(fract(p.y * 52.0) - 0.5));
+              color = mix(color, vec3(0.06, 0.08, 0.14), scan * 0.40);
+              for (int column = 0; column < 7; ++column) {
+                float x = 0.08 + float(column) * 0.145;
+                float width = 0.028 + mod(float(column), 3.0) * 0.012;
+                float bar = 1.0 - smoothstep(0.002, 0.008,
+                    abs(abs(p.x - x) - width));
+                color = mix(color, vec3(0.12, 0.18, 0.33), bar * 0.62);
+              }
+              float card = 1.0 - smoothstep(0.0, 0.009,
+                  abs(sceneRoundedBox(p - vec2(0.74, 0.30),
+                  vec2(0.15, 0.11), 0.025)));
+              color = mix(color, vec3(0.93, 0.28, 0.34), card);
+              color += vec3(0.04, 0.12, 0.15) * sin(p.yxx * 90.0).x;
+            } else {
+              float wave = sin((p.x * 7.0 + p.y * 4.0) + t * 2.0);
+              color = mix(vec3(0.03, 0.09, 0.18), vec3(0.42, 0.08, 0.30),
+                  p.y + wave * 0.10);
+              float diagonal = smoothstep(0.43, 0.48,
+                  abs(fract((p.x * 2.2 - p.y * 1.3) + t * 0.04) - 0.5));
+              color += vec3(0.04, 0.22, 0.36) * diagonal;
+              float c1 = 1.0 - smoothstep(0.0, 0.020,
+                  abs(sceneCircle(p, vec2(0.17 + sin(t) * 0.03, 0.32), 0.16)));
+              float c2 = 1.0 - smoothstep(0.0, 0.020,
+                  abs(sceneCircle(p, vec2(0.82, 0.65 + cos(t) * 0.03), 0.20)));
+              color = mix(color, vec3(0.10, 0.86, 0.70), c1);
+              color = mix(color, vec3(0.98, 0.38, 0.10), c2);
+            }
+            return clamp(color, 0.0, 1.0);
+          }
+
+          vec4 labBackdrop(vec2 pixel) {
+            return vec4(sceneColor(pixel / vec2(960.0, 680.0)), 1.0);
+          }
+
+          ${adaptSkSL(effectSource)}
+
+          void main() {
+            vec2 pixel = vUV * vec2(960.0, 680.0);
+            vec4 source = labBackdrop(pixel);
+            float opacity = uEffectEnabled ? clamp(uOpacity, 0.0, 1.0) : 0.0;
+            if (opacity <= 0.0) {
+              outColor = source;
+              return;
+            }
+            vec4 complete = glassCore(pixel);
+            vec2 panelCenter = uPanelOrigin + uPanelSize * 0.5;
+            float distance = panelDistance(
+                pixel - panelCenter, uPanelSize * 0.5, uCornerRadius);
+            float border = 1.0 - smoothstep(0.0, 2.2, abs(distance));
+            vec3 rimColor = mix(uBorderColor, vec3(1.0),
+                                clamp(distance * 0.02 + 0.5, 0.0, 1.0));
+            complete.rgb = mix(complete.rgb, rimColor, border * uBorderAlpha);
+            outColor = opacity >= 1.0 ? complete : mix(source, complete, opacity);
+          }`;
+      }
+
+      let program;
+      let positionBuffer;
+      let uniform = {};
+      let current = { scene: 'light', preset: 'glassmorphic', time: 0.37 };
+      let interactiveState = {
+        scene: 'light',
+        preset: 'glassmorphic',
+        time: 0.37,
+        custom: false,
+        parameters: parametersForPreset('glassmorphic')
+      };
+      const controlElements = new Map();
+      let controlsBuilt = false;
+
+      function serializableParameters(source) {
+        const parameters = cloneParameters(source);
+        const result = {};
+        for (const key of [
+          'opacity', 'blur', 'edge', 'refraction', 'bulge', 'dispersion', 'tintStrength',
+          'saturation', 'specular', 'borderAlpha', 'grain', 'shapePower',
+          'cornerRadius', 'lightX', 'lightY', 'lightElevation', 'lightIntensity'
+        ]) {
+          result[key] = parameters[key];
+        }
+        result.tint = [...parameters.tint];
+        result.borderColor = [...parameters.borderColor];
+        result.panel = { ...parameters.panel, radius: parameters.cornerRadius };
+        return result;
+      }
+
+      function exportedState() {
+        return {
+          schema: 1,
+          preset: interactiveState.preset,
+          scene: interactiveState.scene,
+          time: interactiveState.time,
+          parameters: serializableParameters(interactiveState.parameters)
+        };
+      }
+
+      function writeQueryState() {
+        const query = new URLSearchParams();
+        query.set('scene', interactiveState.scene);
+        query.set('preset', interactiveState.preset);
+        query.set('time', String(interactiveState.time));
+        if (interactiveState.custom) {
+          query.set('params', JSON.stringify(serializableParameters(interactiveState.parameters)));
+        }
+        const encoded = query.toString();
+        history.replaceState(null, '', `${location.pathname}${encoded ? `?${encoded}` : ''}`);
+      }
+
+      function readQueryState() {
+        const query = new URLSearchParams(location.search);
+        const requestedPreset = query.get('preset');
+        const canonicalPreset = presetAliases[requestedPreset] || requestedPreset;
+        const preset = presets[canonicalPreset] ? canonicalPreset : 'glassmorphic';
+        const scene = scenes.includes(query.get('scene')) ? query.get('scene') : 'light';
+        const rawTime = query.get('time');
+        const requestedTime = rawTime === null ? NaN : Number(rawTime);
+        const time = Number.isFinite(requestedTime) ? requestedTime : 0.37;
+        let parameters = parametersForPreset(preset);
+        let custom = false;
+        const encodedParameters = query.get('params');
+        if (encodedParameters) {
+          try {
+            const parsed = JSON.parse(encodedParameters);
+            const source = parsed.parameters || parsed;
+            parameters = cloneParameters({ ...parameters, ...source });
+            custom = true;
+          } catch (error) {
+            console.warn('Ignoring invalid material parameter query:', error);
+          }
+        }
+        return { scene, preset, time, custom, parameters };
+      }
+
+      function buildControls() {
+        if (controlsBuilt) return;
+        for (const group of controlGroups) {
+          const section = document.createElement('section');
+          section.className = 'control-group';
+          const heading = document.createElement('h3');
+          heading.textContent = group.title;
+          section.append(heading);
+          for (const control of group.controls) {
+            const row = document.createElement('div');
+            row.className = 'control-row';
+            const main = document.createElement('div');
+            main.className = 'control-main';
+            const inputId = `glass-control-${control.key}`;
+            const label = document.createElement('label');
+            label.className = 'control-label';
+            label.htmlFor = inputId;
+            label.textContent = control.label;
+            const input = document.createElement('input');
+            input.id = inputId;
+            input.dataset.control = control.key;
+            input.setAttribute('aria-label', control.label);
+            if (control.type === 'color') {
+              input.type = 'color';
+            } else {
+              input.type = 'range';
+              input.min = String(control.min);
+              input.max = String(control.max);
+              input.step = String(control.step);
+            }
+            const output = document.createElement('output');
+            output.className = 'control-value';
+            output.htmlFor = inputId;
+            main.append(label, input);
+            row.append(main, output);
+            section.append(row);
+            if (control.help) {
+              const help = document.createElement('p');
+              help.className = 'control-help';
+              help.textContent = control.help;
+              section.append(help);
+            }
+            const entry = { control, input, output };
+            controlElements.set(control.key, entry);
+            input.addEventListener('input', () => {
+              const value = control.type === 'color'
+                ? hexToRgb(input.value)
+                : Number(input.value);
+              interactiveState.parameters[control.key] = value;
+              if (control.key === 'cornerRadius') {
+                interactiveState.parameters.panel.radius = value;
+              }
+              interactiveState.custom = true;
+              syncControl(control.key);
+              refreshInteractive();
+            });
+          }
+          controlGroupsOutput.append(section);
+        }
+        controlsBuilt = true;
+      }
+
+      function syncControl(key) {
+        const entry = controlElements.get(key);
+        if (!entry) return;
+        const value = interactiveState.parameters[key];
+        if (entry.control.type === 'color') {
+          entry.input.value = rgbToHex(value);
+        } else {
+          entry.input.value = String(value);
+        }
+        entry.output.textContent = formatControlValue(entry.control, value);
+      }
+
+      function syncControls() {
+        for (const control of controlGroups.flatMap(group => group.controls)) {
+          syncControl(control.key);
+        }
+      }
+
+      function updateStateUi() {
+        const label = interactiveState.custom ? 'Custom' : presetLabels[interactiveState.preset];
+        controlStatus.textContent = label;
+        controlStatus.title = interactiveState.custom
+          ? `Custom values based on ${presetLabels[interactiveState.preset]}`
+          : `${label} preset`;
+        resetControlsButton.textContent = `Reset to ${presetLabels[interactiveState.preset]}`;
+        for (const button of presetButtons) {
+          const active = !interactiveState.custom &&
+            button.dataset.preset === interactiveState.preset;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', String(active));
+        }
+      }
+
+      function updateParameterJson() {
+        parameterJson.value = JSON.stringify(exportedState(), null, 2);
+      }
+
+      function selectPreset(name, render = true) {
+        if (!presets[name]) return false;
+        interactiveState.preset = name;
+        interactiveState.custom = false;
+        interactiveState.parameters = parametersForPreset(name);
+        presetSelect.value = name;
+        syncControls();
+        updateStateUi();
+        updateParameterJson();
+        if (render && program) refreshInteractive();
+        return true;
+      }
+
+      function setInteractiveParameter(key, value) {
+        const entry = controlElements.get(key);
+        if (!entry) return false;
+        entry.input.value = entry.control.type === 'color' ? String(value) : String(value);
+        entry.input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      }
+
+      function getUniform(name) {
+        return gl.getUniformLocation(program, name);
+      }
+
+      function init(effectSource) {
+        program = link(vertexSource, fragmentSource(effectSource));
+        gl.useProgram(program);
+        positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          -1, -1, 1, -1, -1, 1,
+          -1, 1, 1, -1, 1, 1
+        ]), gl.STATIC_DRAW);
+        const position = gl.getAttribLocation(program, 'aPosition');
+        gl.enableVertexAttribArray(position);
+        gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+        for (const name of [
+          'uResolution', 'uPanelOrigin', 'uPanelSize', 'uCornerRadius',
+          'uShapePower', 'uBlurRadius', 'uOpacity', 'uEdgeWidth', 'uRefraction', 'uBulge',
+          'uDispersion', 'uTintStrength', 'uSaturation', 'uSpecular', 'uGrain',
+          'uLightXY', 'uLightElevation', 'uLightIntensity',
+          'uTint', 'uBorderColor', 'uBorderAlpha',
+          'uScene', 'uTime', 'uEffectEnabled'
+        ]) {
+          uniform[name] = getUniform(name);
+        }
+        gl.uniform2f(uniform.uResolution, WIDTH, HEIGHT);
+        gl.uniform2f(uniform.uPanelOrigin, PANEL.x, PANEL.y);
+        gl.uniform2f(uniform.uPanelSize, PANEL.width, PANEL.height);
+        gl.uniform1f(uniform.uCornerRadius, PANEL.radius);
+        gl.viewport(0, 0, WIDTH, HEIGHT);
+      }
+
+      function sceneNumber(name) { return scenes.indexOf(name); }
+
+      function draw(scene, preset, time, enabled = true, parameterOverride = null) {
+        const params = parameterOverride || parametersForPreset(preset);
+        activePanel = panelForParameters(params);
+        gl.useProgram(program);
+        gl.uniform2f(uniform.uPanelOrigin, activePanel.x, activePanel.y);
+        gl.uniform2f(uniform.uPanelSize, activePanel.width, activePanel.height);
+        gl.uniform1f(uniform.uCornerRadius, activePanel.radius);
+        gl.uniform1f(uniform.uShapePower, params.shapePower);
+        gl.uniform1f(uniform.uBlurRadius, params.blur);
+        gl.uniform1f(uniform.uOpacity, params.opacity);
+        gl.uniform1f(uniform.uEdgeWidth, params.edge);
+        gl.uniform1f(uniform.uRefraction, params.refraction);
+        gl.uniform1f(uniform.uBulge, params.bulge);
+        gl.uniform1f(uniform.uDispersion, params.dispersion);
+        gl.uniform1f(uniform.uTintStrength, params.tintStrength);
+        gl.uniform1f(uniform.uSaturation, params.saturation);
+        gl.uniform1f(uniform.uSpecular, params.specular);
+        gl.uniform1f(uniform.uGrain, params.grain);
+        gl.uniform2f(uniform.uLightXY, params.lightX, params.lightY);
+        gl.uniform1f(uniform.uLightElevation, params.lightElevation);
+        gl.uniform1f(uniform.uLightIntensity, params.lightIntensity);
+        gl.uniform4f(uniform.uTint, params.tint[0], params.tint[1], params.tint[2], 1);
+        const borderColor = params.borderColor;
+        gl.uniform3f(uniform.uBorderColor, borderColor[0], borderColor[1], borderColor[2]);
+        gl.uniform1f(uniform.uBorderAlpha, params.borderAlpha);
+        gl.uniform1f(uniform.uScene, sceneNumber(scene));
+        gl.uniform1f(uniform.uTime, time);
+        gl.uniform1i(uniform.uEffectEnabled, enabled ? 1 : 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+
+      function readPixels() {
+        const data = new Uint8Array(WIDTH * HEIGHT * 4);
+        gl.readPixels(0, 0, WIDTH, HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, data);
+        return data;
+      }
+
+      function pixelOffset(x, y) { return (y * WIDTH + x) * 4; }
+
+      function statsFor(data) {
+        let min = 255;
+        let max = 0;
+        let minAlpha = 255;
+        let maxAlpha = 0;
+        let sum = 0;
+        let sumSquared = 0;
+        let black = 0;
+        let panelBlack = 0;
+        let panelSum = 0;
+        let centerSum = 0;
+        let edgeSum = 0;
+        let panelCount = 0;
+        let centerCount = 0;
+        let edgeCount = 0;
+        let maxSpread = 0;
+        let panelMaxSpread = 0;
+        for (let y = 0; y < HEIGHT; ++y) {
+          for (let x = 0; x < WIDTH; ++x) {
+            const i = pixelOffset(x, y);
+            const r = data[i] / 255;
+            const g = data[i + 1] / 255;
+            const b = data[i + 2] / 255;
+            const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
+            min = Math.min(min, data[i], data[i + 1], data[i + 2]);
+            max = Math.max(max, data[i], data[i + 1], data[i + 2]);
+            minAlpha = Math.min(minAlpha, data[i + 3]);
+            maxAlpha = Math.max(maxAlpha, data[i + 3]);
+            sum += luma;
+            sumSquared += luma * luma;
+            if (luma < 0.01) ++black;
+            maxSpread = Math.max(maxSpread, Math.max(r, g, b) - Math.min(r, g, b));
+            const inside = x >= activePanel.x &&
+                x < activePanel.x + activePanel.width &&
+                y >= activePanel.y &&
+                y < activePanel.y + activePanel.height;
+            if (inside) {
+              if (luma < 0.01) ++panelBlack;
+              panelSum += luma;
+              ++panelCount;
+              panelMaxSpread = Math.max(panelMaxSpread,
+                  Math.max(r, g, b) - Math.min(r, g, b));
+              const center = x >= activePanel.x + activePanel.width * 0.3 &&
+                  x < activePanel.x + activePanel.width * 0.7 &&
+                  y >= activePanel.y + activePanel.height * 0.3 &&
+                  y < activePanel.y + activePanel.height * 0.7;
+              if (center) { centerSum += luma; ++centerCount; }
+              const edge = x < activePanel.x + 50 ||
+                  x >= activePanel.x + activePanel.width - 50 ||
+                  y < activePanel.y + 50 ||
+                  y >= activePanel.y + activePanel.height - 50;
+              if (edge) { edgeSum += luma; ++edgeCount; }
+            }
+          }
+        }
+        const count = WIDTH * HEIGHT;
+        const mean = sum / count;
+        return {
+          minChannel: min / 255,
+          maxChannel: max / 255,
+          minAlpha: minAlpha / 255,
+          maxAlpha: maxAlpha / 255,
+          blackFraction: black / count,
+          panelBlackFraction: panelBlack / panelCount,
+          meanLuma: mean,
+          lumaStdDev: Math.sqrt(Math.max(0, sumSquared / count - mean * mean)),
+          panelMeanLuma: panelSum / panelCount,
+          centerMeanLuma: centerSum / centerCount,
+          edgeMeanLuma: edgeSum / edgeCount,
+          maxChannelSpread: maxSpread,
+          panelMaxChannelSpread: panelMaxSpread
+        };
+      }
+
+      function difference(a, b) {
+        let sum = 0;
+        let edgeSum = 0;
+        let panelSum = 0;
+        let cornerSum = 0;
+        let edgeCount = 0;
+        let panelCount = 0;
+        let cornerCount = 0;
+        for (let y = 0; y < HEIGHT; ++y) {
+          for (let x = 0; x < WIDTH; ++x) {
+            const i = pixelOffset(x, y);
+            const delta = (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) +
+                Math.abs(a[i + 2] - b[i + 2])) / (255 * 3);
+            sum += delta;
+            const inside = x >= activePanel.x &&
+                x < activePanel.x + activePanel.width &&
+                y >= activePanel.y &&
+                y < activePanel.y + activePanel.height;
+            if (inside) {
+              panelSum += delta;
+              ++panelCount;
+              const edge = x < activePanel.x + 50 ||
+                  x >= activePanel.x + activePanel.width - 50 ||
+                  y < activePanel.y + 50 ||
+                  y >= activePanel.y + activePanel.height - 50;
+              if (edge) { edgeSum += delta; ++edgeCount; }
+            }
+            const corner = (x < 80 || x >= WIDTH - 80) &&
+                (y < 80 || y >= HEIGHT - 80);
+            if (corner) { cornerSum += delta; ++cornerCount; }
+          }
+        }
+        return {
+          meanAbsoluteDelta: sum / (WIDTH * HEIGHT),
+          panelMeanAbsoluteDelta: panelSum / panelCount,
+          edgeMeanAbsoluteDelta: edgeSum / edgeCount,
+          cornerMeanAbsoluteDelta: cornerSum / cornerCount
+        };
+      }
+
+      function render(scene = current.scene, preset = current.preset, time = current.time) {
+        current = { scene, preset, time };
+        const params = parametersForPreset(preset);
+        draw(scene, preset, time, true, params);
+        const data = readPixels();
+        const effectStats = statsFor(data);
+        draw(scene, preset, time, false, params);
+        const baseData = readPixels();
+        const deltas = difference(data, baseData);
+        draw(scene, preset, time, true, params);
+        return {
+          scene,
+          preset,
+          time,
+          panel: { ...activePanel },
+          effect: effectStats,
+          deltas
+        };
+      }
+
+      function pixelHash(data) {
+        let hash = 2166136261;
+        for (let index = 0; index < data.length; ++index) {
+          hash ^= data[index];
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function exactPixelMatch(a, b) {
+        if (a.length !== b.length) return false;
+        for (let index = 0; index < a.length; ++index) {
+          if (a[index] !== b[index]) return false;
+        }
+        return true;
+      }
+
+      function blendDifference(actual, source, complete, opacity) {
+        let sum = 0;
+        let maxByteDelta = 0;
+        for (let index = 0; index < actual.length; ++index) {
+          const expected = source[index] + (complete[index] - source[index]) * opacity;
+          const delta = Math.abs(actual[index] - expected);
+          sum += delta;
+          maxByteDelta = Math.max(maxByteDelta, delta);
+        }
+        return {
+          meanByteDelta: sum / actual.length,
+          maxByteDelta
+        };
+      }
+
+      function renderOpacity(scene, preset, time, opacity) {
+        const parameters = parametersForPreset(preset);
+        parameters.opacity = clamp(Number(opacity), 0, 1);
+        draw(scene, preset, time, true, parameters);
+        const data = readPixels();
+        return {
+          scene,
+          preset,
+          time,
+          opacity: parameters.opacity,
+          panel: { ...activePanel },
+          effect: statsFor(data),
+          pixelHash: pixelHash(data)
+        };
+      }
+
+      function opacityRegression(scene = 'dense', preset = 'glassmorphic',
+                                 time = 0.37, intermediate = 0.5) {
+        const baseParameters = parametersForPreset(preset);
+        baseParameters.opacity = 0;
+        const completeParameters = parametersForPreset(preset);
+        completeParameters.opacity = 1;
+        const intermediateParameters = parametersForPreset(preset);
+        intermediateParameters.opacity = clamp(intermediate, 0, 1);
+
+        draw(scene, preset, time, false, baseParameters);
+        const untouched = readPixels();
+        draw(scene, preset, time, true, baseParameters);
+        const zero = readPixels();
+        draw(scene, preset, time, true, completeParameters);
+        const complete = readPixels();
+        draw(scene, preset, time, true, intermediateParameters);
+        const middle = readPixels();
+        const presetParameters = parametersForPreset(preset);
+        draw(scene, preset, time, true, presetParameters);
+        const presetOutput = readPixels();
+        const blend = blendDifference(
+          middle, untouched, complete, intermediateParameters.opacity);
+
+        return {
+          scene,
+          preset,
+          intermediate: intermediateParameters.opacity,
+          zeroExact: exactPixelMatch(zero, untouched),
+          oneExact: exactPixelMatch(complete, presetOutput),
+          zeroHash: pixelHash(zero),
+          untouchedHash: pixelHash(untouched),
+          oneHash: pixelHash(complete),
+          presetHash: pixelHash(presetOutput),
+          blend
+        };
+      }
+
+      function renderInteractive(time = interactiveState.time) {
+        interactiveState.time = time;
+        const params = interactiveState.parameters;
+        const scene = interactiveState.scene;
+        const preset = interactiveState.preset;
+        draw(scene, preset, time, true, params);
+        const data = readPixels();
+        const effectStats = statsFor(data);
+        draw(scene, preset, time, false, params);
+        const baseData = readPixels();
+        const deltas = difference(data, baseData);
+        draw(scene, preset, time, true, params);
+        return {
+          scene,
+          preset,
+          time,
+          custom: interactiveState.custom,
+          panel: { ...activePanel },
+          parameters: serializableParameters(params),
+          effect: effectStats,
+          deltas,
+          pixelHash: pixelHash(data)
+        };
+      }
+
+      function refreshInteractive(time = interactiveState.time) {
+        const result = renderInteractive(time);
+        readout.textContent = `${result.effect.meanLuma.toFixed(3)} mean luma · ` +
+          `${result.deltas.edgeMeanAbsoluteDelta.toFixed(3)} edge delta`;
+        updateStateUi();
+        updateParameterJson();
+        writeQueryState();
+        return result;
+      }
+
+      function measure(scene = current.scene, preset = current.preset, frames = 40) {
+        const samples = [];
+        const batchSize = 128;
+        const batches = Math.max(8, Math.ceil(frames / batchSize));
+        const params = parametersForPreset(preset);
+        draw(scene, preset, current.time, true, params);
+        gl.finish();
+        for (let batch = 0; batch < batches; ++batch) {
+          const start = performance.now();
+          for (let frame = 0; frame < batchSize; ++frame) {
+            draw(scene, preset, current.time + (batch * batchSize + frame) * 0.01, true, params);
+          }
+          gl.finish();
+          samples.push((performance.now() - start) / batchSize);
+        }
+        samples.sort((a, b) => a - b);
+        const sum = samples.reduce((total, value) => total + value, 0);
+        return {
+          frames: batches * batchSize,
+          batchSize,
+          meanMs: sum / samples.length,
+          p95Ms: samples[Math.min(samples.length - 1, Math.ceil(samples.length * 0.95) - 1)],
+          maxMs: samples[samples.length - 1],
+          batchMeanMs: (sum / samples.length) * batchSize,
+          batchP95Ms: samples[Math.min(samples.length - 1, Math.ceil(samples.length * 0.95) - 1)] * batchSize
+        };
+      }
+
+      fetch(SHADER_URL)
+        .then(response => {
+          if (!response.ok) throw new Error(`shader fetch failed: ${response.status}`);
+          return response.text();
+        })
+        .then(source => {
+          init(source);
+          buildControls();
+          interactiveState = readQueryState();
+          sceneSelect.value = interactiveState.scene;
+          presetSelect.value = interactiveState.preset;
+          syncControls();
+          updateStateUi();
+          updateParameterJson();
+
+          sceneSelect.addEventListener('change', () => {
+            interactiveState.scene = sceneSelect.value;
+            refreshInteractive();
+          });
+          presetSelect.addEventListener('change', () => {
+            selectPreset(presetSelect.value);
+          });
+          for (const button of presetButtons) {
+            button.addEventListener('click', () => selectPreset(button.dataset.preset));
+          }
+          resetControlsButton.addEventListener('click', () => {
+            selectPreset(interactiveState.preset);
+          });
+          copyParametersButton.addEventListener('click', async () => {
+            const text = JSON.stringify(exportedState(), null, 2);
+            parameterJson.value = text;
+            parameterJson.focus();
+            parameterJson.select();
+            try {
+              if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                throw new Error('clipboard unavailable');
+              }
+              await navigator.clipboard.writeText(text);
+              copyStatus.textContent = 'Copied current parameters.';
+            } catch (error) {
+              copyStatus.textContent = 'Clipboard unavailable; JSON selected for Cmd+C.';
+            }
+          });
+          renderButton.addEventListener('click', () => {
+            refreshInteractive(0.37);
+          });
+          const result = refreshInteractive(interactiveState.time);
+          readout.textContent = `${result.effect.meanLuma.toFixed(3)} mean luma · ready`;
+          window.__glassLab = {
+            ready: true,
+            render,
+            renderOpacity,
+            opacityRegression,
+            stats: () => render(current.scene, current.preset, current.time),
+            renderInteractive,
+            interactiveStats: () => renderInteractive(),
+            selectPreset,
+            setInteractiveParameter,
+            getInteractiveState: exportedState,
+            controlKeys: controlGroups.flatMap(group => group.controls.map(control => control.key)),
+            measure,
+            presets,
+            scenes,
+            dimensions: { width: WIDTH, height: HEIGHT },
+            panel: PANEL
+          };
+        })
+        .catch(showError);
+    })();
+  </script>
+</body>
+</html>

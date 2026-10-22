@@ -1,0 +1,63 @@
+# Route explicit recent-tab shortcuts through macOS priority dispatch and use visible, nonempty browser fixtures.
+# Requires arcium-mru-tab-switcher and arcium-shortcut-presets.
+Index: src/chrome/browser/ui/views/frame/browser_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_view.cc
++++ src/chrome/browser/ui/views/frame/browser_view.cc
+@@ -6788,7 +6788,9 @@
+       if (entry.keycode == ui::VKEY_TAB &&
+           (entry.modifiers & ui::EF_CONTROL_DOWN) &&
+           (entry.command_id == IDC_SELECT_NEXT_TAB ||
+-           entry.command_id == IDC_SELECT_PREVIOUS_TAB)) {
++           entry.command_id == IDC_SELECT_PREVIOUS_TAB ||
++           entry.command_id == IDC_ARCIUM_SELECT_RECENT_TAB ||
++           entry.command_id == IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB)) {
+         priority = ui::AcceleratorManager::kHighPriority;
+       }
+ #endif
+Index: src/chrome/browser/ui/views/frame/browser_view_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_view_unittest.cc
++++ src/chrome/browser/ui/views/frame/browser_view_unittest.cc
+@@ -179,6 +179,8 @@
+ }
+ 
+ TEST_F(BrowserViewTest, HiddenToolbarCanBeTemporarilyRevealedForOmnibox) {
++  AddTab(browser(), GURL("https://toolbar.test/"));
++  browser_view()->GetWidget()->Show();
+   PrefService* prefs = browser()->profile()->GetPrefs();
+   ASSERT_TRUE(browser_view()->GetIsNormalType());
+   EXPECT_TRUE(browser_view()->IsToolbarVisible());
+@@ -201,6 +203,7 @@
+ }
+ 
+ TEST_F(BrowserViewTest, MRUTabSwitcherSharesBrowserWidget) {
++  AddTab(browser(), GURL("https://mru.test/"));
+   content::WebContents* active =
+       browser()->tab_strip_model()->GetActiveWebContents();
+   ASSERT_TRUE(active);
+@@ -242,6 +245,7 @@
+ }
+ 
+ TEST_F(BrowserViewTest, MRUGlobalOpaqueBackendUsesFallback) {
++  AddTab(browser(), GURL("https://mru.test/"));
+   base::test::ScopedCommandLine command_line;
+   command_line.GetProcessCommandLine()->AppendSwitchASCII(
+       helium::kArciumGlassBackendSwitch, "opaque");
+@@ -295,6 +299,8 @@
+ 
+ TEST_F(BrowserViewTest,
+        MRUTabSwitcherVisualizerStopsOnWindowDeactivation) {
++  AddTab(browser(), GURL("https://mru.test/"));
++  browser_view()->GetWidget()->Show();
+   content::WebContents* active =
+       browser()->tab_strip_model()->GetActiveWebContents();
+   ASSERT_TRUE(active);
+@@ -309,6 +315,7 @@
+ }
+ 
+ TEST_F(BrowserViewTest, MRUTabPreviewCommitsOnlyWhenAccepted) {
++  browser_view()->GetWidget()->Show();
+ #if BUILDFLAG(IS_MAC)
+   EXPECT_TRUE(browser_view()->GetFocusManager()->HasPriorityHandler(
+       ui::Accelerator(ui::VKEY_TAB, ui::EF_CONTROL_DOWN)));

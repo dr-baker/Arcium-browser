@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/media/router/discovery/mdns/dns_sd_registry_unittest.cc b/chrome/browser/media/router/discovery/mdns/dns_sd_registry_unittest.cc
+--- a/chrome/browser/media/router/discovery/mdns/dns_sd_registry_unittest.cc
++++ b/chrome/browser/media/router/discovery/mdns/dns_sd_registry_unittest.cc
+@@ -27,7 +27,7 @@
+ 
+ class TestDnsSdRegistry : public DnsSdRegistry {
+  public:
+-  TestDnsSdRegistry() : DnsSdRegistry(nullptr), delegate_(nullptr) {}
++  TestDnsSdRegistry() : DnsSdRegistry(), delegate_(nullptr) {}
+   ~TestDnsSdRegistry() override = default;
+ 
+   MockDnsSdDeviceLister* GetListerForService(const std::string& service_type) {
+@@ -53,9 +53,7 @@
+  protected:
+   DnsSdDeviceLister* CreateDnsSdDeviceLister(
+       DnsSdDelegate* delegate,
+-      const std::string& service_type,
+-      local_discovery::ServiceDiscoverySharedClient* discovery_client)
+-      override {
++      const std::string& service_type) override {
+     delegate_ = delegate;
+     MockDnsSdDeviceLister* lister = new NiceMock<MockDnsSdDeviceLister>();
+     listers_[service_type] = lister;

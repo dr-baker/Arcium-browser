@@ -1,0 +1,24 @@
+--- a/content/browser/renderer_host/delegated_frame_host_unittest.cc
++++ b/content/browser/renderer_host/delegated_frame_host_unittest.cc
+@@ -52,6 +52,7 @@ class DelegatedFrameHostTest : public te
+   }
+ 
+   void SetUp() override;
++  void TearDown() override;
+ 
+  private:
+   BrowserTaskEnvironment task_environment_{
+@@ -82,6 +83,13 @@ void DelegatedFrameHostTest::SetUp() {
+   delegated_frame_host_->AttachToCompositor(compositor_.get());
+ }
+ 
++void DelegatedFrameHostTest::TearDown() {
++  delegated_frame_host_->DetachFromCompositor();
++  delegated_frame_host_.reset();
++  compositor_.reset();
++  ImageTransportFactory::Terminate();
++}
++
+ TEST_F(DelegatedFrameHostTest, NoCopyOutputRequestWithNoValidSurface) {
+   auto* dfh = delegated_frame_host();
+   EXPECT_FALSE(dfh->CanCopyFromCompositingSurface());

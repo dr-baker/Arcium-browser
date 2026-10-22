@@ -1,0 +1,3125 @@
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h
+@@ -38,6 +38,13 @@ struct CommandInfo {
+   std::vector<ShortcutInfo> accelerators;
+ };
+ 
++struct CommandAcceleratorConfiguration {
++  int command_id = 0;
++  std::vector<std::string> accelerators;
++
++  bool operator==(const CommandAcceleratorConfiguration&) const = default;
++};
++
+ enum class AssignmentResult {
+   kSuccess,
+   kInvalidAccelerator,
+@@ -45,6 +52,18 @@ enum class AssignmentResult {
+   kShortcutLocked,
+ };
+ 
++enum class ConfigurationResult {
++  kSuccess,
++  kNoChange,
++  kUnknownCommand,
++  kInvalidAccelerator,
++  kInvalidConfiguration,
++  kShortcutLocked,
++  kAcceleratorConflict,
++  kPreferencesLocked,
++  kNoPreviousConfiguration,
++};
++
+ class BrowserShortcutService : public KeyedService {
+  public:
+   class Observer : public base::CheckedObserver {
+@@ -65,11 +84,25 @@ class BrowserShortcutService : public Ke
+ 
+   AssignmentResult AssignAcceleratorToCommand(int command_id,
+                                               const std::string& serialized);
++  // Replaces user-modifiable bindings for each specified command and removes
++  // user-modifiable conflicts from other commands. Commands omitted from the
++  // request are preserved, apart from those conflicts. Validation completes
++  // before either the in-memory map or preferences are changed.
++  ConfigurationResult ApplyConfiguration(
++      const std::vector<CommandAcceleratorConfiguration>& configuration);
+   bool UnassignAcceleratorFromCommand(int command_id,
+                                       const std::string& serialized);
+   bool ResetAcceleratorsForCommand(int command_id);
+   void ResetAccelerators();
+ 
++  bool HasPreviousConfiguration() const;
++  bool CanModifyConfiguration() const;
++  ConfigurationResult RestorePreviousConfiguration();
++
++  // Exposed for policy that needs to account for dynamically localized
++  // command labels without duplicating profile preference lookups.
++  const PrefService* GetPrefs() const;
++
+   std::optional<int> FindCommandForAccelerator(
+       const std::string& serialized) const;
+   bool IsAcceleratorLocked(const std::string& serialized,
+@@ -114,8 +147,16 @@ class BrowserShortcutService : public Ke
+       const ui::Accelerator& accelerator) const;
+   bool IsAcceleratorLocked(const ui::Accelerator& accelerator,
+                            int command_id_to_ignore) const;
++  bool IsAcceleratorLocked(
++      const CommandAccelerators& accelerators,
++      const ui::Accelerator& accelerator,
++      int command_id_to_ignore) const;
+   bool RemoveConflictingAccelerators(const ui::Accelerator& accelerator,
+                                      int command_id_to_keep);
++  bool RemoveConflictingAccelerators(
++      CommandAccelerators& accelerators,
++      const ui::Accelerator& accelerator,
++      int command_id_to_keep) const;
+   std::vector<AcceleratorEntry>* FindMutableEntries(int command_id);
+   bool HasDefaultEquivalent(int command_id) const;
+ 
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_service.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h"
+ 
+ #include <algorithm>
++#include <set>
+ #include <string>
+ #include <string_view>
+ #include <utility>
+@@ -36,6 +37,9 @@ namespace {
+ 
+ constexpr char kAddedKey[] = "added";
+ constexpr char kRemovedKey[] = "removed";
++constexpr char kBackupConfigurationKey[] = "configuration";
++constexpr char kBackupVersionKey[] = "version";
++constexpr int kBackupVersion = 1;
+ 
+ std::string CommandIdToPrefKey(int command_id) {
+   return base::NumberToString(command_id);
+@@ -124,6 +128,10 @@ BrowserShortcutService::BrowserShortcutS
+ 
+ BrowserShortcutService::~BrowserShortcutService() = default;
+ 
++const PrefService* BrowserShortcutService::GetPrefs() const {
++  return prefs_;
++}
++
+ const std::vector<CommandInfo>& BrowserShortcutService::GetCommands() const {
+   return command_cache_;
+ }
+@@ -150,6 +158,80 @@ bool BrowserShortcutService::HasDefaultA
+   return it != defaults_.end() && ContainsAccelerator(it->second, accelerator);
+ }
+ 
++ConfigurationResult BrowserShortcutService::ApplyConfiguration(
++    const std::vector<CommandAcceleratorConfiguration>& configuration) {
++  if (!CanModifyConfiguration()) {
++    return ConfigurationResult::kPreferencesLocked;
++  }
++
++  std::set<int> configured_commands;
++  std::map<ui::Accelerator, int> requested_accelerators;
++  std::vector<std::pair<int, AcceleratorEntry>> parsed_entries;
++
++  // Parse and validate the entire request before touching `current_` or any
++  // preference. Existing user-modifiable conflicts are deliberately resolved
++  // below, but locked owners and duplicate requested bindings are rejected.
++  for (const CommandAcceleratorConfiguration& command : configuration) {
++    if (!HasCommand(command.command_id)) {
++      return ConfigurationResult::kUnknownCommand;
++    }
++    if (!configured_commands.insert(command.command_id).second) {
++      return ConfigurationResult::kInvalidConfiguration;
++    }
++
++    for (const std::string& serialized : command.accelerators) {
++      std::optional<AcceleratorEntry> entry = EntryFromString(serialized, true);
++      if (!entry) {
++        return ConfigurationResult::kInvalidAccelerator;
++      }
++      const auto [it, inserted] = requested_accelerators.emplace(
++          entry->accelerator, command.command_id);
++      if (!inserted) {
++        return ConfigurationResult::kAcceleratorConflict;
++      }
++      if (IsAcceleratorLocked(entry->accelerator, command.command_id)) {
++        return ConfigurationResult::kShortcutLocked;
++      }
++      parsed_entries.emplace_back(command.command_id, std::move(*entry));
++    }
++  }
++
++  CommandAccelerators candidate = current_;
++  for (const CommandAcceleratorConfiguration& command : configuration) {
++    auto it = candidate.find(command.command_id);
++    DCHECK(it != candidate.end());
++    std::erase_if(it->second, [](const AcceleratorEntry& entry) {
++      return entry.user_modifiable;
++    });
++  }
++
++  for (const auto& [command_id, entry] : parsed_entries) {
++    if (IsAcceleratorLocked(candidate, entry.accelerator, command_id)) {
++      return ConfigurationResult::kShortcutLocked;
++    }
++    RemoveConflictingAccelerators(candidate, entry.accelerator, command_id);
++    InsertEntrySorted(candidate[command_id], entry);
++  }
++
++  if (candidate == current_) {
++    return ConfigurationResult::kNoChange;
++  }
++
++  if (!HasPreviousConfiguration()) {
++    base::DictValue backup;
++    backup.Set(kBackupVersionKey, kBackupVersion);
++    backup.Set(kBackupConfigurationKey,
++               prefs_->GetDict(prefs::kCustomAccelerators).Clone());
++    prefs_->SetDict(prefs::kArcShortcutBackup, std::move(backup));
++  }
++
++  current_ = std::move(candidate);
++  PersistToPrefs();
++  RebuildCommandCache();
++  NotifyChanged();
++  return ConfigurationResult::kSuccess;
++}
++
+ AssignmentResult BrowserShortcutService::AssignAcceleratorToCommand(
+     int command_id,
+     const std::string& serialized) {
+@@ -240,6 +322,44 @@ void BrowserShortcutService::ResetAccele
+   NotifyChanged();
+ }
+ 
++bool BrowserShortcutService::HasPreviousConfiguration() const {
++  const base::DictValue& backup = prefs_->GetDict(prefs::kArcShortcutBackup);
++  return backup.FindInt(kBackupVersionKey) == kBackupVersion &&
++         backup.FindDict(kBackupConfigurationKey) != nullptr;
++}
++
++bool BrowserShortcutService::CanModifyConfiguration() const {
++  return prefs_->IsUserModifiablePreference(prefs::kCustomAccelerators) &&
++         prefs_->IsUserModifiablePreference(prefs::kArcShortcutBackup);
++}
++
++ConfigurationResult BrowserShortcutService::RestorePreviousConfiguration() {
++  if (!CanModifyConfiguration()) {
++    return ConfigurationResult::kPreferencesLocked;
++  }
++
++  const base::DictValue& backup = prefs_->GetDict(prefs::kArcShortcutBackup);
++  if (backup.FindInt(kBackupVersionKey) != kBackupVersion) {
++    return ConfigurationResult::kNoPreviousConfiguration;
++  }
++  const base::DictValue* saved_configuration =
++      backup.FindDict(kBackupConfigurationKey);
++  if (!saved_configuration) {
++    return ConfigurationResult::kNoPreviousConfiguration;
++  }
++
++  const CommandAccelerators previous = current_;
++  prefs_->SetDict(prefs::kCustomAccelerators, saved_configuration->Clone());
++  LoadFromPrefs();
++  prefs_->ClearPref(prefs::kArcShortcutBackup);
++  RebuildCommandCache();
++  // Consuming the marker changes restore availability even when the saved
++  // bindings already match the current preference.
++  NotifyChanged();
++  return current_ == previous ? ConfigurationResult::kNoChange
++                              : ConfigurationResult::kSuccess;
++}
++
+ std::optional<int> BrowserShortcutService::FindCommandForAccelerator(
+     const std::string& serialized) const {
+   std::optional<AcceleratorEntry> search_entry =
+@@ -276,6 +396,13 @@ bool BrowserShortcutService::IsAccelerat
+ bool BrowserShortcutService::IsAcceleratorLocked(
+     const ui::Accelerator& accelerator,
+     int command_id_to_ignore) const {
++  return IsAcceleratorLocked(current_, accelerator, command_id_to_ignore);
++}
++
++bool BrowserShortcutService::IsAcceleratorLocked(
++    const CommandAccelerators& accelerators,
++    const ui::Accelerator& accelerator,
++    int command_id_to_ignore) const {
+ #if BUILDFLAG(IS_MAC)
+   for (const auto& platform_default : GetPlatformDefaultAccelerators()) {
+     if (platform_default.command_id != command_id_to_ignore &&
+@@ -286,7 +413,7 @@ bool BrowserShortcutService::IsAccelerat
+   }
+ #endif
+ 
+-  for (const auto& [command_id, entries] : current_) {
++  for (const auto& [command_id, entries] : accelerators) {
+     if (command_id == command_id_to_ignore) {
+       continue;
+     }
+@@ -554,8 +681,16 @@ BrowserShortcutService::ReadAcceleratorD
+ bool BrowserShortcutService::RemoveConflictingAccelerators(
+     const ui::Accelerator& accelerator,
+     int command_id_to_keep) {
++  return RemoveConflictingAccelerators(current_, accelerator,
++                                       command_id_to_keep);
++}
++
++bool BrowserShortcutService::RemoveConflictingAccelerators(
++    CommandAccelerators& accelerators,
++    const ui::Accelerator& accelerator,
++    int command_id_to_keep) const {
+   bool removed = false;
+-  for (auto& [command_id, entries] : current_) {
++  for (auto& [command_id, entries] : accelerators) {
+     if (command_id == command_id_to_keep) {
+       continue;
+     }
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_prefs.h
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_prefs.h
+@@ -11,6 +11,8 @@ namespace browser_shortcuts::prefs {
+ 
+ inline constexpr char kCustomAccelerators[] =
+     "helium.browser.custom_accelerators";
++inline constexpr char kArcShortcutBackup[] =
++    "helium.browser.arc_shortcut_backup";
+ 
+ void RegisterProfilePrefs(PrefRegistrySimple* registry);
+ 
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_prefs.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_prefs.cc
+@@ -10,6 +10,7 @@ namespace browser_shortcuts::prefs {
+ 
+ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterDictionaryPref(kCustomAccelerators);
++  registry->RegisterDictionaryPref(kArcShortcutBackup);
+ }
+ 
+ }  // namespace browser_shortcuts::prefs
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1493,6 +1493,12 @@ static_library("ui") {
+       # that //chrome/browser:browser has no remaining sources. It registers
+       # WebUI interface binders for desktop, which need this target's headers.
+       "//chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc",
++      "browser_shortcuts/arcium_shortcut_commands.cc",
++      "browser_shortcuts/arcium_shortcut_commands.h",
++      "browser_shortcuts/arcium_shortcut_tab_actions.cc",
++      "browser_shortcuts/arcium_shortcut_tab_actions.h",
++      "browser_shortcuts/arcium_shortcut_presets.cc",
++      "browser_shortcuts/arcium_shortcut_presets.h",
+       "browser_shortcuts/browser_shortcut_metadata.cc",
+       "browser_shortcuts/browser_shortcut_metadata.h",
+       "browser_shortcuts/browser_shortcut_prefs.cc",
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -6709,6 +6709,7 @@ test("unit_tests") {
+       "../browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper_unittest.mm",
+       "../browser/shell_integration_mac_unittest.mm",
+       "../browser/ui/accelerator_table_unittest_mac.mm",
++      "../browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm",
+       "../browser/ui/cocoa/applescript/apple_event_util_unittest.mm",
+       "../browser/ui/cocoa/bookmarks/bookmark_menu_bridge_unittest.mm",
+       "../browser/ui/cocoa/bookmarks/bookmark_menu_cocoa_controller_unittest.mm",
+@@ -7132,6 +7133,9 @@ test("unit_tests") {
+       "../browser/safe_browsing/generated_security_settings_bundle_pref_unittest.cc",
+       "../browser/signin/signin_promo_unittest.cc",
+       "../browser/ui/accelerator_table_unittest.cc",
++      "../browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc",
++    "../browser/ui/browser_shortcuts/arcium_shortcut_commands_unittest.cc",
++    "../browser/ui/browser_shortcuts/arcium_shortcut_tab_actions_unittest.cc",
+       "../browser/ui/browser_command_controller_unittest.cc",
+       "../browser/ui/browser_manager_service_factory_unittest.cc",
+       "../browser/ui/browser_unittest.cc",
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h
+@@ -0,0 +1,69 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_PRESETS_H_
++#define CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_PRESETS_H_
++
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h"
++
++namespace browser_shortcuts::arcium {
++
++// A report entry keeps the stable Arc action identifier and human-facing name
++// alongside the browser command label that native settings can show to the
++// user. `reason` is empty for supported entries and explains why an unavailable
++// entry was omitted from the applied configuration.
++struct CommandReport {
++  std::string action_id;
++  std::string action_name;
++  std::optional<int> command_id;
++  std::string accelerator;
++  std::u16string browser_command_name;
++  std::string reason;
++  // Already supplied by the native menu; do not persist a competing binding.
++  bool uses_platform_binding = false;
++};
++
++struct PresetReport {
++  std::vector<CommandReport> supported;
++  std::vector<CommandReport> unavailable;
++};
++
++enum class PresetResult {
++  kApplied,
++  kNoChange,
++  kNoSupportedCommands,
++  kUnknownCommand,
++  kInvalidAccelerator,
++  kInvalidConfiguration,
++  kShortcutLocked,
++  kAcceleratorConflict,
++  kPreferencesLocked,
++  kNoPreviousConfiguration,
++};
++
++// Computes the Arc macOS shortcut mapping against the commands and locked
++// accelerators available in this build. The unsupported list is intentional:
++// callers can explain real product gaps instead of silently assigning a
++// browser command with different behavior.
++PresetReport GetArcShortcutPresetReport(const BrowserShortcutService& service);
++
++// Applies every currently supported Arc mapping as one service transaction.
++// Unsupported Arc actions remain in the report and do not make the supported
++// subset fail.
++PresetResult ApplyArcShortcutPreset(BrowserShortcutService* service);
++
++bool CanModifyArcShortcutConfiguration(const BrowserShortcutService& service);
++
++bool HasPreviousArcShortcutConfiguration(const BrowserShortcutService& service);
++
++PresetResult RestorePreviousArcShortcutConfiguration(
++    BrowserShortcutService* service);
++
++}  // namespace browser_shortcuts::arcium
++
++#endif  // CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_PRESETS_H_
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.cc
+@@ -0,0 +1,293 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h"
++
++#include <map>
++#include <string>
++#include <string_view>
++#include <utility>
++#include <vector>
++
++#include "base/check.h"
++#include "build/build_config.h"
++#include "base/feature_list.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.h"
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_serialization.h"
++#include "chrome/browser/ui/helium/helium_layout_state_controller.h"
++#include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
++#include "chrome/browser/ui/ui_features.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/prefs/pref_service.h"
++
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.h"
++#endif
++
++namespace browser_shortcuts::arcium {
++
++namespace {
++
++// The strings use the same DOM-code serialization as browser shortcut prefs.
++// A command can occur more than once when Arc documents equivalent physical
++// keys for the same action; ApplyArcShortcutPreset groups those entries into a
++// single service configuration.
++struct ShortcutDefinition {
++  const char* action_id;
++  const char* action_name;
++  int command_id;
++  const char* accelerator;
++};
++
++constexpr ShortcutDefinition kSupportedShortcuts[] = {
++    {"pin_unpin_current_tab", "Pin or Unpin current tab",
++     IDC_ARCIUM_TOGGLE_SPACE_PIN, "Meta+KeyD"},
++    {"focus_space_1", "Focus on Space 1", IDC_ARCIUM_SELECT_SPACE_1,
++     "Control+Digit1"},
++    {"focus_space_2", "Focus on Space 2", IDC_ARCIUM_SELECT_SPACE_2,
++     "Control+Digit2"},
++    {"focus_space_3", "Focus on Space 3", IDC_ARCIUM_SELECT_SPACE_3,
++     "Control+Digit3"},
++    {"focus_space_4", "Focus on Space 4", IDC_ARCIUM_SELECT_SPACE_4,
++     "Control+Digit4"},
++    {"focus_space_5", "Focus on Space 5", IDC_ARCIUM_SELECT_SPACE_5,
++     "Control+Digit5"},
++    {"focus_space_6", "Focus on Space 6", IDC_ARCIUM_SELECT_SPACE_6,
++     "Control+Digit6"},
++    {"focus_space_7", "Focus on Space 7", IDC_ARCIUM_SELECT_SPACE_7,
++     "Control+Digit7"},
++    {"focus_space_8", "Focus on Space 8", IDC_ARCIUM_SELECT_SPACE_8,
++     "Control+Digit8"},
++    {"focus_space_9", "Focus on Space 9", IDC_ARCIUM_SELECT_SPACE_9,
++     "Control+Digit9"},
++    {"switch_to_previous_space", "Switch between Spaces",
++     IDC_ARCIUM_PREVIOUS_SPACE, "Meta+Alt+ArrowLeft"},
++    {"switch_to_next_space", "Switch between Spaces", IDC_ARCIUM_NEXT_SPACE,
++     "Meta+Alt+ArrowRight"},
++    {"previous_recent_tab", "Previous recent tab",
++     IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB, "Control+Shift+Tab"},
++    {"copy_current_tab_url_as_markdown", "Copy current tab URL as Markdown",
++     IDC_ARCIUM_COPY_MARKDOWN, "Meta+Shift+Alt+KeyC"},
++    {"select_tab_9", "Go directly to tab 9", IDC_ARCIUM_SELECT_TAB_9, "Meta+Digit9"},
++    {"clear_unpinned_tabs", "Clear unpinned tabs in this window",
++     IDC_ARCIUM_CLEAR_UNPINNED, "Meta+Shift+KeyK"},
++    {"close_split_view", "Separate split tabs", IDC_ARCIUM_CLOSE_SPLIT,
++     "Control+Shift+Minus"},
++    {"focus_split_pane_1", "Focus Split View pane 1", IDC_ARCIUM_FOCUS_SPLIT_1,
++     "Control+Shift+Digit1"},
++    {"focus_split_pane_2", "Focus Split View pane 2", IDC_ARCIUM_FOCUS_SPLIT_2,
++     "Control+Shift+Digit2"},
++    {"new_tab", "New tab", IDC_NEW_TAB, "Meta+KeyT"},
++    {"new_window", "New window", IDC_NEW_WINDOW, "Meta+KeyN"},
++    {"new_incognito_window", "New incognito window", IDC_NEW_INCOGNITO_WINDOW,
++     "Meta+Shift+KeyN"},
++    {"close_current_tab_or_window", "Close current tab or window", IDC_CLOSE_TAB,
++     "Meta+KeyW"},
++    {"reopen_last_closed_tab", "Re-open last closed tab", IDC_RESTORE_TAB,
++     "Meta+Shift+KeyT"},
++    {"save_page_as", "Save Page As", IDC_SAVE_PAGE, "Meta+Shift+KeyS"},
++    {"show_hide_sidebar", "Show or Hide the Sidebar",
++     IDC_TOGGLE_VERTICAL_TABS_COLLAPSE, "Meta+KeyS"},
++    {"copy_current_tab_url", "Copy current tab URL", IDC_COPY_URL,
++     "Meta+Shift+KeyC"},
++    {"change_current_tab_url", "Change current tab URL", IDC_FOCUS_LOCATION,
++     "Meta+KeyL"},
++    {"select_tab_1", "Go directly to tab 1", IDC_SELECT_TAB_0, "Meta+Digit1"},
++    {"select_tab_2", "Go directly to tab 2", IDC_SELECT_TAB_1, "Meta+Digit2"},
++    {"select_tab_3", "Go directly to tab 3", IDC_SELECT_TAB_2, "Meta+Digit3"},
++    {"select_tab_4", "Go directly to tab 4", IDC_SELECT_TAB_3, "Meta+Digit4"},
++    {"select_tab_5", "Go directly to tab 5", IDC_SELECT_TAB_4, "Meta+Digit5"},
++    {"select_tab_6", "Go directly to tab 6", IDC_SELECT_TAB_5, "Meta+Digit6"},
++    {"select_tab_7", "Go directly to tab 7", IDC_SELECT_TAB_6, "Meta+Digit7"},
++    {"select_tab_8", "Go directly to tab 8", IDC_SELECT_TAB_7, "Meta+Digit8"},
++    {"toggle_between_recent_tabs", "Toggle between recent tabs", IDC_ARCIUM_SELECT_RECENT_TAB,
++     "Control+Tab"},
++    {"switch_to_next_tab", "Switch between tabs", IDC_ARCIUM_SELECT_NEXT_TAB,
++     "Meta+Alt+ArrowDown"},
++    {"switch_to_previous_tab", "Switch between tabs", IDC_ARCIUM_SELECT_PREVIOUS_TAB,
++     "Meta+Alt+ArrowUp"},
++    {"go_forward_on_tab_history", "Go forward on tab history", IDC_FORWARD,
++     "Meta+ArrowRight"},
++    {"go_forward_on_tab_history", "Go forward on tab history", IDC_FORWARD,
++     "Meta+BracketRight"},
++    {"go_back_on_tab_history", "Go back on tab history", IDC_BACK,
++     "Meta+ArrowLeft"},
++    {"go_back_on_tab_history", "Go back on tab history", IDC_BACK,
++     "Meta+BracketLeft"},
++    {"add_split_view", "Add Split View", IDC_NEW_SPLIT_TAB,
++     "Control+Shift+Equal"},
++    {"view_history", "View History", IDC_SHOW_HISTORY, "Meta+KeyY"},
++    {"zoom_in_webpage", "Zoom in webpage", IDC_ZOOM_PLUS,
++     "Meta+Shift+Equal"},
++    {"zoom_out_webpage", "Zoom out webpage", IDC_ZOOM_MINUS, "Meta+Minus"},
++    {"reset_webpage_zoom", "Reset webpage zoom", IDC_ZOOM_NORMAL,
++     "Meta+Digit0"},
++    {"reload_webpage", "Reload webpage", IDC_RELOAD, "Meta+KeyR"},
++    {"find_in_webpage", "Find in webpage", IDC_FIND, "Meta+KeyF"},
++};
++
++struct UnavailableDefinition {
++  const char* action_id;
++  const char* action_name;
++  int command_id;
++  const char* accelerator;
++  const char* reason;
++};
++
++constexpr UnavailableDefinition kUnavailableShortcuts[] = {
++    {"open_little_arc", "Open Little Arc", 0, "Meta+Alt+KeyN",
++     "Little Arc can open links, but a new Little Arc search window is not "
++     "implemented yet."},
++
++};
++
++std::u16string CommandName(const BrowserShortcutService& service,
++                           int command_id) {
++  for (const CommandInfo& command : service.GetCommands()) {
++    if (command.command_id == command_id) {
++      return command.name;
++    }
++  }
++  return std::u16string();
++}
++
++CommandReport MakeReport(const char* action_id,
++                         const char* action_name,
++                         int command_id,
++                         const char* accelerator,
++                         const BrowserShortcutService& service,
++                         std::string reason) {
++  std::optional<int> optional_command_id;
++  if (command_id != 0) {
++    optional_command_id = command_id;
++  }
++  return {action_id,
++          action_name,
++          optional_command_id,
++          accelerator, CommandName(service, command_id), std::move(reason)};
++}
++
++std::string SupportedShortcutReason(const ShortcutDefinition& definition,
++                                    const BrowserShortcutService& service) {
++  if (!service.HasCommand(definition.command_id)) {
++    return "This browser action is not available in the current build.";
++  }
++  if (!IsValidAcceleratorString(definition.accelerator)) {
++    return "Preset accelerator is invalid.";
++  }
++  if (definition.command_id == IDC_ARCIUM_TOGGLE_SPACE_PIN &&
++      !helium::IsHeliumFavoritesAndPinsEnabled()) {
++    return "Space Pins are disabled in the current build.";
++  }
++  const PrefService* prefs = service.GetPrefs();
++  if (definition.command_id == IDC_TOGGLE_VERTICAL_TABS_COLLAPSE &&
++      (!prefs ||
++       prefs->GetInteger(::prefs::kHeliumLayout) !=
++           std::to_underlying(HeliumLayoutType::kVertical))) {
++    return "Sidebar visibility is unavailable in the current layout.";
++  }
++  if (service.IsAcceleratorLocked(definition.accelerator,
++                                  definition.command_id)) {
++    return "This shortcut is reserved by the browser.";
++  }
++  return std::string();
++}
++
++PresetResult ToPresetResult(ConfigurationResult result) {
++  switch (result) {
++    case ConfigurationResult::kSuccess:
++      return PresetResult::kApplied;
++    case ConfigurationResult::kNoChange:
++      return PresetResult::kNoChange;
++    case ConfigurationResult::kUnknownCommand:
++      return PresetResult::kUnknownCommand;
++    case ConfigurationResult::kInvalidAccelerator:
++      return PresetResult::kInvalidAccelerator;
++    case ConfigurationResult::kInvalidConfiguration:
++      return PresetResult::kInvalidConfiguration;
++    case ConfigurationResult::kShortcutLocked:
++      return PresetResult::kShortcutLocked;
++    case ConfigurationResult::kAcceleratorConflict:
++      return PresetResult::kAcceleratorConflict;
++    case ConfigurationResult::kPreferencesLocked:
++      return PresetResult::kPreferencesLocked;
++    case ConfigurationResult::kNoPreviousConfiguration:
++      return PresetResult::kNoPreviousConfiguration;
++  }
++}
++
++}  // namespace
++
++PresetReport GetArcShortcutPresetReport(const BrowserShortcutService& service) {
++  PresetReport report;
++  for (const ShortcutDefinition& definition : kSupportedShortcuts) {
++    bool uses_platform_binding = false;
++#if BUILDFLAG(IS_MAC)
++    if (definition.command_id == IDC_CLOSE_TAB) {
++      uses_platform_binding = IsPlatformDynamicCloseAccelerator(
++          ui::Accelerator(ui::VKEY_W, ui::EF_COMMAND_DOWN));
++    }
++#endif
++    std::string reason = uses_platform_binding
++                             ? std::string()
++                             : SupportedShortcutReason(definition, service);
++    CommandReport entry = MakeReport(
++        definition.action_id, definition.action_name, definition.command_id,
++        definition.accelerator, service, std::move(reason));
++    entry.uses_platform_binding = uses_platform_binding;
++    if (entry.reason.empty()) {
++      report.supported.push_back(std::move(entry));
++    } else {
++      report.unavailable.push_back(std::move(entry));
++    }
++  }
++
++  for (const UnavailableDefinition& definition : kUnavailableShortcuts) {
++    report.unavailable.push_back(MakeReport(
++        definition.action_id, definition.action_name, definition.command_id,
++        definition.accelerator, service, definition.reason));
++  }
++  return report;
++}
++
++PresetResult ApplyArcShortcutPreset(BrowserShortcutService* service) {
++  const PresetReport report = GetArcShortcutPresetReport(*service);
++  std::map<int, std::vector<std::string>> accelerators_by_command;
++  for (const CommandReport& entry : report.supported) {
++    if (entry.uses_platform_binding) {
++      continue;
++    }
++    DCHECK(entry.command_id.has_value());
++    accelerators_by_command[*entry.command_id].push_back(entry.accelerator);
++  }
++  if (accelerators_by_command.empty()) {
++    return PresetResult::kNoSupportedCommands;
++  }
++
++  std::vector<CommandAcceleratorConfiguration> configuration;
++  configuration.reserve(accelerators_by_command.size());
++  for (auto& [command_id, accelerators] : accelerators_by_command) {
++    configuration.push_back(
++        {command_id, std::move(accelerators)});
++  }
++  return ToPresetResult(service->ApplyConfiguration(configuration));
++}
++
++bool CanModifyArcShortcutConfiguration(const BrowserShortcutService& service) {
++  return service.CanModifyConfiguration();
++}
++
++bool HasPreviousArcShortcutConfiguration(
++    const BrowserShortcutService& service) {
++  return service.HasPreviousConfiguration();
++}
++
++PresetResult RestorePreviousArcShortcutConfiguration(
++    BrowserShortcutService* service) {
++  return ToPresetResult(service->RestorePreviousConfiguration());
++}
++
++}  // namespace browser_shortcuts::arcium
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets_unittest.cc
+@@ -0,0 +1,397 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h"
++
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/scoped_observation.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/test/scoped_feature_list.h"
++#include "base/values.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_prefs.h"
++#include "chrome/browser/ui/helium/helium_layout_state_controller.h"
++#include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
++#include "chrome/browser/ui/tabs/features.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/testing_pref_service.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace browser_shortcuts::arcium {
++namespace {
++
++constexpr char kBackupConfigurationKey[] = "configuration";
++constexpr char kBackupVersionKey[] = "version";
++
++void RegisterPrefs(TestingPrefServiceSimple* pref_service) {
++  pref_service->registry()->RegisterDictionaryPref(
++      prefs::kCustomAccelerators);
++  pref_service->registry()->RegisterDictionaryPref(prefs::kArcShortcutBackup);
++  pref_service->registry()->RegisterBooleanPref(::prefs::kCopyPageUrlShortcut,
++                                                true);
++  pref_service->registry()->RegisterBooleanPref(
++      ::prefs::kVerticalCollapseShortcut, true);
++  pref_service->registry()->RegisterBooleanPref(::prefs::kTabCyclingMRU,
++                                                false);
++  pref_service->registry()->RegisterBooleanPref(::prefs::kCtrlTabMru, false);
++  pref_service->registry()->RegisterIntegerPref(::prefs::kHeliumLayout, 0);
++}
++
++void UseVerticalSidebar(TestingPrefServiceSimple* pref_service) {
++  pref_service->SetInteger(
++      ::prefs::kHeliumLayout,
++      std::to_underlying(HeliumLayoutType::kVertical));
++}
++
++class CountingObserver final : public BrowserShortcutService::Observer {
++ public:
++  void OnBrowserShortcutsChanged() override { ++change_count; }
++
++  int change_count = 0;
++};
++
++using ServiceObservation =
++    base::ScopedObservation<BrowserShortcutService,
++                            BrowserShortcutService::Observer>;
++
++TEST(ArciumShortcutPresetsTest,
++     ApplyPreservesEmptyOriginalBackupAcrossRepeatedApplications) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  CountingObserver observer;
++  ServiceObservation observation(&observer);
++  observation.Observe(&service);
++
++  EXPECT_EQ(service.ApplyConfiguration({
++                {IDC_NEW_TAB, {"Control+Alt+KeyT"}},
++            }),
++            ConfigurationResult::kSuccess);
++  EXPECT_TRUE(service.HasPreviousConfiguration());
++  const base::DictValue* saved_configuration =
++      pref_service.GetDict(prefs::kArcShortcutBackup)
++          .FindDict(kBackupConfigurationKey);
++  ASSERT_TRUE(saved_configuration);
++  EXPECT_TRUE(saved_configuration->empty());
++  EXPECT_EQ(observer.change_count, 1);
++
++  // A second application changes the live mapping but retains the original
++  // empty configuration until restore consumes it.
++  EXPECT_EQ(service.ApplyConfiguration({
++                {IDC_NEW_TAB, {"Control+Alt+KeyN"}},
++            }),
++            ConfigurationResult::kSuccess);
++  EXPECT_EQ(observer.change_count, 2);
++  EXPECT_TRUE(service.HasPreviousConfiguration());
++  EXPECT_TRUE(pref_service.GetDict(prefs::kArcShortcutBackup)
++                  .FindDict(kBackupConfigurationKey)
++                  ->empty());
++
++  EXPECT_EQ(service.RestorePreviousConfiguration(),
++            ConfigurationResult::kSuccess);
++  EXPECT_FALSE(service.HasPreviousConfiguration());
++  EXPECT_TRUE(pref_service.GetDict(prefs::kCustomAccelerators).empty());
++  EXPECT_EQ(observer.change_count, 3);
++}
++
++TEST(ArciumShortcutPresetsTest, RejectsInvalidRequestBeforeMutation) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  CountingObserver observer;
++  ServiceObservation observation(&observer);
++  observation.Observe(&service);
++  const base::DictValue before =
++      pref_service.GetDict(prefs::kCustomAccelerators).Clone();
++
++  EXPECT_EQ(service.ApplyConfiguration({
++                {IDC_NEW_TAB, {"not-a-shortcut"}},
++            }),
++            ConfigurationResult::kInvalidAccelerator);
++  EXPECT_EQ(pref_service.GetDict(prefs::kCustomAccelerators), before);
++  EXPECT_FALSE(service.HasPreviousConfiguration());
++  EXPECT_EQ(observer.change_count, 0);
++}
++
++TEST(ArciumShortcutPresetsTest, RestoreNotifiesWhenSavedBindingsAlreadyMatch) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  CountingObserver observer;
++  ServiceObservation observation(&observer);
++  observation.Observe(&service);
++
++  EXPECT_EQ(service.ApplyConfiguration({
++                {IDC_NEW_TAB, {"Control+Alt+KeyT"}},
++            }),
++            ConfigurationResult::kSuccess);
++  const int changes_after_apply = observer.change_count;
++  base::DictValue matching_backup;
++  matching_backup.Set(kBackupVersionKey, 1);
++  matching_backup.Set(kBackupConfigurationKey,
++                      pref_service.GetDict(prefs::kCustomAccelerators).Clone());
++  pref_service.SetDict(prefs::kArcShortcutBackup,
++                       std::move(matching_backup));
++
++  EXPECT_EQ(service.RestorePreviousConfiguration(),
++            ConfigurationResult::kNoChange);
++  EXPECT_EQ(observer.change_count, changes_after_apply + 1);
++  EXPECT_FALSE(service.HasPreviousConfiguration());
++}
++
++TEST(ArciumShortcutPresetsTest, RejectsRequestedAcceleratorConflicts) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  CountingObserver observer;
++  ServiceObservation observation(&observer);
++  observation.Observe(&service);
++  const base::DictValue before =
++      pref_service.GetDict(prefs::kCustomAccelerators).Clone();
++
++  EXPECT_EQ(service.ApplyConfiguration({
++                {IDC_NEW_TAB, {"Control+Alt+KeyT"}},
++                {IDC_NEW_WINDOW, {"Control+Alt+KeyT"}},
++            }),
++            ConfigurationResult::kAcceleratorConflict);
++  EXPECT_EQ(pref_service.GetDict(prefs::kCustomAccelerators), before);
++  EXPECT_FALSE(service.HasPreviousConfiguration());
++  EXPECT_EQ(observer.change_count, 0);
++}
++
++TEST(ArciumShortcutPresetsTest, ManagedPreferencesDisableTransactions) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  pref_service.SetManagedPref(prefs::kCustomAccelerators, base::DictValue());
++  BrowserShortcutService service(&pref_service);
++  CountingObserver observer;
++  ServiceObservation observation(&observer);
++  observation.Observe(&service);
++
++  EXPECT_EQ(service.ApplyConfiguration({
++                {IDC_NEW_TAB, {"Control+Alt+KeyT"}},
++            }),
++            ConfigurationResult::kPreferencesLocked);
++  EXPECT_FALSE(service.HasPreviousConfiguration());
++  EXPECT_EQ(observer.change_count, 0);
++
++  pref_service.RemoveManagedPref(prefs::kCustomAccelerators);
++  EXPECT_EQ(service.ApplyConfiguration({
++                {IDC_NEW_TAB, {"Control+Alt+KeyT"}},
++            }),
++            ConfigurationResult::kSuccess);
++  EXPECT_EQ(observer.change_count, 1);
++
++  pref_service.SetManagedPref(
++      prefs::kArcShortcutBackup,
++      pref_service.GetDict(prefs::kArcShortcutBackup).Clone());
++  EXPECT_EQ(service.RestorePreviousConfiguration(),
++            ConfigurationResult::kPreferencesLocked);
++  EXPECT_TRUE(service.HasPreviousConfiguration());
++  EXPECT_EQ(observer.change_count, 1);
++}
++
++TEST(ArciumShortcutPresetsTest, UsesDedicatedCopyDespiteInspectPreference) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  pref_service.SetBoolean(::prefs::kCopyPageUrlShortcut, false);
++  BrowserShortcutService service(&pref_service);
++  ASSERT_TRUE(service.HasCommand(IDC_COPY_URL));
++  ASSERT_TRUE(service.HasCommand(IDC_DEV_TOOLS_INSPECT));
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Shift+KeyC"), IDC_COPY_URL);
++  EXPECT_FALSE(pref_service.GetBoolean(::prefs::kCopyPageUrlShortcut));
++}
++
++TEST(ArciumShortcutPresetsTest, KeepsSequentialAndRecentCommandsIndependent) {
++  for (bool mru_enabled : {false, true}) {
++    TestingPrefServiceSimple pref_service;
++    RegisterPrefs(&pref_service);
++    pref_service.SetBoolean(::prefs::kTabCyclingMRU, mru_enabled);
++    pref_service.SetBoolean(::prefs::kCtrlTabMru, mru_enabled);
++    BrowserShortcutService service(&pref_service);
++    EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++    EXPECT_EQ(service.FindCommandForAccelerator("Control+Tab"),
++              IDC_ARCIUM_SELECT_RECENT_TAB);
++    EXPECT_EQ(service.FindCommandForAccelerator("Control+Shift+Tab"),
++              IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB);
++    EXPECT_EQ(service.FindCommandForAccelerator("Meta+Alt+ArrowDown"),
++              IDC_ARCIUM_SELECT_NEXT_TAB);
++    EXPECT_EQ(service.FindCommandForAccelerator("Meta+Alt+ArrowUp"),
++              IDC_ARCIUM_SELECT_PREVIOUS_TAB);
++    EXPECT_EQ(pref_service.GetBoolean(::prefs::kTabCyclingMRU), mru_enabled);
++    EXPECT_EQ(pref_service.GetBoolean(::prefs::kCtrlTabMru), mru_enabled);
++  }
++}
++
++TEST(ArciumShortcutPresetsTest, AssignsSpaceCommandsAndRestoresOriginalMap) {
++  base::test::ScopedFeatureList features;
++  features.InitAndEnableFeature(helium::kHeliumFavoritesAndPins);
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++  const auto original = service.GetAcceleratorMap();
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+KeyD"),
++            IDC_ARCIUM_TOGGLE_SPACE_PIN);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Alt+ArrowLeft"),
++            IDC_ARCIUM_PREVIOUS_SPACE);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Alt+ArrowRight"),
++            IDC_ARCIUM_NEXT_SPACE);
++  for (int i = 1; i <= 9; ++i) {
++    EXPECT_EQ(service.FindCommandForAccelerator(
++                  "Control+Digit" + base::NumberToString(i)),
++              IDC_ARCIUM_SELECT_SPACE_1 + i - 1);
++  }
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Shift+Alt+KeyC"),
++            IDC_ARCIUM_COPY_MARKDOWN);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Digit9"),
++            IDC_ARCIUM_SELECT_TAB_9);
++  EXPECT_EQ(service.FindCommandForAccelerator("Control+Shift+Digit1"),
++            IDC_ARCIUM_FOCUS_SPLIT_1);
++  EXPECT_EQ(service.FindCommandForAccelerator("Control+Shift+Digit2"),
++            IDC_ARCIUM_FOCUS_SPLIT_2);
++  EXPECT_EQ(service.FindCommandForAccelerator("Control+Shift+Minus"),
++            IDC_ARCIUM_CLOSE_SPLIT);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Shift+KeyK"),
++            IDC_ARCIUM_CLEAR_UNPINNED);
++  EXPECT_EQ(RestorePreviousArcShortcutConfiguration(&service),
++            PresetResult::kApplied);
++  EXPECT_EQ(service.GetAcceleratorMap(), original);
++}
++
++TEST(ArciumShortcutPresetsTest,
++     ReportsArcCommandsAndDedicatedSidebarEquivalents) {
++  base::test::ScopedFeatureList feature_list;
++  feature_list.InitWithFeatures(
++      {}, {tabs::kVerticalTabs, tabs::kVerticalTabsLaunch});
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  UseVerticalSidebar(&pref_service);
++  BrowserShortcutService service(&pref_service);
++
++  const PresetReport report = GetArcShortcutPresetReport(service);
++  bool found_save_page = false;
++  bool found_sidebar = false;
++  bool found_little_arc = false;
++  for (const CommandReport& entry : report.supported) {
++    if (entry.action_id == "save_page_as") {
++      found_save_page = true;
++      ASSERT_TRUE(entry.command_id.has_value());
++      EXPECT_EQ(*entry.command_id, IDC_SAVE_PAGE);
++      EXPECT_EQ(entry.action_name, "Save Page As");
++      EXPECT_EQ(entry.accelerator, "Meta+Shift+KeyS");
++    }
++    if (entry.action_id == "show_hide_sidebar") {
++      found_sidebar = true;
++      ASSERT_TRUE(entry.command_id.has_value());
++      EXPECT_EQ(*entry.command_id, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE);
++      EXPECT_EQ(entry.action_name, "Show or Hide the Sidebar");
++      EXPECT_EQ(entry.accelerator, "Meta+KeyS");
++    }
++    EXPECT_NE(entry.command_id.value_or(0), IDC_CTRL_S_SHORTCUT);
++  }
++  for (const CommandReport& entry : report.unavailable) {
++    if (entry.action_id == "open_little_arc") {
++      found_little_arc = true;
++      EXPECT_FALSE(entry.command_id.has_value());
++    }
++  }
++  EXPECT_TRUE(found_save_page);
++  EXPECT_TRUE(found_sidebar);
++  EXPECT_TRUE(found_little_arc);
++}
++
++TEST(ArciumShortcutPresetsTest, ReportsSidebarUnavailableOutsideVerticalLayout) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  BrowserShortcutService service(&pref_service);
++
++  const PresetReport report = GetArcShortcutPresetReport(service);
++  bool found_sidebar = false;
++  for (const CommandReport& entry : report.unavailable) {
++    if (entry.action_id == "show_hide_sidebar") {
++      found_sidebar = true;
++      EXPECT_EQ(entry.reason,
++                "Sidebar visibility is unavailable in the current layout.");
++    }
++  }
++  EXPECT_TRUE(found_sidebar);
++}
++
++TEST(ArciumShortcutPresetsTest,
++     AppliesSavePageAndSidebarWithDedicatedCommands) {
++  base::test::ScopedFeatureList feature_list;
++  feature_list.InitWithFeatures(
++      {}, {tabs::kVerticalTabs, tabs::kVerticalTabsLaunch});
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++  UseVerticalSidebar(&pref_service);
++  pref_service.SetBoolean(::prefs::kVerticalCollapseShortcut, false);
++  BrowserShortcutService service(&pref_service);
++
++  const std::optional<int> original_sidebar_owner =
++      service.FindCommandForAccelerator("Meta+KeyS");
++  const std::optional<int> original_save_page_owner =
++      service.FindCommandForAccelerator("Meta+Shift+KeyS");
++  const auto original_accelerator_map = service.GetAcceleratorMap();
++
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+KeyS"),
++            std::optional<int>(IDC_TOGGLE_VERTICAL_TABS_COLLAPSE));
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Shift+KeyS"),
++            std::optional<int>(IDC_SAVE_PAGE));
++  EXPECT_NE(service.FindCommandForAccelerator("Meta+KeyS"),
++            std::optional<int>(IDC_CTRL_S_SHORTCUT));
++
++  EXPECT_EQ(RestorePreviousArcShortcutConfiguration(&service),
++            PresetResult::kApplied);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+KeyS"),
++            original_sidebar_owner);
++  EXPECT_EQ(service.FindCommandForAccelerator("Meta+Shift+KeyS"),
++            original_save_page_owner);
++  EXPECT_EQ(service.GetAcceleratorMap(), original_accelerator_map);
++}
++
++TEST(ArciumShortcutPresetsTest,
++     AppliesSupportedSubsetAndRestoresNonEmptyConfiguration) {
++  TestingPrefServiceSimple pref_service;
++  RegisterPrefs(&pref_service);
++
++  // Keep one unrelated custom binding and deliberately unassign Ctrl+Tab so
++  // restore proves that the full profile dictionary and effective map return.
++  base::ListValue added;
++  added.Append("Control+Alt+KeyT");
++  base::ListValue removed;
++  removed.Append("Control+Tab");
++  base::DictValue initial;
++  initial.Set(base::NumberToString(IDC_NEW_TAB),
++              base::DictValue().Set("added", std::move(added)));
++  initial.Set(base::NumberToString(IDC_SELECT_NEXT_TAB),
++              base::DictValue().Set("removed", std::move(removed)));
++  pref_service.SetDict(prefs::kCustomAccelerators, initial.Clone());
++
++  BrowserShortcutService service(&pref_service);
++  const base::DictValue before_preferences =
++      pref_service.GetDict(prefs::kCustomAccelerators).Clone();
++  const auto before_accelerators = service.GetAcceleratorMap();
++
++  EXPECT_EQ(ApplyArcShortcutPreset(&service), PresetResult::kApplied);
++  EXPECT_TRUE(HasPreviousArcShortcutConfiguration(service));
++
++  EXPECT_EQ(RestorePreviousArcShortcutConfiguration(&service),
++            PresetResult::kApplied);
++  EXPECT_EQ(pref_service.GetDict(prefs::kCustomAccelerators),
++            before_preferences);
++  EXPECT_EQ(service.GetAcceleratorMap(), before_accelerators);
++  EXPECT_FALSE(HasPreviousArcShortcutConfiguration(service));
++}
++
++}  // namespace
++}  // namespace browser_shortcuts::arcium
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -1964,6 +1964,45 @@ are declared in tools/grit/grit_args.gni
+       <message name="IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS" desc="Command name shown on the Settings shortcuts page for toggling vertical tabs with the Ctrl+S shortcut when vertical layout is active.">
+         Toggle vertical tabs
+       </message>
++      <message name="IDS_ARCIUM_SHORTCUT_TOGGLE_SPACE_PIN" desc="Arcium keyboard shortcut command name.">
++        Pin or unpin current tab in its Space
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_PREVIOUS_SPACE" desc="Arcium keyboard shortcut command name.">
++        Previous Space
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_NEXT_SPACE" desc="Arcium keyboard shortcut command name.">
++        Next Space
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_RECENT_TAB" desc="Arcium keyboard shortcut command name.">
++        Next recent tab
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_PREVIOUS_RECENT_TAB" desc="Arcium keyboard shortcut command name.">
++        Previous recent tab
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_SELECT_SPACE" desc="Arcium keyboard shortcut command name.">
++        Go to Space <ph name="SPACE_NUMBER">$1<ex>1</ex></ph>
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_COPY_MARKDOWN" desc="Arcium keyboard shortcut command name.">
++        Copy current tab URL as Markdown
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_CLEAR_UNPINNED" desc="Arcium keyboard shortcut command name.">
++        Clear unpinned tabs in this window
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_CLOSE_SPLIT" desc="Arcium keyboard shortcut command name.">
++        Separate split tabs
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_FOCUS_SPLIT" desc="Arcium keyboard shortcut command name.">
++        Focus split pane <ph name="PANE_NUMBER">$1<ex>1</ex></ph>
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_NEXT_TAB_IN_ORDER" desc="Arcium keyboard shortcut command name.">
++        Next tab in sidebar order
++      </message>
++      <message name="IDS_ARCIUM_SHORTCUT_PREVIOUS_TAB_IN_ORDER" desc="Arcium keyboard shortcut command name.">
++        Previous tab in sidebar order
++      </message>
++      <message name="IDS_SHORTCUT_COMMAND_TOGGLE_SIDEBAR" desc="Command name shown on the Settings shortcuts page for showing or hiding the sidebar.">
++        Show or hide sidebar
++      </message>
+       <message name="IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP" desc="Command name shown on the Settings shortcuts page for closing the find bar or stopping page loading.">
+         Close find bar or stop loading
+       </message>
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -58,6 +58,8 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_commands.h"
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_select_file_dialog_controller.h"
+ #include "chrome/browser/ui/browser_window.h"
+@@ -262,11 +264,15 @@ actions::ActionItem* FindAction(actions:
+   return actions::ActionManager::Get().FindAction(action_id, root_action_item);
+ }
+ 
++bool IsVerticalSidebarLayout(PrefService* prefs) {
++  return prefs->GetInteger(prefs::kHeliumLayout) ==
++             std::to_underlying(HeliumLayoutType::kVertical);
++}
++
+ bool ShouldToggleVerticalCollapse(PrefService* prefs) {
+   return tabs::IsVerticalTabsFeatureEnabled() &&
+-         prefs->GetBoolean(prefs::kVerticalCollapseShortcut) &&
+-         prefs->GetInteger(prefs::kHeliumLayout) ==
+-             std::to_underlying(HeliumLayoutType::kVertical);
++         IsVerticalSidebarLayout(prefs) &&
++         prefs->GetBoolean(prefs::kVerticalCollapseShortcut);
+ }
+ 
+ }  // namespace
+@@ -704,6 +710,17 @@ void BrowserCommandController::HandleCom
+       ToggleVerticalTabs(browser_);
+       break;
+     case IDC_TOGGLE_VERTICAL_TABS_COLLAPSE:
++      // The dedicated sidebar command must preserve the side-chrome behavior
++      // that Cmd+S has in Zen mode. It never falls through to Save Page.
++      if (PrefService* prefs = profile()->GetPrefs()) {
++        auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
++        if (browser_view && browser_view->IsZenModeEnabledForLayout() &&
++            browser_view->ShouldDrawVerticalTabStrip() &&
++            IsVerticalSidebarLayout(prefs)) {
++          browser_view->ToggleZenModeSideChrome();
++          break;
++        }
++      }
+ #if !BUILDFLAG(IS_MAC)
+       // On Mac, the logging for both the keyboard shortcut and the view menu
+       // is handled in BrowserNativeWidgetMac::ExecuteCommand to correctly
+@@ -814,6 +831,60 @@ void BrowserCommandController::HandleCom
+     case IDC_MOVE_TAB_TO_NEW_WINDOW:
+       MoveActiveTabToNewWindow(browser_);
+       break;
++    case IDC_ARCIUM_TOGGLE_SPACE_PIN:
++      browser_shortcuts::arcium::ToggleCurrentSpacePin(browser_);
++      break;
++    case IDC_ARCIUM_SELECT_SPACE_1:
++    case IDC_ARCIUM_SELECT_SPACE_2:
++    case IDC_ARCIUM_SELECT_SPACE_3:
++    case IDC_ARCIUM_SELECT_SPACE_4:
++    case IDC_ARCIUM_SELECT_SPACE_5:
++    case IDC_ARCIUM_SELECT_SPACE_6:
++    case IDC_ARCIUM_SELECT_SPACE_7:
++    case IDC_ARCIUM_SELECT_SPACE_8:
++    case IDC_ARCIUM_SELECT_SPACE_9:
++      browser_shortcuts::arcium::SelectSpace(browser_, id - IDC_ARCIUM_SELECT_SPACE_1);
++      break;
++    case IDC_ARCIUM_PREVIOUS_SPACE:
++    case IDC_ARCIUM_NEXT_SPACE:
++      browser_shortcuts::arcium::SelectRelativeSpace(browser_, id == IDC_ARCIUM_NEXT_SPACE);
++      break;
++    case IDC_ARCIUM_SELECT_NEXT_TAB:
++    case IDC_ARCIUM_SELECT_PREVIOUS_TAB:
++      browser_shortcuts::arcium::SelectSequentialTab(
++          browser_, id == IDC_ARCIUM_SELECT_NEXT_TAB,
++          TabStripUserGestureDetails(TabStripUserGestureDetails::GestureType::kKeyboard,
++                                     time_stamp));
++      break;
++    case IDC_ARCIUM_SELECT_RECENT_TAB:
++    case IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB:
++      browser_shortcuts::arcium::SelectRecentTab(
++          browser_, id == IDC_ARCIUM_SELECT_RECENT_TAB,
++          TabStripUserGestureDetails(TabStripUserGestureDetails::GestureType::kKeyboard,
++                                     time_stamp));
++      break;
++    case IDC_ARCIUM_COPY_MARKDOWN:
++      browser_shortcuts::arcium::CopyCurrentTabURLAsMarkdown(browser_);
++      break;
++    case IDC_ARCIUM_CLEAR_UNPINNED:
++      browser_shortcuts::arcium::ClearUnpinnedTabs(browser_);
++      break;
++    case IDC_ARCIUM_CLOSE_SPLIT:
++      browser_shortcuts::arcium::CloseSplitView(browser_);
++      break;
++    case IDC_ARCIUM_FOCUS_SPLIT_1:
++    case IDC_ARCIUM_FOCUS_SPLIT_2:
++      browser_shortcuts::arcium::FocusSplitViewPane(
++          browser_, id - IDC_ARCIUM_FOCUS_SPLIT_1,
++          TabStripUserGestureDetails(TabStripUserGestureDetails::GestureType::kKeyboard,
++                                     time_stamp));
++      break;
++    case IDC_ARCIUM_SELECT_TAB_9:
++      browser_shortcuts::arcium::SelectNinthVisibleTab(
++          browser_, TabStripUserGestureDetails(
++                        TabStripUserGestureDetails::GestureType::kKeyboard,
++                        time_stamp));
++      break;
+     case IDC_NEW_SPLIT_TAB:
+       if (!browser_->tab_strip_model()->GetActiveTab()->IsSplit()) {
+         NewSplitTab(browser_, split_tabs::SplitTabLayout::kSideBySide,
+@@ -2054,6 +2125,12 @@ void BrowserCommandController::InitComma
+ 
+   command_updater_->UpdateCommandEnabled(IDC_WINDOW_MUTE_SITE, normal_window);
+   command_updater_->UpdateCommandEnabled(IDC_WINDOW_PIN_TAB, normal_window);
++  for (int command = IDC_ARCIUM_TOGGLE_SPACE_PIN;
++       command <= IDC_ARCIUM_SELECT_TAB_9; ++command) {
++    command_updater_->UpdateCommandEnabled(command, normal_window);
++  }
++  command_updater_->UpdateCommandEnabled(
++      IDC_ARCIUM_COPY_MARKDOWN, normal_window && IsCommandEnabled(IDC_COPY_URL));
+   command_updater_->UpdateCommandEnabled(IDC_WINDOW_GROUP_TAB, normal_window);
+   command_updater_->UpdateCommandEnabled(IDC_WINDOW_CLOSE_TABS_TO_RIGHT,
+                                          normal_window);
+@@ -2236,6 +2313,12 @@ void BrowserCommandController::UpdateCom
+                                          !is_app && CanDuplicateTab(browser_));
+   command_updater_->UpdateCommandEnabled(IDC_WINDOW_MUTE_SITE, !is_app);
+   command_updater_->UpdateCommandEnabled(IDC_WINDOW_PIN_TAB, is_normal);
++  for (int command = IDC_ARCIUM_TOGGLE_SPACE_PIN;
++       command <= IDC_ARCIUM_SELECT_TAB_9; ++command) {
++    command_updater_->UpdateCommandEnabled(command, is_normal);
++  }
++  command_updater_->UpdateCommandEnabled(
++      IDC_ARCIUM_COPY_MARKDOWN, is_normal && IsCommandEnabled(IDC_COPY_URL));
+   command_updater_->UpdateCommandEnabled(IDC_WINDOW_GROUP_TAB, is_normal);
+ 
+   // Page-related commands
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
+@@ -79,6 +79,50 @@ std::optional<BrowserShortcutCommandLabe
+   }
+ 
+   switch (command_id) {
++    case IDC_ARCIUM_TOGGLE_SPACE_PIN:
++      return Label(IDS_ARCIUM_SHORTCUT_TOGGLE_SPACE_PIN);
++    case IDC_ARCIUM_PREVIOUS_SPACE:
++      return Label(IDS_ARCIUM_SHORTCUT_PREVIOUS_SPACE);
++    case IDC_ARCIUM_NEXT_SPACE:
++      return Label(IDS_ARCIUM_SHORTCUT_NEXT_SPACE);
++    case IDC_ARCIUM_SELECT_NEXT_TAB:
++      return Label(IDS_ARCIUM_SHORTCUT_NEXT_TAB_IN_ORDER);
++    case IDC_ARCIUM_SELECT_PREVIOUS_TAB:
++      return Label(IDS_ARCIUM_SHORTCUT_PREVIOUS_TAB_IN_ORDER);
++    case IDC_ARCIUM_SELECT_RECENT_TAB:
++      return Label(IDS_ARCIUM_SHORTCUT_RECENT_TAB);
++    case IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB:
++      return Label(IDS_ARCIUM_SHORTCUT_PREVIOUS_RECENT_TAB);
++    case IDC_ARCIUM_SELECT_SPACE_1:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"1");
++    case IDC_ARCIUM_SELECT_SPACE_2:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"2");
++    case IDC_ARCIUM_SELECT_SPACE_3:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"3");
++    case IDC_ARCIUM_SELECT_SPACE_4:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"4");
++    case IDC_ARCIUM_SELECT_SPACE_5:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"5");
++    case IDC_ARCIUM_SELECT_SPACE_6:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"6");
++    case IDC_ARCIUM_SELECT_SPACE_7:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"7");
++    case IDC_ARCIUM_SELECT_SPACE_8:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"8");
++    case IDC_ARCIUM_SELECT_SPACE_9:
++      return Label(IDS_ARCIUM_SHORTCUT_SELECT_SPACE, u"9");
++    case IDC_ARCIUM_COPY_MARKDOWN:
++      return Label(IDS_ARCIUM_SHORTCUT_COPY_MARKDOWN);
++    case IDC_ARCIUM_CLEAR_UNPINNED:
++      return Label(IDS_ARCIUM_SHORTCUT_CLEAR_UNPINNED);
++    case IDC_ARCIUM_CLOSE_SPLIT:
++      return Label(IDS_ARCIUM_SHORTCUT_CLOSE_SPLIT);
++    case IDC_ARCIUM_FOCUS_SPLIT_1:
++      return Label(IDS_ARCIUM_SHORTCUT_FOCUS_SPLIT, u"1");
++    case IDC_ARCIUM_FOCUS_SPLIT_2:
++      return Label(IDS_ARCIUM_SHORTCUT_FOCUS_SPLIT, u"2");
++    case IDC_ARCIUM_SELECT_TAB_9:
++      return Label(IDS_SHORTCUT_COMMAND_SELECT_TAB, u"9");
+     case IDC_BACK:
+       return Label(IDS_SHORTCUT_COMMAND_BACK);
+     case IDC_FORWARD:
+@@ -168,7 +212,7 @@ std::optional<BrowserShortcutCommandLabe
+                        ? IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS
+                        : IDS_SAVE_PAGE);
+     case IDC_TOGGLE_VERTICAL_TABS_COLLAPSE:
+-      return Label(IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS);
++      return Label(IDS_SHORTCUT_COMMAND_TOGGLE_SIDEBAR);
+     case IDC_PRINT:
+       return Label(IDS_CONTENT_CONTEXT_PRINT);
+     case IDC_BASIC_PRINT:
+@@ -248,13 +292,38 @@ std::optional<BrowserShortcutCommandLabe
+ std::vector<int> GetBrowserShortcutCommandsWithoutDefault(
+     const PrefService* prefs) {
+   std::vector<int> commands;
+-  if (ShouldUseVerticalCollapseLabel(prefs)) {
+-    commands.push_back(IDC_SAVE_PAGE);
+-  }
++  commands.push_back(IDC_ARCIUM_COPY_MARKDOWN);
++  commands.push_back(IDC_ARCIUM_CLEAR_UNPINNED);
++  commands.push_back(IDC_ARCIUM_CLOSE_SPLIT);
++  commands.push_back(IDC_ARCIUM_FOCUS_SPLIT_1);
++  commands.push_back(IDC_ARCIUM_FOCUS_SPLIT_2);
++  commands.push_back(IDC_ARCIUM_SELECT_TAB_9);
++
++  commands.push_back(IDC_ARCIUM_TOGGLE_SPACE_PIN);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_1);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_2);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_3);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_4);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_5);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_6);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_7);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_8);
++  commands.push_back(IDC_ARCIUM_SELECT_SPACE_9);
++  commands.push_back(IDC_ARCIUM_PREVIOUS_SPACE);
++  commands.push_back(IDC_ARCIUM_NEXT_SPACE);
++  commands.push_back(IDC_ARCIUM_SELECT_NEXT_TAB);
++  commands.push_back(IDC_ARCIUM_SELECT_PREVIOUS_TAB);
++  commands.push_back(IDC_ARCIUM_SELECT_RECENT_TAB);
++  commands.push_back(IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB);
++
++  // Save Page has a dedicated command even when the macOS menu has not been
++  // constructed yet. Keep it assignable independently of the layout-aware
++  // Ctrl+S dispatcher.
++  commands.push_back(IDC_SAVE_PAGE);
+   commands.push_back(IDC_TOGGLE_VERTICAL_TABS_COLLAPSE);
+ 
+-  commands.push_back(ShouldUseCopyPageUrlLabel(prefs) ? IDC_DEV_TOOLS_INSPECT
+-                                                      : IDC_COPY_URL);
++  commands.push_back(IDC_COPY_URL);
++  commands.push_back(IDC_DEV_TOOLS_INSPECT);
+   commands.push_back(IDC_FORCE_PASTE);
+   return commands;
+ }
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -129,6 +129,31 @@
+ #define IDC_ADD_NEW_TAB_RECENT_GROUP  34107
+ #define IDC_UNFOCUS_TAB_GROUP         34108
+ 
++// Arcium commands with stable, preference-independent shortcut behavior.
++#define IDC_ARCIUM_TOGGLE_SPACE_PIN 34120
++#define IDC_ARCIUM_SELECT_SPACE_1 34121
++#define IDC_ARCIUM_SELECT_SPACE_2 34122
++#define IDC_ARCIUM_SELECT_SPACE_3 34123
++#define IDC_ARCIUM_SELECT_SPACE_4 34124
++#define IDC_ARCIUM_SELECT_SPACE_5 34125
++#define IDC_ARCIUM_SELECT_SPACE_6 34126
++#define IDC_ARCIUM_SELECT_SPACE_7 34127
++#define IDC_ARCIUM_SELECT_SPACE_8 34128
++#define IDC_ARCIUM_SELECT_SPACE_9 34129
++#define IDC_ARCIUM_PREVIOUS_SPACE 34130
++#define IDC_ARCIUM_NEXT_SPACE 34131
++#define IDC_ARCIUM_SELECT_NEXT_TAB 34132
++#define IDC_ARCIUM_SELECT_PREVIOUS_TAB 34133
++#define IDC_ARCIUM_SELECT_RECENT_TAB 34134
++#define IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB 34135
++
++#define IDC_ARCIUM_COPY_MARKDOWN 34136
++#define IDC_ARCIUM_CLEAR_UNPINNED 34137
++#define IDC_ARCIUM_CLOSE_SPLIT 34138
++#define IDC_ARCIUM_FOCUS_SPLIT_1 34139
++#define IDC_ARCIUM_FOCUS_SPLIT_2 34140
++#define IDC_ARCIUM_SELECT_TAB_9 34141
++
+ // Page-related commands
+ #define IDC_BOOKMARK_THIS_TAB           35000
+ #define IDC_BOOKMARK_ALL_TABS           35001
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_commands.cc
+@@ -0,0 +1,167 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_commands.h"
++
++#include <algorithm>
++#include <cstddef>
++#include <iterator>
++#include <optional>
++#include <string_view>
++#include <vector>
++
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/tabs/public/tab_interface.h"
++
++namespace browser_shortcuts::arcium {
++
++namespace {
++
++bool IsNormalBrowser(Browser* browser) {
++  return browser && browser->is_type_normal() && browser->profile();
++}
++
++bool IsEligiblePersistentBrowser(Browser* browser) {
++  if (!IsNormalBrowser(browser)) {
++    return false;
++  }
++  Profile* const profile = browser->profile();
++  return !profile->IsOffTheRecord() && !profile->IsGuestSession();
++}
++
++bool SelectTab(Browser* browser,
++               bool next,
++               bool recent,
++               TabStripUserGestureDetails detail) {
++  if (!IsNormalBrowser(browser)) {
++    return false;
++  }
++  TabStripModel* const model = browser->tab_strip_model();
++  if (!model || model->count() < 2 ||
++      model->active_index() == TabStripModel::kNoTab) {
++    return false;
++  }
++
++  const int old_index = model->active_index();
++  const TabStripModel::TabRelativeDirection direction =
++      next ? TabStripModel::TabRelativeDirection::kNext
++           : TabStripModel::TabRelativeDirection::kPrevious;
++  if (recent) {
++    model->SelectRecentTab(direction, detail);
++  } else {
++    model->SelectSequentialTab(direction, detail);
++  }
++  return model->active_index() != old_index;
++}
++
++bool ActivateSpace(Browser* browser, helium::HeliumSpace* space) {
++  return IsEligiblePersistentBrowser(browser) && space &&
++         space->ActivateOrCreatePrimaryWindow() != nullptr;
++}
++
++}  // namespace
++
++bool ToggleCurrentSpacePin(Browser* browser) {
++  if (!IsEligiblePersistentBrowser(browser) ||
++      !helium::IsHeliumFavoritesAndPinsEnabled()) {
++    return false;
++  }
++
++  TabStripModel* const model = browser->tab_strip_model();
++  tabs::TabInterface* const tab = model ? model->GetActiveTab() : nullptr;
++  if (!tab) {
++    return false;
++  }
++
++  helium::HeliumSpaceService* const service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser->profile());
++  if (!service) {
++    return false;
++  }
++
++  const std::optional<helium::PersistentRecordKind> kind =
++      service->GetPersistentItemKind(tab);
++  if (kind.has_value()) {
++    // The Arc pin shortcut has no Favorite equivalent. In particular, never
++    // route a Favorite through RemovePersistentItem or the context-menu
++    // toggle, which would change a different persistent collection.
++    return *kind == helium::PersistentRecordKind::kPin &&
++           service->RemovePersistentItem(tab);
++  }
++
++  return helium::MakePin(tab);
++}
++
++bool SelectSpace(Browser* browser, size_t index) {
++  if (!IsEligiblePersistentBrowser(browser)) {
++    return false;
++  }
++
++  helium::HeliumSpaceService* const service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser->profile());
++  if (!service) {
++    return false;
++  }
++  const std::vector<helium::HeliumSpace*> spaces = service->GetSpaces();
++  if (index >= spaces.size()) {
++    return false;
++  }
++  const std::optional<size_t> arc_index =
++      SpaceIndexForArcOrdinal(index + 1, spaces.size());
++  return arc_index.has_value() && ActivateSpace(browser, spaces[*arc_index]);
++}
++
++bool SelectRelativeSpace(Browser* browser, bool next) {
++  if (!IsEligiblePersistentBrowser(browser)) {
++    return false;
++  }
++
++  helium::HeliumSpaceService* const service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser->profile());
++  if (!service) {
++    return false;
++  }
++  const std::vector<helium::HeliumSpace*> spaces = service->GetSpaces();
++  if (spaces.empty()) {
++    return false;
++  }
++
++  const std::string_view current_id = service->GetSpaceIdForBrowser(browser);
++  const auto current = std::find_if(
++      spaces.begin(), spaces.end(),
++      [current_id](const helium::HeliumSpace* space) {
++        return space && space->id() == current_id;
++      });
++  if (current == spaces.end()) {
++    return false;
++  }
++
++  const size_t current_index =
++      static_cast<size_t>(std::distance(spaces.begin(), current));
++  const size_t count = spaces.size();
++  const size_t target_index =
++      next ? (current_index + 1) % count
++           : (current_index + count - 1) % count;
++  return ActivateSpace(browser, spaces[target_index]);
++}
++
++bool SelectSequentialTab(Browser* browser,
++                         bool next,
++                         TabStripUserGestureDetails detail) {
++  return SelectTab(browser, next, /*recent=*/false, detail);
++}
++
++bool SelectRecentTab(Browser* browser,
++                     bool next,
++                     TabStripUserGestureDetails detail) {
++  return SelectTab(browser, next, /*recent=*/true, detail);
++}
++
++}  // namespace browser_shortcuts::arcium
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_commands.h
+@@ -0,0 +1,55 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_COMMANDS_H_
++#define CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_COMMANDS_H_
++
++#include <cstddef>
++#include <optional>
++
++#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
++
++class Browser;
++
++namespace browser_shortcuts::arcium {
++
++// Returns the zero-based Space index represented by an Arc Space ordinal. Arc
++// exposes only the first nine Spaces through numbered shortcuts.
++constexpr std::optional<size_t> SpaceIndexForArcOrdinal(size_t ordinal,
++                                                        size_t space_count) {
++  return ordinal == 0 || ordinal > 9 || ordinal > space_count
++             ? std::nullopt
++             : std::optional<size_t>(ordinal - 1);
++}
++
++// Toggles the active tab's durable Space Pin. Favorites, ordinary Chromium
++// pinned tabs, and ineligible tab contexts are left unchanged.
++bool ToggleCurrentSpacePin(Browser* browser);
++
++// Activates a Space by its zero-based profile index, creating its primary
++// normal window when it does not already have one. Only Arc's first nine
++// Spaces are addressable through numbered shortcuts.
++bool SelectSpace(Browser* browser, size_t index);
++
++// Activates the adjacent Space in the ordered profile Space list. `next`
++// selects the next Space when true and the previous Space otherwise; the list
++// wraps at either end.
++bool SelectRelativeSpace(Browser* browser, bool next);
++
++// Selects tabs through TabStripModel's group-aware sequential or MRU APIs.
++// These return false when the browser is ineligible or has fewer than two tabs.
++bool SelectSequentialTab(
++    Browser* browser,
++    bool next,
++    TabStripUserGestureDetails detail = TabStripUserGestureDetails(
++        TabStripUserGestureDetails::GestureType::kKeyboard));
++bool SelectRecentTab(
++    Browser* browser,
++    bool next,
++    TabStripUserGestureDetails detail = TabStripUserGestureDetails(
++        TabStripUserGestureDetails::GestureType::kKeyboard));
++
++}  // namespace browser_shortcuts::arcium
++
++#endif  // CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_COMMANDS_H_
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_commands_unittest.cc
+@@ -0,0 +1,26 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by a GPL-3.0 license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_commands.h"
++
++#include <cstddef>
++#include <optional>
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace browser_shortcuts::arcium {
++
++TEST(ArciumShortcutCommandsTest, MapsOnlyArcSpaceOrdinals) {
++  EXPECT_EQ(SpaceIndexForArcOrdinal(1, 3), std::optional<size_t>(0));
++  EXPECT_EQ(SpaceIndexForArcOrdinal(2, 3), std::optional<size_t>(1));
++  EXPECT_EQ(SpaceIndexForArcOrdinal(9, 9), std::optional<size_t>(8));
++}
++
++TEST(ArciumShortcutCommandsTest, RejectsUnavailableSpaceOrdinals) {
++  EXPECT_FALSE(SpaceIndexForArcOrdinal(0, 3).has_value());
++  EXPECT_FALSE(SpaceIndexForArcOrdinal(4, 3).has_value());
++  EXPECT_FALSE(SpaceIndexForArcOrdinal(10, 10).has_value());
++}
++
++}  // namespace browser_shortcuts::arcium
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.cc
+@@ -0,0 +1,273 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.h"
++
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/memory/weak_ptr.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/tabs/public/split_tab_data.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/clipboard/clipboard_buffer.h"
++#include "ui/base/clipboard/scoped_clipboard_writer.h"
++
++namespace browser_shortcuts::arcium {
++
++namespace {
++
++std::u16string EscapeMarkdownLinkText(std::u16string_view text) {
++  std::u16string escaped;
++  escaped.reserve(text.size());
++  for (char16_t character : text) {
++    switch (character) {
++      case u'\\':
++      case u'[':
++      case u']':
++      case u'*':
++      case u'_':
++      case u'`':
++      case u'&':
++      case u'~':
++      case u'<':
++      case u'>':
++        escaped.push_back(u'\\');
++        break;
++      case u'\r':
++      case u'\n':
++        escaped.push_back(u' ');
++        continue;
++      default:
++        break;
++    }
++    escaped.push_back(character);
++  }
++  return escaped;
++}
++
++std::u16string EscapeMarkdownDestination(std::u16string_view destination) {
++  std::u16string escaped;
++  escaped.reserve(destination.size());
++  for (char16_t character : destination) {
++    switch (character) {
++      case u'\\':
++      case u'<':
++      case u'>':
++        escaped.push_back(u'\\');
++        break;
++      case u'\r':
++      case u'\n':
++        escaped.push_back(u' ');
++        continue;
++      default:
++        break;
++    }
++    escaped.push_back(character);
++  }
++  return escaped;
++}
++
++Browser* GetBrowser(BrowserWindowInterface* browser_window) {
++  return browser_window ? browser_window->GetBrowserForMigrationOnly()
++                        : nullptr;
++}
++
++}  // namespace
++
++bool ClearUnpinnedTabs(BrowserWindowInterface* browser_window) {
++  if (!browser_window ||
++      browser_window->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
++    return false;
++  }
++  Browser* browser = GetBrowser(browser_window);
++  TabStripModel* model = browser ? browser->tab_strip_model() : nullptr;
++  if (!model) {
++    return false;
++  }
++
++  std::vector<tabs::TabHandle> tabs_to_close;
++  tabs_to_close.reserve(model->count());
++  helium::HeliumSpaceService* space_service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(browser->profile());
++  // Capture the invoking window's effective Space before any close can run
++  // synchronous lifecycle callbacks that change its association.
++  const bool has_space_service = space_service != nullptr;
++  const std::string effective_space_id =
++      space_service
++          ? std::string(space_service->GetSpaceIdForBrowser(browser))
++          : std::string();
++  for (int index = 0; index < model->count(); ++index) {
++    tabs::TabInterface* tab = model->GetTabAtIndex(index);
++    if (!tab || tab->IsPinned() ||
++        (space_service && space_service->IsPersistentItemTab(tab))) {
++      continue;
++    }
++    tabs_to_close.push_back(tab->GetHandle());
++  }
++  if (tabs_to_close.empty()) {
++    return false;
++  }
++
++  base::WeakPtr<BrowserWindowInterface> browser_weak =
++      browser_window->GetWeakPtr();
++  bool closed_any = false;
++  for (const tabs::TabHandle& tab_handle : tabs_to_close) {
++    BrowserWindowInterface* current_window = browser_weak.get();
++    Browser* current_browser = GetBrowser(current_window);
++    TabStripModel* current_model =
++        current_browser ? current_browser->tab_strip_model() : nullptr;
++    if (!current_window || !current_browser || !current_model) {
++      break;
++    }
++    space_service = helium::HeliumSpaceServiceFactory::GetForProfile(
++        current_browser->profile());
++    if (has_space_service &&
++        (!space_service ||
++         space_service->GetSpaceIdForBrowser(current_browser) !=
++             effective_space_id)) {
++      break;
++    }
++    tabs::TabInterface* tab = tab_handle.Get();
++    BrowserWindowInterface* tab_window =
++        tab ? tab->GetBrowserWindowInterface() : nullptr;
++    if (!tab || tab_window != current_window ||
++        tab_window->GetBrowserForMigrationOnly() != current_browser ||
++        tab->IsPinned() ||
++        (space_service && space_service->IsPersistentItemTab(tab))) {
++      continue;
++    }
++    const int index = current_model->GetIndexOfTab(tab);
++    if (index == TabStripModel::kNoTab) {
++      continue;
++    }
++    current_model->CloseWebContentsAt(
++        index, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
++    closed_any = true;
++  }
++  return closed_any;
++}
++
++std::u16string FormatTabMarkdownLink(std::u16string_view title,
++                                     const GURL& canonical_url) {
++  const std::u16string canonical_url_text =
++      base::UTF8ToUTF16(canonical_url.spec());
++  std::u16string literal_title(title);
++  if (literal_title.empty()) {
++    literal_title = canonical_url_text;
++  }
++
++  std::u16string markdown;
++  markdown.reserve(literal_title.size() + canonical_url_text.size() + 5);
++  markdown.push_back(u'[');
++  markdown.append(EscapeMarkdownLinkText(literal_title));
++  // An angle-bracket destination accepts parentheses and percent-encoded
++  // spaces without interpreting them as Markdown delimiters. GURL::spec()
++  // keeps the canonical URL's percent escapes intact; only Markdown delimiter
++  // characters are escaped below.
++  markdown.append(u"](<");
++  markdown.append(EscapeMarkdownDestination(canonical_url_text));
++  markdown.append(u">)");
++  return markdown;
++}
++
++bool CopyCurrentTabURLAsMarkdown(BrowserWindowInterface* browser_window) {
++  Browser* browser = GetBrowser(browser_window);
++  content::WebContents* web_contents =
++      browser ? browser->tab_strip_model()->GetActiveWebContents() : nullptr;
++  if (!browser || !web_contents || !web_contents->GetVisibleURL().is_valid()) {
++    return false;
++  }
++
++  const std::u16string markdown =
++      FormatTabMarkdownLink(web_contents->GetTitle(),
++                            web_contents->GetVisibleURL());
++  ui::ScopedClipboardWriter clipboard_writer(ui::ClipboardBuffer::kCopyPaste);
++  clipboard_writer.WriteText(markdown);
++  return true;
++}
++
++bool CloseSplitView(BrowserWindowInterface* browser_window) {
++  Browser* browser = GetBrowser(browser_window);
++  TabStripModel* model = browser ? browser->tab_strip_model() : nullptr;
++  tabs::TabInterface* active_tab = model ? model->GetActiveTab() : nullptr;
++  if (!model || !active_tab) {
++    return false;
++  }
++
++  const std::optional<split_tabs::SplitTabId> split_id =
++      active_tab->GetSplit();
++  if (!split_id.has_value()) {
++    return false;
++  }
++  model->RemoveSplit(*split_id);
++  return true;
++}
++
++bool FocusSplitViewPane(BrowserWindowInterface* browser_window,
++                        int pane_index,
++                        TabStripUserGestureDetails user_gesture) {
++  Browser* browser = GetBrowser(browser_window);
++  TabStripModel* model = browser ? browser->tab_strip_model() : nullptr;
++  tabs::TabInterface* active_tab = model ? model->GetActiveTab() : nullptr;
++  if (!model || !active_tab || pane_index < 0) {
++    return false;
++  }
++
++  const std::optional<split_tabs::SplitTabId> split_id =
++      active_tab->GetSplit();
++  if (!split_id.has_value()) {
++    return false;
++  }
++  split_tabs::SplitTabData* split_data = model->GetSplitData(*split_id);
++  if (!split_data) {
++    return false;
++  }
++  const std::vector<tabs::TabInterface*> split_tabs = split_data->ListTabs();
++  if (split_tabs.size() < 2) {
++    return false;
++  }
++  if (pane_index >= static_cast<int>(split_tabs.size())) {
++    return false;
++  }
++  tabs::TabInterface* target_tab = split_tabs[pane_index];
++  const int target_index = model->GetIndexOfTab(target_tab);
++  if (target_index == TabStripModel::kNoTab) {
++    return false;
++  }
++  model->ActivateTabAt(target_index, user_gesture);
++  target_tab->GetContents()->Focus();
++  return true;
++}
++
++bool SelectNinthVisibleTab(BrowserWindowInterface* browser_window,
++                           TabStripUserGestureDetails user_gesture) {
++  Browser* browser = GetBrowser(browser_window);
++  TabStripModel* model = browser ? browser->tab_strip_model() : nullptr;
++  if (!model) {
++    return false;
++  }
++
++  int visible_count = 0;
++  for (int index = 0; index < model->count(); ++index) {
++    if (model->IsTabCollapsed(index)) {
++      continue;
++    }
++    if (visible_count++ == 8) {
++      model->ActivateTabAt(index, user_gesture);
++      return true;
++    }
++  }
++  return false;
++}
++
++}  // namespace browser_shortcuts::arcium
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.h
+@@ -0,0 +1,52 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_TAB_ACTIONS_H_
++#define CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_TAB_ACTIONS_H_
++
++#include <string>
++#include <string_view>
++
++#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
++#include "url/gurl.h"
++
++class BrowserWindowInterface;
++
++namespace browser_shortcuts::arcium {
++
++// Closes the ordinary tabs in the invoking browser's unpinned region. Durable
++// Helium persistent items remain in the pinned projection.
++bool ClearUnpinnedTabs(BrowserWindowInterface* browser);
++
++// Copies the active tab as a Markdown link and returns whether a tab was
++// available to copy.
++bool CopyCurrentTabURLAsMarkdown(BrowserWindowInterface* browser);
++
++// Formats a canonical URL as a Markdown link. The URL is serialized from
++// GURL::spec() so percent escapes remain intact; the title is escaped as
++// literal Markdown link text.
++std::u16string FormatTabMarkdownLink(std::u16string_view title,
++                                     const GURL& canonical_url);
++
++// Removes the active tab's split collection while retaining its tabs.
++bool CloseSplitView(BrowserWindowInterface* browser);
++
++// Activates the ordinal pane in the active split collection. `pane_index` is
++// zero-based, so Arc's Ctrl+Shift+1 and Ctrl+Shift+2 pass 0 and 1.
++bool FocusSplitViewPane(
++    BrowserWindowInterface* browser,
++    int pane_index,
++    TabStripUserGestureDetails user_gesture = TabStripUserGestureDetails(
++        TabStripUserGestureDetails::GestureType::kKeyboard));
++
++// Activates the ninth visible tab, using the same collapsed-tab definition as
++// Chromium's existing numbered-tab commands.
++bool SelectNinthVisibleTab(
++    BrowserWindowInterface* browser,
++    TabStripUserGestureDetails user_gesture = TabStripUserGestureDetails(
++        TabStripUserGestureDetails::GestureType::kKeyboard));
++
++}  // namespace browser_shortcuts::arcium
++
++#endif  // CHROME_BROWSER_UI_BROWSER_SHORTCUTS_ARCIUM_SHORTCUT_TAB_ACTIONS_H_
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions_unittest.cc
+@@ -0,0 +1,120 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/browser_with_test_window_test.h"
++#include "components/tabs/public/tab_interface.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace browser_shortcuts::arcium {
++
++TEST(ArciumShortcutTabActionsTest, EscapesLiteralTitleAndCanonicalURL) {
++  const GURL url(
++      "https://example.test/path%20with%20spaces/(part)?line=%0A#anchor");
++
++  EXPECT_EQ(
++      u"[Title \\[literal\\]\\\\slash next](<https://example.test/path%20with%20spaces/(part)?line=%0A#anchor>)",
++      FormatTabMarkdownLink(u"Title [literal]\\slash\nnext", url));
++}
++
++TEST(ArciumShortcutTabActionsTest, EscapesInlineMarkdownAndHtmlDelimiters) {
++  const GURL url("https://example.test/(part)%20name");
++
++  EXPECT_EQ(
++      u"[\\*bold\\* \\_under\\_ \\`code\\` \\<tag\\>](<https://example.test/(part)%20name>)",
++      FormatTabMarkdownLink(u"*bold* _under_ `code` <tag>", url));
++}
++
++TEST(ArciumShortcutTabActionsTest, KeepsEntitiesAndStrikethroughLiteral) {
++  EXPECT_EQ(u"[A \\&lt;B \\~\\~C\\~\\~](<https://example.test/>)",
++            FormatTabMarkdownLink(u"A &lt;B ~~C~~", GURL("https://example.test/")));
++}
++
++TEST(ArciumShortcutTabActionsTest, EmptyTitleUsesCanonicalURL) {
++  const GURL url("https://example.test/path%20with%20spaces/(part)");
++
++  EXPECT_EQ(
++      u"[https://example.test/path%20with%20spaces/(part)](<https://example.test/path%20with%20spaces/(part)>)",
++      FormatTabMarkdownLink({}, url));
++}
++
++class ArciumShortcutTabActionsBrowserTest : public BrowserWithTestWindowTest {
++ protected:
++  void SetUp() override {
++    BrowserWithTestWindowTest::SetUp();
++    service_ = helium::HeliumSpaceServiceFactory::GetForProfile(profile());
++    ASSERT_TRUE(service_);
++    space_ = service_->GetDefaultSpace();
++    ASSERT_TRUE(space_);
++    service_->SetSpaceForBrowser(browser(), space_->id());
++  }
++
++  tabs::TabInterface* AddTabTo(Browser* target, const char* url) {
++    AddTab(target, GURL(url));
++    return tabs::TabInterface::MaybeGetFromContents(
++        target->tab_strip_model()->GetActiveWebContents());
++  }
++
++  helium::HeliumSpaceService* service_ = nullptr;
++  helium::HeliumSpace* space_ = nullptr;
++};
++
++TEST_F(ArciumShortcutTabActionsBrowserTest,
++       ClearsOnlyOrdinaryTabsInInvokingWindow) {
++  tabs::TabInterface* pin_tab =
++      AddTabTo(browser(), "https://pin.example.test/");
++  ASSERT_TRUE(pin_tab);
++  const std::optional<std::string> pin_id = service_->ConvertTabToPinInSpace(
++      browser(), space_->id(), pin_tab, /*parent_id=*/{}, /*before_id=*/{});
++  ASSERT_TRUE(pin_id);
++
++  tabs::TabInterface* favorite_tab =
++      AddTabTo(browser(), "https://favorite.example.test/");
++  ASSERT_TRUE(favorite_tab);
++  ASSERT_TRUE(service_->AddFavoriteFromTab(favorite_tab));
++
++  tabs::TabInterface* ordinary_tab =
++      AddTabTo(browser(), "https://ordinary.example.test/");
++  ASSERT_TRUE(ordinary_tab);
++  const tabs::TabHandle pin_handle = pin_tab->GetHandle();
++  const tabs::TabHandle favorite_handle = favorite_tab->GetHandle();
++  const tabs::TabHandle ordinary_handle = ordinary_tab->GetHandle();
++
++  helium::HeliumSpace* other_space =
++      service_->GetOrCreateSpace("other-space", u"Other Space");
++  ASSERT_TRUE(other_space);
++  std::unique_ptr<Browser> other_browser =
++      CreateBrowser(profile(), Browser::TYPE_NORMAL, /*hosted_app=*/false);
++  ASSERT_TRUE(other_browser);
++  service_->SetSpaceForBrowser(other_browser.get(), other_space->id());
++  tabs::TabInterface* other_tab =
++      AddTabTo(other_browser.get(), "https://other.example.test/");
++  ASSERT_TRUE(other_tab);
++  const tabs::TabHandle other_handle = other_tab->GetHandle();
++
++  EXPECT_TRUE(ClearUnpinnedTabs(browser()));
++  EXPECT_EQ(nullptr, ordinary_handle.Get());
++  EXPECT_NE(nullptr, pin_handle.Get());
++  EXPECT_NE(nullptr, favorite_handle.Get());
++  EXPECT_NE(nullptr, other_handle.Get());
++  EXPECT_NE(TabStripModel::kNoTab,
++            browser()->tab_strip_model()->GetIndexOfTab(pin_handle.Get()));
++  EXPECT_NE(
++      TabStripModel::kNoTab,
++      browser()->tab_strip_model()->GetIndexOfTab(favorite_handle.Get()));
++  EXPECT_NE(TabStripModel::kNoTab,
++            other_browser->tab_strip_model()->GetIndexOfTab(other_handle.Get()));
++}
++
++}  // namespace browser_shortcuts::arcium
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.h
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.h
+@@ -21,6 +21,10 @@ struct BrowserShortcutPlatformDefaultAcc
+ std::vector<BrowserShortcutPlatformDefaultAccelerator>
+ GetPlatformDefaultAccelerators();
+ 
++// Returns true when the live macOS menu currently owns `accelerator` for one
++// of the dynamic Close Tab/Close Window items.
++bool IsPlatformDynamicCloseAccelerator(const ui::Accelerator& accelerator);
++
+ void UpdatePlatformMenuAccelerators(
+     const std::vector<std::pair<ui::Accelerator, int>>& accelerators);
+ 
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.mm
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.mm
+@@ -97,6 +97,18 @@ base::flat_set<int>& HeliumManagedMenuCo
+   return *command_ids;
+ }
+ 
++struct OriginalMenuAssignment {
++  NSMenuItem* __weak item = nil;
++  std::optional<ui::Accelerator> accelerator;
++  std::optional<ui::Accelerator> last_applied_accelerator;
++};
++
++std::map<int, OriginalMenuAssignment>& OriginalMenuAssignments() {
++  static base::NoDestructor<std::map<int, OriginalMenuAssignment>>
++      assignments;
++  return *assignments;
++}
++
+ bool IsDynamicCloseCommand(int command_id) {
+   // AppController swaps Cmd+W/Cmd+Shift+W between Close Tab and Close Window at
+   // runtime based on the active window. Helium can expose these commands for
+@@ -104,20 +116,81 @@ bool IsDynamicCloseCommand(int command_i
+   return command_id == IDC_CLOSE_TAB || command_id == IDC_CLOSE_WINDOW;
+ }
+ 
++int CanonicalMenuCommandId(int command_id) {
++  // The macOS menu exposes Save Page and Copy URL as separate items, while
++  // Chromium's static Cocoa accelerators own their shared keys through legacy
++  // dispatchers. Treat those dispatchers as the canonical menu defaults when
++  // deciding whether the menu item is still at its default.
++  switch (command_id) {
++    case IDC_SAVE_PAGE:
++      return IDC_CTRL_S_SHORTCUT;
++    case IDC_COPY_URL:
++      return IDC_COPY_OR_INSPECT_SHORTCUT;
++    default:
++      return command_id;
++  }
++}
++
++bool IsUnassignedCanonicalMenuCommand(int command_id) {
++  return command_id == IDC_SAVE_PAGE || command_id == IDC_COPY_URL;
++}
++
++bool IsManagedMenuCommand(
++    NSMenuItem* item,
++    int command_id,
++    const std::optional<ui::Accelerator>& current_accelerator) {
++  if (!HeliumManagedMenuCommandIds().contains(command_id)) {
++    return false;
++  }
++  if (!IsUnassignedCanonicalMenuCommand(command_id)) {
++    return true;
++  }
++
++  const auto it = OriginalMenuAssignments().find(command_id);
++  return it != OriginalMenuAssignments().end() && it->second.item == item &&
++         it->second.last_applied_accelerator == current_accelerator;
++}
++
++std::optional<ui::Accelerator> MenuAcceleratorForDefaults(
++    NSMenuItem* item,
++    int command_id,
++    const std::optional<ui::Accelerator>& current_accelerator) {
++  if (!IsManagedMenuCommand(item, command_id, current_accelerator)) {
++    return current_accelerator;
++  }
++
++  const auto it = OriginalMenuAssignments().find(command_id);
++  DCHECK(it != OriginalMenuAssignments().end());
++  return it->second.accelerator;
++}
++
++const ui::Accelerator* CanonicalMenuAcceleratorForCommand(int command_id) {
++  return AcceleratorsCocoa::GetInstance()->GetAcceleratorForCommand(
++      CanonicalMenuCommandId(command_id));
++}
++
+ bool IsMenuCommandHeliumModifiable(
+     int command_id,
+-    const std::optional<ui::Accelerator>& accelerator) {
++    const std::optional<ui::Accelerator>& accelerator,
++    NSMenuItem* item) {
+   if (IsDynamicCloseCommand(command_id)) {
+     return false;
+   }
+ 
+   const ui::Accelerator* default_accelerator =
+-      AcceleratorsCocoa::GetInstance()->GetAcceleratorForCommand(command_id);
++      CanonicalMenuAcceleratorForCommand(command_id);
+   if (!default_accelerator) {
+     return false;
+   }
+ 
+-  if (!HeliumManagedMenuCommandIds().contains(command_id) &&
++  const bool is_unassigned_canonical_menu_command =
++      IsUnassignedCanonicalMenuCommand(command_id) && !accelerator.has_value();
++  // Chromium's native Save Page and Copy URL items may intentionally have no
++  // key equivalent; treat that absence as their canonical baseline. A present
++  // noncanonical key is an AppKit remap and remains reserved.
++  if (!IsManagedMenuCommand(item, command_id,
++                            AcceleratorFromMenuItem(item)) &&
++      !is_unassigned_canonical_menu_command &&
+       (!accelerator.has_value() || *default_accelerator != *accelerator)) {
+     return false;
+   }
+@@ -140,18 +213,26 @@ void AppendMenuItems(
+     }
+     std::optional<ui::Accelerator> accelerator = AcceleratorFromMenuItem(item);
+     if (command_id != NO_COMMAND) {
++      const std::optional<ui::Accelerator> menu_accelerator_for_defaults =
++          MenuAcceleratorForDefaults(item, command_id, accelerator);
+       const bool user_modifiable =
+-          IsMenuCommandHeliumModifiable(command_id, accelerator);
++          IsMenuCommandHeliumModifiable(command_id,
++                                        menu_accelerator_for_defaults, item);
+       const ui::Accelerator* default_accelerator =
+-          user_modifiable
+-              ? AcceleratorsCocoa::GetInstance()->GetAcceleratorForCommand(
+-                    command_id)
+-              : nullptr;
+-      if (default_accelerator) {
++          user_modifiable ? CanonicalMenuAcceleratorForCommand(command_id)
++                          : nullptr;
++      // An unassigned Save Page or Copy URL menu item inherits its legacy
++      // default for modifiability checks, but must not steal that accelerator
++      // from the legacy dispatcher in the service's default map.
++      const bool is_unassigned_canonical_menu_command =
++          IsUnassignedCanonicalMenuCommand(command_id) &&
++          !menu_accelerator_for_defaults.has_value();
++      if (default_accelerator && !is_unassigned_canonical_menu_command) {
+         defaults->push_back(
+             {command_id, *default_accelerator, user_modifiable});
+-      } else if (accelerator.has_value()) {
+-        defaults->push_back({command_id, *accelerator, user_modifiable});
++      } else if (menu_accelerator_for_defaults.has_value()) {
++        defaults->push_back(
++            {command_id, *menu_accelerator_for_defaults, user_modifiable});
+       }
+     }
+ 
+@@ -161,12 +242,104 @@ void AppendMenuItems(
+   }
+ }
+ 
++void RememberOriginalMenuAssignment(NSMenuItem* item, int command_id) {
++  if (!IsUnassignedCanonicalMenuCommand(command_id)) {
++    return;
++  }
++
++  OriginalMenuAssignment& assignment = OriginalMenuAssignments()[command_id];
++  if (assignment.item == item) {
++    return;
++  }
++
++  assignment.item = item;
++  assignment.accelerator = AcceleratorFromMenuItem(item);
++}
++
++bool IsPlatformDefaultUserModifiable(int command_id,
++                                     const ui::Accelerator& accelerator) {
++  // Keep the legacy Ctrl+S dispatcher independently assignable for the
++  // dedicated Save Page command.
++  if (command_id == IDC_CTRL_S_SHORTCUT) {
++    return true;
++  }
++
++  // These exact legacy defaults are displaced by Arcium commands. Other
++  // defaults owned by the same commands remain reserved, including any
++  // AppKit-customized menu accelerator discovered above.
++  switch (command_id) {
++    case IDC_COPY_OR_INSPECT_SHORTCUT:
++      return accelerator ==
++             ui::Accelerator(ui::VKEY_C,
++                             ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
++    case IDC_SELECT_NEXT_TAB:
++      return accelerator ==
++                 ui::Accelerator(ui::VKEY_TAB, ui::EF_CONTROL_DOWN) ||
++             accelerator == ui::Accelerator(
++                                ui::VKEY_RIGHT,
++                                ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN);
++    case IDC_SELECT_PREVIOUS_TAB:
++      return accelerator ==
++                 ui::Accelerator(ui::VKEY_TAB,
++                                 ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN) ||
++             accelerator == ui::Accelerator(
++                                ui::VKEY_LEFT,
++                                ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN);
++    case IDC_FOCUS_NEXT_PANE:
++      return accelerator == ui::Accelerator(
++                                ui::VKEY_DOWN,
++                                ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN);
++    case IDC_FOCUS_PREVIOUS_PANE:
++      return accelerator == ui::Accelerator(
++                                ui::VKEY_UP,
++                                ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN);
++    case IDC_SELECT_LAST_TAB:
++      return accelerator ==
++             ui::Accelerator(ui::VKEY_9, ui::EF_COMMAND_DOWN);
++    default:
++      return false;
++  }
++}
++
+ void AppendShortcutData(
+     const std::vector<KeyboardShortcutAcceleratorData>& shortcuts,
+     std::vector<BrowserShortcutPlatformDefaultAccelerator>* defaults) {
+   for (const KeyboardShortcutAcceleratorData& shortcut : shortcuts) {
+     defaults->push_back({shortcut.chrome_command, shortcut.accelerator,
+-                         /*user_modifiable=*/false});
++                         IsPlatformDefaultUserModifiable(
++                             shortcut.chrome_command, shortcut.accelerator)});
++  }
++}
++
++void InspectMenuForDynamicCloseAccelerator(
++    NSMenu* menu,
++    const ui::Accelerator& accelerator,
++    bool hidden_ancestor,
++    bool* found_close,
++    bool* found_conflict) {
++  if (menu == NSApp.servicesMenu) {
++    return;
++  }
++
++  for (NSMenuItem* item in menu.itemArray) {
++    const bool hidden = hidden_ancestor || item.hidden;
++    const std::optional<ui::Accelerator> item_accelerator =
++        AcceleratorFromMenuItem(item);
++    if (!hidden && item_accelerator.has_value() &&
++        *item_accelerator == accelerator) {
++      const int command_id = CommandIdFromMenuItem(item);
++      if (command_id == IDC_CLOSE_TAB || command_id == IDC_CLOSE_WINDOW) {
++        *found_close = true;
++      } else {
++        // A real non-close menu owner wins over the dynamic close fallback.
++        *found_conflict = true;
++      }
++    }
++
++    if (item.submenu) {
++      InspectMenuForDynamicCloseAccelerator(
++          item.submenu, accelerator, hidden, found_close, found_conflict);
++    }
+   }
+ }
+ 
+@@ -175,11 +348,12 @@ bool ShouldManageMenuItem(NSMenuItem* it
+     return false;
+   }
+ 
+-  if (HeliumManagedMenuCommandIds().contains(command_id)) {
++  if (IsManagedMenuCommand(item, command_id, AcceleratorFromMenuItem(item))) {
+     return true;
+   }
+ 
+-  return IsMenuCommandHeliumModifiable(command_id, AcceleratorFromMenuItem(item));
++  return IsMenuCommandHeliumModifiable(command_id, AcceleratorFromMenuItem(item),
++                                       item);
+ }
+ 
+ void ApplyMenuItemAccelerator(
+@@ -210,7 +384,12 @@ void UpdateMenuItems(
+   for (NSMenuItem* item in menu.itemArray) {
+     const int command_id = CommandIdFromMenuItem(item);
+     if (command_id != NO_COMMAND && ShouldManageMenuItem(item, command_id)) {
++      RememberOriginalMenuAssignment(item, command_id);
+       ApplyMenuItemAccelerator(item, accelerators_by_command_id, command_id);
++      if (IsUnassignedCanonicalMenuCommand(command_id)) {
++        OriginalMenuAssignments()[command_id].last_applied_accelerator =
++            AcceleratorFromMenuItem(item);
++      }
+       HeliumManagedMenuCommandIds().insert(command_id);
+     }
+ 
+@@ -239,7 +418,9 @@ GetPlatformDefaultAccelerators() {
+     if (live_menu_command_ids.contains(it->first)) {
+       continue;
+     }
+-    defaults.push_back({it->first, it->second, /*user_modifiable=*/false});
++    defaults.push_back(
++        {it->first, it->second,
++         IsPlatformDefaultUserModifiable(it->first, it->second)});
+   }
+ 
+   AppendShortcutData(GetShortcutSettingsAcceleratorsNotPresentInMainMenu(),
+@@ -248,6 +429,19 @@ GetPlatformDefaultAccelerators() {
+   return defaults;
+ }
+ 
++bool IsPlatformDynamicCloseAccelerator(const ui::Accelerator& accelerator) {
++  if (!NSApp || !NSApp.mainMenu) {
++    return false;
++  }
++
++  bool found_close = false;
++  bool found_conflict = false;
++  InspectMenuForDynamicCloseAccelerator(NSApp.mainMenu, accelerator,
++                                         /*hidden_ancestor=*/false,
++                                         &found_close, &found_conflict);
++  return found_close && !found_conflict;
++}
++
+ void UpdatePlatformMenuAccelerators(
+     const std::vector<std::pair<ui::Accelerator, int>>& accelerators) {
+   if (!NSApp.mainMenu) {
+--- /dev/null
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm
+@@ -0,0 +1,568 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.h"
++
++#import <AppKit/AppKit.h>
++
++#include <set>
++#include <vector>
++
++#include "chrome/app/chrome_command_ids.h"
++#include "base/strings/string_number_conversions.h"
++#include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h"
++#include "chrome/browser/ui/browser_shortcuts/browser_shortcut_prefs.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/testing_pref_service.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace browser_shortcuts {
++namespace {
++
++class ScopedMainMenu {
++ public:
++  explicit ScopedMainMenu(NSMenu* replacement)
++      : original_([NSApp mainMenu]) {
++    [NSApp setMainMenu:replacement];
++  }
++
++  ScopedMainMenu(const ScopedMainMenu&) = delete;
++  ScopedMainMenu& operator=(const ScopedMainMenu&) = delete;
++
++  ~ScopedMainMenu() { [NSApp setMainMenu:original_]; }
++
++ private:
++  NSMenu* __strong original_;
++};
++
++NSMenu* MainMenuWithCommandShortcut(int command_id,
++                                    NSString* title,
++                                    NSString* key_equivalent,
++                                    NSEventModifierFlags modifier_mask,
++                                    SEL action) {
++  NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Test Main Menu"];
++  NSMenuItem* item = [[NSMenuItem alloc]
++      initWithTitle:title
++             action:action
++      keyEquivalent:key_equivalent];
++  item.tag = command_id;
++  item.keyEquivalentModifierMask = modifier_mask;
++  [menu addItem:item];
++  return menu;
++}
++
++NSMenu* MainMenuWithSavePageShortcut(NSString* key_equivalent,
++                                     NSEventModifierFlags modifier_mask) {
++  return MainMenuWithCommandShortcut(IDC_SAVE_PAGE, @"Save Page",
++                                     key_equivalent, modifier_mask,
++                                     @selector(commandDispatch:));
++}
++
++NSMenu* MainMenuWithCopyURLShortcut(NSString* key_equivalent,
++                                    NSEventModifierFlags modifier_mask) {
++  return MainMenuWithCommandShortcut(IDC_COPY_URL, @"Copy URL", key_equivalent,
++                                     modifier_mask, @selector(commandDispatch:));
++}
++
++int CountDefaultsForCommand(
++    const std::vector<BrowserShortcutPlatformDefaultAccelerator>& defaults,
++    int command_id) {
++  int count = 0;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.command_id == command_id) {
++      ++count;
++    }
++  }
++  return count;
++}
++
++NSMenu* MainMenuWithCloseShortcuts(bool has_tabs,
++                                   NSString* close_window_key = nil,
++                                   NSEventModifierFlags close_window_modifiers =
++                                       NSEventModifierFlagCommand,
++                                   NSString* close_tab_key = nil,
++                                   NSEventModifierFlags close_tab_modifiers =
++                                       NSEventModifierFlagCommand) {
++  if (!close_window_key) {
++    close_window_key = has_tabs ? @"W" : @"w";
++  }
++  if (!close_tab_key) {
++    close_tab_key = @"w";
++  }
++
++  NSMenu* menu = [[NSMenu alloc] initWithTitle:@"Test Main Menu"];
++  NSMenuItem* close_window = [[NSMenuItem alloc]
++      initWithTitle:@"Close Window"
++             action:@selector(performClose:)
++      keyEquivalent:close_window_key];
++  close_window.tag = IDC_CLOSE_WINDOW;
++  close_window.keyEquivalentModifierMask = close_window_modifiers;
++  [menu addItem:close_window];
++
++  NSMenuItem* close_tab = [[NSMenuItem alloc]
++      initWithTitle:@"Close Tab"
++             action:@selector(commandDispatch:)
++      keyEquivalent:close_tab_key];
++  close_tab.tag = IDC_CLOSE_TAB;
++  close_tab.hidden = !has_tabs;
++  close_tab.keyEquivalentModifierMask = close_tab_modifiers;
++  [menu addItem:close_tab];
++  return menu;
++}
++
++TEST(BrowserShortcutPlatformMacTest, CanonicalCommandSOwnersAreModifiable) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithSavePageShortcut(
++      @"s", NSEventModifierFlagCommand));
++
++  const ui::Accelerator command_s(ui::VKEY_S, ui::EF_COMMAND_DOWN);
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++
++  std::set<int> command_s_owners;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.accelerator != command_s) {
++      continue;
++    }
++    command_s_owners.insert(entry.command_id);
++    EXPECT_TRUE(entry.user_modifiable)
++        << "command " << entry.command_id << " owns Cmd+S";
++  }
++
++  EXPECT_TRUE(command_s_owners.contains(IDC_SAVE_PAGE));
++  // The historical command remains an owner of the same canonical shortcut.
++  EXPECT_TRUE(command_s_owners.contains(IDC_CTRL_S_SHORTCUT));
++}
++
++TEST(BrowserShortcutPlatformMacTest, CustomizedSavePageShortcutIsLocked) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithSavePageShortcut(
++      @"s", NSEventModifierFlagCommand | NSEventModifierFlagOption));
++
++  const ui::Accelerator customized_command_s(
++      ui::VKEY_S, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN);
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++
++  bool found_save_page = false;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.command_id != IDC_SAVE_PAGE) {
++      continue;
++    }
++    ASSERT_FALSE(found_save_page);
++    found_save_page = true;
++    EXPECT_EQ(entry.accelerator, customized_command_s);
++    EXPECT_FALSE(entry.user_modifiable);
++  }
++  EXPECT_TRUE(found_save_page);
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     UnassignedSavePageHasNoSyntheticDefaultAndLegacyOwnersStayModifiable) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithSavePageShortcut(@"", 0));
++
++  const ui::Accelerator command_s(ui::VKEY_S, ui::EF_COMMAND_DOWN);
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++
++  int save_page_entry_count = 0;
++  int legacy_command_s_owner_count = 0;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.command_id == IDC_SAVE_PAGE) {
++      ++save_page_entry_count;
++    }
++    if (entry.command_id == IDC_CTRL_S_SHORTCUT &&
++        entry.accelerator == command_s) {
++      ++legacy_command_s_owner_count;
++      EXPECT_TRUE(entry.user_modifiable);
++    }
++  }
++
++  EXPECT_EQ(save_page_entry_count, 0);
++  EXPECT_GT(legacy_command_s_owner_count, 0);
++}
++
++TEST(BrowserShortcutPlatformMacTest, CanonicalCopyURLOwnersAreModifiable) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithCopyURLShortcut(
++      @"c", NSEventModifierFlagCommand | NSEventModifierFlagShift));
++
++  const ui::Accelerator copy_url(ui::VKEY_C,
++                                 ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++
++  std::set<int> copy_url_owners;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.accelerator != copy_url) {
++      continue;
++    }
++    copy_url_owners.insert(entry.command_id);
++    EXPECT_TRUE(entry.user_modifiable)
++        << "command " << entry.command_id << " owns Cmd+Shift+C";
++  }
++
++  EXPECT_TRUE(copy_url_owners.contains(IDC_COPY_URL));
++  // The hidden preference-dependent dispatcher remains assignable so the
++  // dedicated Copy URL command can take over its default key.
++  EXPECT_TRUE(copy_url_owners.contains(IDC_COPY_OR_INSPECT_SHORTCUT));
++}
++
++TEST(BrowserShortcutPlatformMacTest, CustomizedCopyURLShortcutIsLocked) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithCopyURLShortcut(
++      @"c", NSEventModifierFlagCommand | NSEventModifierFlagOption));
++
++  const ui::Accelerator customized_copy_url(
++      ui::VKEY_C, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN);
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++
++  bool found_copy_url = false;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.command_id != IDC_COPY_URL) {
++      continue;
++    }
++    ASSERT_FALSE(found_copy_url);
++    found_copy_url = true;
++    EXPECT_EQ(entry.accelerator, customized_copy_url);
++    EXPECT_FALSE(entry.user_modifiable);
++  }
++  EXPECT_TRUE(found_copy_url);
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     UnassignedCopyURLHasNoSyntheticDefaultAndLegacyOwnerStaysModifiable) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithCopyURLShortcut(@"", 0));
++
++  const ui::Accelerator copy_url(ui::VKEY_C,
++                                 ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++
++  int copy_url_entry_count = 0;
++  int legacy_copy_url_owner_count = 0;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.command_id == IDC_COPY_URL) {
++      ++copy_url_entry_count;
++    }
++    if (entry.command_id == IDC_COPY_OR_INSPECT_SHORTCUT &&
++        entry.accelerator == copy_url) {
++      ++legacy_copy_url_owner_count;
++      EXPECT_TRUE(entry.user_modifiable);
++    }
++  }
++
++  EXPECT_EQ(copy_url_entry_count, 0);
++  EXPECT_GT(legacy_copy_url_owner_count, 0);
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     ManagedEmptyAliasItemsRetainTheirOriginalUnassignedBaseline) {
++  ASSERT_NE(NSApp, nil);
++  const ui::Accelerator save_page_accelerator(
++      ui::VKEY_S, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
++  const ui::Accelerator copy_url_accelerator(
++      ui::VKEY_C, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
++
++  NSMenu* save_menu = MainMenuWithSavePageShortcut(@"", 0);
++  NSMenuItem* save_page = [save_menu itemWithTag:IDC_SAVE_PAGE];
++  {
++    ScopedMainMenu menu(save_menu);
++    EXPECT_EQ(CountDefaultsForCommand(GetPlatformDefaultAccelerators(),
++                                      IDC_SAVE_PAGE),
++              0);
++    UpdatePlatformMenuAccelerators({
++        {save_page_accelerator, IDC_SAVE_PAGE},
++    });
++    EXPECT_GT(save_page.keyEquivalent.length, 0u);
++    EXPECT_EQ(CountDefaultsForCommand(GetPlatformDefaultAccelerators(),
++                                      IDC_SAVE_PAGE),
++              0);
++
++    UpdatePlatformMenuAccelerators({});
++    EXPECT_EQ(save_page.keyEquivalent.length, 0u);
++    EXPECT_EQ(CountDefaultsForCommand(GetPlatformDefaultAccelerators(),
++                                      IDC_SAVE_PAGE),
++              0);
++  }
++
++  NSMenu* copy_menu = MainMenuWithCopyURLShortcut(@"", 0);
++  NSMenuItem* copy_url = [copy_menu itemWithTag:IDC_COPY_URL];
++  {
++    ScopedMainMenu menu(copy_menu);
++    EXPECT_EQ(CountDefaultsForCommand(GetPlatformDefaultAccelerators(),
++                                      IDC_COPY_URL),
++              0);
++    UpdatePlatformMenuAccelerators({
++        {copy_url_accelerator, IDC_COPY_URL},
++    });
++    EXPECT_GT(copy_url.keyEquivalent.length, 0u);
++    EXPECT_EQ(CountDefaultsForCommand(GetPlatformDefaultAccelerators(),
++                                      IDC_COPY_URL),
++              0);
++
++    UpdatePlatformMenuAccelerators({});
++    EXPECT_EQ(copy_url.keyEquivalent.length, 0u);
++    EXPECT_EQ(CountDefaultsForCommand(GetPlatformDefaultAccelerators(),
++                                      IDC_COPY_URL),
++              0);
++  }
++
++  // A remap of the same item after Arcium updates it is an AppKit override,
++  // so the last Arcium assignment must not keep authorizing future rewrites.
++  NSMenu* remapped_save_menu = MainMenuWithSavePageShortcut(@"", 0);
++  NSMenuItem* remapped_save = [remapped_save_menu itemWithTag:IDC_SAVE_PAGE];
++  {
++    ScopedMainMenu menu(remapped_save_menu);
++    UpdatePlatformMenuAccelerators({
++        {save_page_accelerator, IDC_SAVE_PAGE},
++    });
++    remapped_save.keyEquivalent = @"x";
++    remapped_save.keyEquivalentModifierMask =
++        NSEventModifierFlagCommand | NSEventModifierFlagOption;
++
++    bool found_customized_save = false;
++    for (const BrowserShortcutPlatformDefaultAccelerator& entry :
++         GetPlatformDefaultAccelerators()) {
++      if (entry.command_id != IDC_SAVE_PAGE) {
++        continue;
++      }
++      found_customized_save = true;
++      EXPECT_EQ(entry.accelerator,
++                ui::Accelerator(ui::VKEY_X,
++                                ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN));
++      EXPECT_FALSE(entry.user_modifiable);
++    }
++    EXPECT_TRUE(found_customized_save);
++
++    UpdatePlatformMenuAccelerators({
++        {save_page_accelerator, IDC_SAVE_PAGE},
++    });
++    EXPECT_EQ(remapped_save.keyEquivalent, @"x");
++    EXPECT_EQ(remapped_save.keyEquivalentModifierMask,
++              NSEventModifierFlagCommand | NSEventModifierFlagOption);
++  }
++
++  // A later AppKit menu object must retain its own customized assignment even
++  // though the process-global managed-command set remembers the old item.
++  NSMenu* replacement_save_menu = MainMenuWithSavePageShortcut(
++      @"s", NSEventModifierFlagCommand | NSEventModifierFlagOption);
++  NSMenuItem* replacement_save =
++      [replacement_save_menu itemWithTag:IDC_SAVE_PAGE];
++  {
++    ScopedMainMenu menu(replacement_save_menu);
++    UpdatePlatformMenuAccelerators({
++        {save_page_accelerator, IDC_SAVE_PAGE},
++    });
++    EXPECT_EQ(replacement_save.keyEquivalent, @"s");
++    EXPECT_EQ(replacement_save.keyEquivalentModifierMask,
++              NSEventModifierFlagCommand | NSEventModifierFlagOption);
++  }
++
++  NSMenu* replacement_copy_menu = MainMenuWithCopyURLShortcut(
++      @"c", NSEventModifierFlagCommand | NSEventModifierFlagOption);
++  NSMenuItem* replacement_copy =
++      [replacement_copy_menu itemWithTag:IDC_COPY_URL];
++  {
++    ScopedMainMenu menu(replacement_copy_menu);
++    UpdatePlatformMenuAccelerators({
++        {copy_url_accelerator, IDC_COPY_URL},
++    });
++    EXPECT_EQ(replacement_copy.keyEquivalent, @"c");
++    EXPECT_EQ(replacement_copy.keyEquivalentModifierMask,
++              NSEventModifierFlagCommand | NSEventModifierFlagOption);
++  }
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     ReassignableArcLegacyDefaultsAreLimitedToExactAccelerators) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu([[NSMenu alloc] initWithTitle:@"Test Main Menu"]);
++
++  struct ExpectedAccelerator {
++    int command_id;
++    ui::Accelerator accelerator;
++  };
++  const ExpectedAccelerator expected[] = {
++      {IDC_COPY_OR_INSPECT_SHORTCUT,
++       ui::Accelerator(ui::VKEY_C,
++                       ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)},
++      {IDC_SELECT_NEXT_TAB,
++       ui::Accelerator(ui::VKEY_TAB, ui::EF_CONTROL_DOWN)},
++      {IDC_SELECT_NEXT_TAB,
++       ui::Accelerator(ui::VKEY_RIGHT,
++                       ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN)},
++      {IDC_SELECT_PREVIOUS_TAB,
++       ui::Accelerator(ui::VKEY_TAB,
++                       ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN)},
++      {IDC_SELECT_PREVIOUS_TAB,
++       ui::Accelerator(ui::VKEY_LEFT,
++                       ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN)},
++      {IDC_FOCUS_NEXT_PANE,
++       ui::Accelerator(ui::VKEY_DOWN,
++                       ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN)},
++      {IDC_FOCUS_PREVIOUS_PANE,
++       ui::Accelerator(ui::VKEY_UP,
++                       ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN)},
++      {IDC_SELECT_LAST_TAB,
++       ui::Accelerator(ui::VKEY_9, ui::EF_COMMAND_DOWN)},
++  };
++
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++  for (const ExpectedAccelerator& expected_entry : expected) {
++    bool found = false;
++    for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++      if (entry.command_id != expected_entry.command_id ||
++          entry.accelerator != expected_entry.accelerator) {
++        continue;
++      }
++      found = true;
++      EXPECT_TRUE(entry.user_modifiable)
++          << "command " << expected_entry.command_id << " remains locked";
++    }
++    EXPECT_TRUE(found) << "missing expected platform default for command "
++                       << expected_entry.command_id;
++  }
++
++  const ui::Accelerator unrelated_select_next_tab(
++      ui::VKEY_OEM_6, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
++  bool found_unrelated = false;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.command_id != IDC_SELECT_NEXT_TAB ||
++        entry.accelerator != unrelated_select_next_tab) {
++      continue;
++    }
++    found_unrelated = true;
++    EXPECT_FALSE(entry.user_modifiable);
++  }
++  EXPECT_TRUE(found_unrelated);
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     CustomizedWhitelistedMenuShortcutRemainsLocked) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithCommandShortcut(
++      IDC_SELECT_NEXT_TAB, @"Next Tab", @"x",
++      NSEventModifierFlagCommand | NSEventModifierFlagOption,
++      @selector(commandDispatch:)));
++
++  const ui::Accelerator customized_next_tab(
++      ui::VKEY_X, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN);
++  const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++      GetPlatformDefaultAccelerators();
++
++  bool found_customized_next_tab = false;
++  for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++    if (entry.command_id != IDC_SELECT_NEXT_TAB ||
++        entry.accelerator != customized_next_tab) {
++      continue;
++    }
++    found_customized_next_tab = true;
++    EXPECT_FALSE(entry.user_modifiable);
++  }
++  EXPECT_TRUE(found_customized_next_tab);
++}
++
++TEST(BrowserShortcutPlatformMacTest, DynamicCloseUsesVisibleLiveMenuItems) {
++  ASSERT_NE(NSApp, nil);
++  NSMenu* main_menu = MainMenuWithCloseShortcuts(/*has_tabs=*/true);
++  // Visibility determines ownership; a disabled item still owns its AppKit
++  // key equivalent and must not be replaced by a static fallback.
++  [main_menu itemWithTag:IDC_CLOSE_TAB].enabled = NO;
++  ScopedMainMenu menu(main_menu);
++
++  EXPECT_TRUE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_W, ui::EF_COMMAND_DOWN)));
++  EXPECT_TRUE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_W,
++                      ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)));
++  EXPECT_FALSE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_W,
++                      ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN)));
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     DynamicCloseIgnoresHiddenCloseTabInTablessMenu) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithCloseShortcuts(/*has_tabs=*/false));
++
++  EXPECT_TRUE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_W, ui::EF_COMMAND_DOWN)));
++  EXPECT_FALSE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_W,
++                      ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)));
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     DynamicCloseDoesNotClaimCustomizedOrConflictingAccelerators) {
++  ASSERT_NE(NSApp, nil);
++  NSMenu* menu = MainMenuWithCloseShortcuts(
++      /*has_tabs=*/true, @"x", NSEventModifierFlagCommand,
++      @"X", NSEventModifierFlagCommand);
++  NSMenuItem* conflict = [[NSMenuItem alloc]
++      initWithTitle:@"Other Command"
++             action:@selector(commandDispatch:)
++      keyEquivalent:@"w"];
++  conflict.tag = IDC_NEW_TAB;
++  conflict.keyEquivalentModifierMask = NSEventModifierFlagCommand;
++  [menu addItem:conflict];
++  ScopedMainMenu scoped_menu(menu);
++
++  EXPECT_FALSE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_W, ui::EF_COMMAND_DOWN)));
++  EXPECT_TRUE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_X, ui::EF_COMMAND_DOWN)));
++  EXPECT_TRUE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_X,
++                      ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN)));
++}
++
++TEST(BrowserShortcutPlatformMacTest,
++     DynamicCloseDoesNotUseStaticFallbackWithoutLiveMenuOwner) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu([[NSMenu alloc] initWithTitle:@"Test Main Menu"]);
++
++  EXPECT_FALSE(IsPlatformDynamicCloseAccelerator(
++      ui::Accelerator(ui::VKEY_W, ui::EF_COMMAND_DOWN)));
++}
++
++TEST(BrowserShortcutPlatformMacTest, PresetPreservesNativeDynamicClose) {
++  ASSERT_NE(NSApp, nil);
++  for (bool has_tabs : {false, true}) {
++    ScopedMainMenu menu(MainMenuWithCloseShortcuts(has_tabs));
++    TestingPrefServiceSimple preferences;
++    auto* registry = preferences.registry();
++    registry->RegisterDictionaryPref(prefs::kCustomAccelerators);
++    registry->RegisterDictionaryPref(prefs::kArcShortcutBackup);
++    registry->RegisterBooleanPref(::prefs::kCopyPageUrlShortcut, false);
++    registry->RegisterBooleanPref(::prefs::kVerticalCollapseShortcut, false);
++    registry->RegisterBooleanPref(::prefs::kTabCyclingMRU, false);
++    registry->RegisterBooleanPref(::prefs::kCtrlTabMru, false);
++    registry->RegisterIntegerPref(::prefs::kHeliumLayout, 0);
++    BrowserShortcutService service(&preferences);
++    const auto report = arcium::GetArcShortcutPresetReport(service);
++    bool found_native_close = false;
++    for (const auto& entry : report.supported) {
++      if (entry.action_id == "close_current_tab_or_window") {
++        found_native_close = true;
++        EXPECT_TRUE(entry.uses_platform_binding);
++      }
++    }
++    EXPECT_TRUE(found_native_close);
++    EXPECT_EQ(arcium::ApplyArcShortcutPreset(&service),
++              arcium::PresetResult::kApplied);
++    EXPECT_FALSE(preferences.GetDict(prefs::kCustomAccelerators).contains(
++        base::NumberToString(IDC_CLOSE_TAB)));
++    EXPECT_TRUE(IsPlatformDynamicCloseAccelerator(
++        ui::Accelerator(ui::VKEY_W, ui::EF_COMMAND_DOWN)));
++  }
++}
++
++}  // namespace
++}  // namespace browser_shortcuts
+--- src.orig/chrome/browser/ui/tabs/tab_strip_model.cc
++++ src/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -1986,6 +1986,16 @@
+   SelectRelativeTabCycle(TabRelativeDirection::kPrevious, detail);
+ }
+ 
++void TabStripModel::SelectSequentialTab(TabRelativeDirection direction,
++                                        TabStripUserGestureDetails detail) {
++  SelectRelativeTab(direction, detail);
++}
++
++void TabStripModel::SelectRecentTab(TabRelativeDirection direction,
++                                    TabStripUserGestureDetails detail) {
++  SelectMRUTab(direction, detail, /*preview_only=*/false);
++}
++
+ void TabStripModel::SelectLastTab(TabStripUserGestureDetails detail) {
+   ActivateTabAt(count() - 1, detail);
+ }
+--- a/chrome/browser/ui/tabs/tab_strip_model.h
++++ b/chrome/browser/ui/tabs/tab_strip_model.h
+@@ -619,6 +619,21 @@ class TabStripModel {
+ 
+   enum class TabRelativeDirection { kNext, kPrevious };
+ 
++  // Selects adjacent tabs without consulting the tab-cycling MRU preference.
++  // This preserves the same group and collapsed-group handling as the normal
++  // sequential tab command.
++  void SelectSequentialTab(
++      TabRelativeDirection direction,
++      TabStripUserGestureDetails detail = TabStripUserGestureDetails(
++          TabStripUserGestureDetails::GestureType::kOther));
++
++  // Selects the adjacent tab according to MRU ordering, regardless of the
++  // tab-cycling preferences. This is the explicit recent-tab command path.
++  void SelectRecentTab(
++      TabRelativeDirection direction,
++      TabStripUserGestureDetails detail = TabStripUserGestureDetails(
++          TabStripUserGestureDetails::GestureType::kOther));
++
+   // Advances a pending MRU selection without activating it. Only modifier-held
+   // switcher gestures use this; ordinary tab commands still activate at once.
+   void PreviewMRUTab(TabRelativeDirection direction,
+--- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+@@ -901,6 +901,28 @@ TEST_F(MRUTabCyclingTest, OrdinaryMRUCom
+   EXPECT_EQ(1, tabstrip()->active_index());
+ }
+ 
++TEST_F(MRUTabCyclingTest, ExplicitSequentialSelectionIgnoresMRUPreference) {
++  // The active tab starts at index 2. MRU ordering would select index 1,
++  // while the explicit sequential command must wrap to index 0.
++  tabstrip()->SelectSequentialTab(
++      TabStripModel::TabRelativeDirection::kNext);
++  EXPECT_EQ(0, tabstrip()->active_index());
++
++  tabstrip()->SelectSequentialTab(
++      TabStripModel::TabRelativeDirection::kPrevious);
++  EXPECT_EQ(2, tabstrip()->active_index());
++}
++
++TEST_F(MRUTabCyclingTest, ExplicitRecentSelectionIgnoresDisabledMRUPreference) {
++  profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, false);
++
++  // With the preference disabled, the normal command would select index 0.
++  // The explicit recent command still follows the recency order and selects
++  // index 1 from the fixture's active index 2.
++  tabstrip()->SelectRecentTab(TabStripModel::TabRelativeDirection::kNext);
++  EXPECT_EQ(1, tabstrip()->active_index());
++}
++
+ TEST_F(MRUTabCyclingTest, DisabledMRUStillActivatesImmediately) {
+   profile()->GetPrefs()->SetBoolean(prefs::kTabCyclingMRU, false);
+   tabstrip()->SelectNextTab();
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -6092,14 +6092,20 @@ bool BrowserView::AcceleratorPressed(con
+ 
+   // Only Ctrl+Tab holds a pending selection until Control is released. Menu,
+   // wheel, and other next/previous-tab shortcuts must activate immediately.
+-  const bool next_tab = command_id == IDC_SELECT_NEXT_TAB;
+-  const bool previous_tab = command_id == IDC_SELECT_PREVIOUS_TAB;
++  const bool explicit_recent = command_id == IDC_ARCIUM_SELECT_RECENT_TAB ||
++                               command_id == IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB;
++  const bool next_tab = command_id == IDC_SELECT_NEXT_TAB ||
++                        command_id == IDC_ARCIUM_SELECT_RECENT_TAB;
++  const bool previous_tab = command_id == IDC_SELECT_PREVIOUS_TAB ||
++                            command_id == IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB;
+   const bool global_mru =
+-      next_tab && base::FeatureList::IsEnabled(features::kCtrlTabMru) &&
++      !explicit_recent && next_tab &&
++      base::FeatureList::IsEnabled(features::kCtrlTabMru) &&
+       browser_->profile()->GetPrefs()->GetBoolean(prefs::kCtrlTabMru);
+   if ((next_tab || previous_tab) && !global_mru &&
+       accelerator.key_code() == ui::VKEY_TAB && accelerator.IsCtrlDown() &&
+-      browser_->profile()->GetPrefs()->GetBoolean(prefs::kTabCyclingMRU) &&
++      (explicit_recent ||
++       browser_->profile()->GetPrefs()->GetBoolean(prefs::kTabCyclingMRU)) &&
+       chrome::IsCommandEnabled(browser_.get(), command_id)) {
+     browser_->tab_strip_model()->PreviewMRUTab(
+         next_tab ? TabStripModel::TabRelativeDirection::kNext

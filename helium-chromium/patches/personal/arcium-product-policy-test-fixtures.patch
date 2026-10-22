@@ -1,0 +1,574 @@
+# Requires arcium-peek, arcium-little-arc, arcium-auto-pip-setting and arcium-little-arc-test-link-params.
+# Align existing behavior fixtures with deliberate product menu and cookie policy.
+--- a/chrome/browser/chrome_content_browser_client_unittest.cc
++++ b/chrome/browser/chrome_content_browser_client_unittest.cc
+@@ -499,14 +499,24 @@ TEST_F(ChromeContentBrowserClientTest, O
+ // data) are disallowed if the 3PCs are blocked.
+ TEST_F(ChromeContentBrowserClientTest, AutomaticBeaconCredentials) {
+   ChromeContentBrowserClient client;
++  const GURL destination_url("https://a.test/beacon");
++  const url::Origin top_frame_origin =
++      url::Origin::Create(GURL("https://c.test"));
++  ASSERT_TRUE(destination_url.is_valid());
++  ASSERT_FALSE(top_frame_origin.opaque());
+ 
++  // Exercise the explicit allowed-to-blocked transition independently of the
++  // product's default third-party cookie mode.
++  profile()->GetPrefs()->SetInteger(
++      prefs::kCookieControlsMode,
++      static_cast<int>(content_settings::CookieControlsMode::kOff));
+   EXPECT_TRUE(client.AreDeprecatedAutomaticBeaconCredentialsAllowed(
+-      profile(), GURL("a.test"), url::Origin::Create(GURL("c.test"))));
++      profile(), destination_url, top_frame_origin));
+   profile()->GetPrefs()->SetInteger(
+       prefs::kCookieControlsMode,
+       static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
+   EXPECT_FALSE(client.AreDeprecatedAutomaticBeaconCredentialsAllowed(
+-      profile(), GURL("a.test"), url::Origin::Create(GURL("c.test"))));
++      profile(), destination_url, top_frame_origin));
+ }
+ 
+ TEST_F(ChromeContentBrowserClientTestWithWebContents,
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
+@@ -1008,7 +1008,7 @@ TEST_F(RenderViewContextMenuPrefsTest, O
+ }
+ 
+ TEST_F(RenderViewContextMenuPrefsTest,
+-       SearchWebForNewTabAppendsSourceParameter) {
++       SearchWebForNewTabOmitsSourceParameterForGoogle) {
+   TestNavigationDelegate delegate;
+   web_contents()->SetDelegate(&delegate);
+   content::RenderFrameHost& main_frame = *web_contents()->GetPrimaryMainFrame();
+@@ -1022,10 +1022,14 @@ TEST_F(RenderViewContextMenuPrefsTest,
+   menu->ExecuteCommand(IDC_CONTENT_CONTEXT_SEARCHWEBFORNEWTAB, 0);
+ 
+   ASSERT_TRUE(delegate.last_navigation_params());
++  // Search still opens the selected provider with the original query.
++  EXPECT_EQ(GURL("https://www.google.com/search?q=hello+world"),
++            delegate.last_navigation_params()->url);
++  EXPECT_EQ(WindowOpenDisposition::NEW_FOREGROUND_TAB,
++            delegate.last_navigation_params()->disposition);
+   std::string source_param;
+-  EXPECT_TRUE(net::GetValueForKeyInQuery(delegate.last_navigation_params()->url,
+-                                         "source", &source_param));
+-  EXPECT_EQ("chrome.ctxt", source_param);
++  EXPECT_FALSE(net::GetValueForKeyInQuery(delegate.last_navigation_params()->url,
++                                        "source", &source_param));
+ }
+ 
+ TEST_F(RenderViewContextMenuPrefsTest,
+@@ -1292,8 +1296,9 @@ TEST_F(RenderViewContextMenuPrefsTest, L
+   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+ }
+ 
+-// Verify that the Lens Image Search menu item is enabled on image content
+-TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchEnabled) {
++// Google image search uses the generic command with Lens flags enabled.
++TEST_F(RenderViewContextMenuPrefsTest,
++       GenericImageSearchWithLensStandaloneEnabled) {
+   base::test::ScopedFeatureList features;
+   features.InitWithFeatures({lens::features::kLensStandalone},
+                             {lens::features::kLensOverlay});
+@@ -1306,12 +1311,18 @@ TEST_F(RenderViewContextMenuPrefsTest, L
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE)
++          .has_value());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_LENS_OVERLAY)
++          .has_value());
+ }
+ 
+-// Verify that the Lens Image Search menu item has an icon in fallback case
+-TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchFallbackHasIcon) {
++// Generic image search retains its icon with Lens fallback flags enabled.
++TEST_F(RenderViewContextMenuPrefsTest,
++       GenericImageSearchHasIconWithLensFallbackEnabled) {
+   base::test::ScopedFeatureList features;
+   features.InitWithFeatures({lens::features::kLensStandalone,
+                              lens::features::kShowContextualTasksMenuIcon},
+@@ -1325,15 +1336,22 @@ TEST_F(RenderViewContextMenuPrefsTest, L
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE)
++          .has_value());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_LENS_OVERLAY)
++          .has_value());
+   std::optional<size_t> index = menu.menu_model().GetIndexOfCommandId(
+-      IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
++      IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE);
+   ASSERT_TRUE(index.has_value());
+   EXPECT_FALSE(menu.menu_model().GetIconAt(index.value()).IsEmpty());
+ }
+ 
+-// Verify that the Lens Video Search menu item has an icon in fallback case
+-TEST_F(RenderViewContextMenuPrefsTest, LensVideoSearchFallbackHasIcon) {
++// Generic video-frame search retains its icon with Lens fallback flags enabled.
++TEST_F(RenderViewContextMenuPrefsTest,
++       GenericVideoFrameSearchHasIconWithLensFallbackEnabled) {
+   base::test::ScopedFeatureList features;
+   features.InitWithFeatures(
+       {lens::features::kLensStandalone, media::kContextMenuSearchForVideoFrame,
+@@ -1347,17 +1365,22 @@ TEST_F(RenderViewContextMenuPrefsTest, L
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME));
+-  std::optional<size_t> index = menu.menu_model().GetIndexOfCommandId(
+-      IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME);
+-  ASSERT_TRUE(index.has_value());
+-  EXPECT_FALSE(menu.menu_model().GetIconAt(index.value()).IsEmpty());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHLENSFORVIDEOFRAME)
++          .has_value());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_LENS_OVERLAY)
++          .has_value());
++  auto item =
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHWEBFORVIDEOFRAME);
++  ASSERT_TRUE(item.has_value());
++  EXPECT_FALSE(item->first->GetIconAt(item->second).IsEmpty());
+ }
+ 
+ #if BUILDFLAG(IS_MAC)
+-// Verify that the Lens Image Search menu item has NO icon when flag is disabled
++// Generic image search omits its icon when the macOS icon flag is disabled.
+ TEST_F(RenderViewContextMenuPrefsTest,
+-       LensImageSearchFallbackNoIconWhenFlagDisabled) {
++       GenericImageSearchNoIconWhenMacIconFlagDisabled) {
+   base::test::ScopedFeatureList features;
+   features.InitWithFeatures({lens::features::kLensStandalone},
+                             {lens::features::kLensOverlay,
+@@ -1371,16 +1394,23 @@ TEST_F(RenderViewContextMenuPrefsTest,
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE)
++          .has_value());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_LENS_OVERLAY)
++          .has_value());
+   std::optional<size_t> index = menu.menu_model().GetIndexOfCommandId(
+-      IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
++      IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE);
+   ASSERT_TRUE(index.has_value());
+   EXPECT_TRUE(menu.menu_model().GetIconAt(index.value()).IsEmpty());
+ }
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+-// Verify that the Lens Image Search menu item has an icon in overlay case
+-TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchOverlayHasIcon) {
++// Generic image search retains its icon with Lens overlay flags enabled.
++TEST_F(RenderViewContextMenuPrefsTest,
++       GenericImageSearchHasIconWithLensOverlayEnabled) {
+   base::test::ScopedFeatureList features;
+   features.InitWithFeatures(
+       {lens::features::kLensStandalone, lens::features::kLensOverlay,
+@@ -1395,26 +1425,24 @@ TEST_F(RenderViewContextMenuPrefsTest, L
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  // Item ID might be different for overlay, let's check both
+-  bool present = menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE) ||
+-                 menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_OVERLAY);
+-  EXPECT_TRUE(present);
+-
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE)
++          .has_value());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_LENS_OVERLAY)
++          .has_value());
+   std::optional<size_t> index = menu.menu_model().GetIndexOfCommandId(
+-      IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
+-  if (!index.has_value()) {
+-    index =
+-        menu.menu_model().GetIndexOfCommandId(IDC_CONTENT_CONTEXT_LENS_OVERLAY);
+-  }
++      IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE);
+   ASSERT_TRUE(index.has_value());
+   EXPECT_FALSE(menu.menu_model().GetIconAt(index.value()).IsEmpty());
+ }
+ 
+ #if BUILDFLAG(IS_MAC)
+-// Verify that the Lens Image Search menu item has NO icon in overlay case when
+-// flag is disabled
++// Generic image search omits its icon with Lens overlay enabled and the
++// macOS icon flag disabled.
+ TEST_F(RenderViewContextMenuPrefsTest,
+-       LensImageSearchOverlayNoIconWhenFlagDisabled) {
++       GenericImageSearchNoIconWithLensOverlayAndMacIconFlagDisabled) {
+   base::test::ScopedFeatureList features;
+   features.InitWithFeatures(
+       {lens::features::kLensStandalone, lens::features::kLensOverlay},
+@@ -1428,24 +1456,22 @@ TEST_F(RenderViewContextMenuPrefsTest,
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  bool present = menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE) ||
+-                 menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_OVERLAY);
+-  EXPECT_TRUE(present);
+-
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE)
++          .has_value());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_LENS_OVERLAY)
++          .has_value());
+   std::optional<size_t> index = menu.menu_model().GetIndexOfCommandId(
+-      IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE);
+-  if (!index.has_value()) {
+-    index =
+-        menu.menu_model().GetIndexOfCommandId(IDC_CONTENT_CONTEXT_LENS_OVERLAY);
+-  }
++      IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE);
+   ASSERT_TRUE(index.has_value());
+   EXPECT_TRUE(menu.menu_model().GetIconAt(index.value()).IsEmpty());
+ }
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+-// Verify that the Lens Image Search menu item is enabled for Progressive Web
+-// Apps
+-TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchForProgressiveWebApp) {
++// Progressive Web Apps retain generic image search while Lens stays absent.
++TEST_F(RenderViewContextMenuPrefsTest, GenericImageSearchForProgressiveWebApp) {
+   base::test::ScopedFeatureList features;
+   features.InitWithFeatures({lens::features::kLensStandalone},
+                             {lens::features::kLensOverlay});
+@@ -1458,8 +1484,13 @@ TEST_F(RenderViewContextMenuPrefsTest, L
+   menu.SetBrowser(GetPwaBrowser());
+   menu.Init();
+ 
+-  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE)
++          .has_value());
++  EXPECT_FALSE(
++      menu.GetMenuModelAndItemIndex(IDC_CONTENT_CONTEXT_LENS_OVERLAY)
++          .has_value());
+ }
+ 
+ TEST_F(RenderViewContextMenuPrefsTest,
+@@ -1973,7 +2004,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+ TEST_F(RenderViewContextMenuPrefsTest,
+-       TextSelectionShowsPartialTranslateWhenMenuSimplificationDisabled) {
++       TextSelectionOmitsTranslationWhenMenuSimplificationDisabled) {
+   base::test::ScopedFeatureList feature_list;
+   feature_list.InitAndDisableFeature(features::kMenuSimplification);
+   translate::TranslateManager::SetIgnoreMissingKeyForTesting(true);
+@@ -1991,12 +2022,16 @@ TEST_F(RenderViewContextMenuPrefsTest,
+       ->LanguageDetermined("fr", true);
+ 
+   content::ContextMenuParams params = CreateParams(MenuItem::SELECTION);
++  params.properties[prefs::kDefaultSearchProviderContextMenuAccessAllowed] = "";
+   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                  params);
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_COPY));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFOR));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATE));
+ }
+ #endif  // !BUILDFLAG(IS_CHROMEOS)
+ 
+@@ -2239,73 +2274,34 @@ class RenderViewContextMenuReadAnythingT
+ #define MAYBE_AppendPageItems AppendPageItems
+ #endif
+ TEST_P(RenderViewContextMenuReadAnythingTest, MAYBE_AppendPageItems) {
+-  const auto& params = GetParam();
+-  const std::string& group = std::get<0>(params);
+-
+   content::ContextMenuParams menu_params = CreateParams(MenuItem::PAGE);
+   TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                  menu_params);
+ 
+   ASSERT_TRUE(GetBrowser());
+-  const bool enable_region_search =
+-      lens::LensOverlayEntryPointController::From(GetBrowser())->IsEnabled();
+-  if (enable_region_search) {
+-    SetUserSelectedDefaultSearchProvider("https://www.google.com",
+-                                         /*supports_image_search=*/true);
+-  } else {
+-    SetUserSelectedDefaultSearchProvider("https://www.example.com",
+-                                         /*supports_image_search=*/false);
+-  }
++  SetUserSelectedDefaultSearchProvider("https://www.google.com",
++                                       /*supports_image_search=*/true);
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  const ui::MenuModel& model = menu.menu_model();
+-
+-  std::optional<size_t> read_anything_index;
+-  std::optional<size_t> region_search_index;
+-
+-  for (size_t i = 0; i < model.GetItemCount(); ++i) {
+-    int command_id = model.GetCommandIdAt(i);
+-
+-    if (command_id == IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE) {
+-      read_anything_index = i;
+-    } else if (command_id == IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH) {
+-      region_search_index = i;
+-    }
+-  }
+-
+-  ASSERT_TRUE(read_anything_index.has_value());
+-  if (enable_region_search) {
+-    ASSERT_TRUE(region_search_index.has_value());
+-  } else {
+-    ASSERT_FALSE(region_search_index.has_value());
+-  }
++  // Arcium keeps page navigation and output commands in every experiment arm.
++  EXPECT_TRUE(menu.IsItemPresent(IDC_RELOAD));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_SAVE_PAGE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_PRINT));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_VIEW_SOURCE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LISTEN_TO_THIS_PAGE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
+ 
+-  if (group == "MenuShuffleDefault") {
+-    if (enable_region_search) {
+-      // Read anything is after region search, without a separator in between.
+-      EXPECT_LT(region_search_index.value(), read_anything_index.value());
+-      EXPECT_EQ(model.GetCommandIdAt(read_anything_index.value() - 1),
+-                IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH);
+-    } else {
+-      // No separator before read anything if region search is not present.
+-      EXPECT_NE(model.GetTypeAt(read_anything_index.value() - 1),
+-                ui::MenuModel::TYPE_SEPARATOR);
+-      EXPECT_NE(model.GetItemCount() - 1, read_anything_index.value());
+-    }
+-  } else if (group == "MenuShuffleSeparation") {
+-    // Separator is right before read anything.
+-    EXPECT_EQ(model.GetTypeAt(read_anything_index.value() - 1),
+-              ui::MenuModel::TYPE_SEPARATOR);
+-    if (enable_region_search) {
+-      // And region search is right before that separator.
+-      EXPECT_EQ(model.GetCommandIdAt(read_anything_index.value() - 2),
+-                IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH);
++  const ui::MenuModel& model = menu.menu_model();
++  ASSERT_GT(model.GetItemCount(), 0u);
++  EXPECT_NE(ui::MenuModel::TYPE_SEPARATOR, model.GetTypeAt(0));
++  EXPECT_NE(ui::MenuModel::TYPE_SEPARATOR,
++            model.GetTypeAt(model.GetItemCount() - 1));
++  for (size_t i = 1; i < model.GetItemCount(); ++i) {
++    if (model.GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {
++      EXPECT_NE(ui::MenuModel::TYPE_SEPARATOR, model.GetTypeAt(i - 1));
+     }
+-    EXPECT_NE(model.GetItemCount() - 1, read_anything_index.value());
+-  } else if (group == "MenuShufflePlaceAtBottom") {
+-    // Read anything is after translate.
+-    EXPECT_EQ(model.GetItemCount() - 1, read_anything_index.value());
+   }
+ }
+ 
+@@ -2341,7 +2337,7 @@ class RenderViewContextMenuListenToThisP
+   RenderViewContextMenuListenToThisPageTest() = default;
+ };
+ 
+-TEST_F(RenderViewContextMenuListenToThisPageTest, MenuItemPresentWhenEnabled) {
++TEST_F(RenderViewContextMenuListenToThisPageTest, MenuItemAbsentWhenEnabled) {
+   base::test::ScopedFeatureList feature_list;
+   feature_list.InitAndEnableFeature(features::kImprovedReadAloud);
+ 
+@@ -2351,7 +2347,12 @@ TEST_F(RenderViewContextMenuListenToThis
+   menu.SetBrowser(GetBrowser());
+   menu.Init();
+ 
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LISTEN_TO_THIS_PAGE));
++  // Enabling the upstream flag cannot restore the removed reading UI.
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LISTEN_TO_THIS_PAGE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_RELOAD));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_SAVE_PAGE));
++  EXPECT_TRUE(menu.IsItemPresent(IDC_PRINT));
+ }
+ 
+ TEST_F(RenderViewContextMenuListenToThisPageTest, MenuItemAbsentWhenDisabled) {
+@@ -2543,7 +2544,28 @@ TEST_F(RenderViewContextMenuMenuSimplifi
+   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_COPY));
+   EXPECT_TRUE(menu.IsItemPresent(IDC_PRINT));
+   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFOR));
+-  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LISTEN_TO_THIS_PAGE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATE));
++
++  const auto& model = menu.menu_model();
++  const auto copy_index = model.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_COPY);
++  const auto print_index = model.GetIndexOfCommandId(IDC_PRINT);
++  const auto search_index =
++      model.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_SEARCHWEBFOR);
++  ASSERT_TRUE(copy_index.has_value());
++  ASSERT_TRUE(print_index.has_value());
++  ASSERT_TRUE(search_index.has_value());
++  EXPECT_LT(copy_index.value(), print_index.value());
++  EXPECT_LT(print_index.value(), search_index.value());
++  size_t separators = 0;
++  for (size_t i = print_index.value() + 1; i < search_index.value(); ++i) {
++    if (model.GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {
++      ++separators;
++    }
++  }
++  EXPECT_EQ(1u, separators);
+ }
+ 
+ TEST_F(RenderViewContextMenuMenuSimplificationTest, PageMenuSeparators) {
+@@ -2557,39 +2579,38 @@ TEST_F(RenderViewContextMenuMenuSimplifi
+   ChromeTranslateClient::CreateForWebContents(web_contents());
+   menu.Init();
+ 
+-  const ui::MenuModel& model = menu.menu_model();
+-
+-  std::optional<size_t> print_index;
+-  for (size_t i = 0; i < model.GetItemCount(); ++i) {
+-    if (model.GetCommandIdAt(i) == IDC_PRINT) {
+-      print_index = i;
+-      break;
+-    }
+-  }
+-
++  // The surviving page groups are navigation, save/print, and developer tools.
++  const auto& model = menu.menu_model();
++  const auto reload_index = model.GetIndexOfCommandId(IDC_RELOAD);
++  const auto save_index = model.GetIndexOfCommandId(IDC_SAVE_PAGE);
++  const auto print_index = model.GetIndexOfCommandId(IDC_PRINT);
++  const auto source_index = model.GetIndexOfCommandId(IDC_VIEW_SOURCE);
++  ASSERT_TRUE(reload_index.has_value());
++  ASSERT_TRUE(save_index.has_value());
+   ASSERT_TRUE(print_index.has_value());
++  ASSERT_TRUE(source_index.has_value());
++  ASSERT_LT(reload_index.value() + 1, model.GetItemCount());
++  EXPECT_EQ(ui::MenuModel::TYPE_SEPARATOR,
++            model.GetTypeAt(reload_index.value() + 1));
++  EXPECT_LT(reload_index.value(), save_index.value());
++  EXPECT_EQ(save_index.value() + 1, print_index.value());
++  ASSERT_LT(print_index.value(), source_index.value());
+ 
+-  std::optional<size_t> next_item_index;
+-  for (size_t i = print_index.value() + 1; i < model.GetItemCount(); ++i) {
+-    int command_id = model.GetCommandIdAt(i);
+-    if (command_id == IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH ||
+-        command_id == IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE) {
+-      next_item_index = i;
+-      break;
++  size_t separators = 0;
++  for (size_t i = print_index.value() + 1; i < source_index.value(); ++i) {
++    if (model.GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {
++      ++separators;
+     }
+   }
+-
+-  ASSERT_TRUE(next_item_index.has_value());
+-
+-  bool found_separator = false;
+-  for (size_t i = print_index.value() + 1; i < next_item_index.value(); ++i) {
++  EXPECT_EQ(1u, separators);
++  EXPECT_NE(ui::MenuModel::TYPE_SEPARATOR, model.GetTypeAt(0));
++  EXPECT_NE(ui::MenuModel::TYPE_SEPARATOR,
++            model.GetTypeAt(model.GetItemCount() - 1));
++  for (size_t i = 1; i < model.GetItemCount(); ++i) {
+     if (model.GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {
+-      found_separator = true;
+-      break;
++      EXPECT_NE(ui::MenuModel::TYPE_SEPARATOR, model.GetTypeAt(i - 1));
+     }
+   }
+-
+-  EXPECT_TRUE(found_separator);
+ }
+ 
+ TEST_F(RenderViewContextMenuMenuSimplificationTest, LinkAndSelectionLayout) {
+@@ -2610,11 +2631,12 @@ TEST_F(RenderViewContextMenuMenuSimplifi
+ }
+ 
+ TEST_F(RenderViewContextMenuMenuSimplificationTest,
+-       TranslateSelectionOnlyOnce_NonEditable) {
++       TranslationAbsentAndCopySearchOnce_NonEditable) {
+   auto reset_ignore_missing_key = SetUpTranslateClient();
+ 
+   content::ContextMenuParams params;
+   params.selection_text = u"hello world";
++  params.properties[prefs::kDefaultSearchProviderContextMenuAccessAllowed] = "";
+   params.is_editable = false;
+ 
+   auto menu = std::make_unique<TestRenderViewContextMenu>(
+@@ -2622,19 +2644,26 @@ TEST_F(RenderViewContextMenuMenuSimplifi
+   menu->SetBrowser(GetBrowser());
+   menu->Init();
+ 
+-  // Verify that the partial translate item is present.
+-  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
+-
+-  // Verify that it is present exactly once.
+-  EXPECT_EQ(1, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  // Translation stays absent for an eligible language and selection.
++  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATE));
++  EXPECT_EQ(0, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  EXPECT_EQ(0, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_TRANSLATE));
++
++  // The editable and non-editable construction paths still add copy/search once.
++  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPY));
++  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFOR));
++  EXPECT_EQ(1, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_COPY));
++  EXPECT_EQ(1, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_SEARCHWEBFOR));
+ }
+ 
+ TEST_F(RenderViewContextMenuMenuSimplificationTest,
+-       TranslateSelectionOnlyOnce_Editable) {
++       TranslationAbsentAndCopySearchOnce_Editable) {
+   auto reset_ignore_missing_key = SetUpTranslateClient();
+ 
+   content::ContextMenuParams params;
+   params.selection_text = u"hello world";
++  params.properties[prefs::kDefaultSearchProviderContextMenuAccessAllowed] = "";
+   params.is_editable = true;
+ 
+   auto menu = std::make_unique<TestRenderViewContextMenu>(
+@@ -2642,9 +2671,15 @@ TEST_F(RenderViewContextMenuMenuSimplifi
+   menu->SetBrowser(GetBrowser());
+   menu->Init();
+ 
+-  // Verify that the partial translate item is present.
+-  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
+-
+-  // Verify that it is present exactly once.
+-  EXPECT_EQ(1, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  // Translation stays absent for an eligible language and selection.
++  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATE));
++  EXPECT_EQ(0, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_PARTIAL_TRANSLATE));
++  EXPECT_EQ(0, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_TRANSLATE));
++
++  // The editable and non-editable construction paths still add copy/search once.
++  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPY));
++  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFOR));
++  EXPECT_EQ(1, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_COPY));
++  EXPECT_EQ(1, CountOccurrences(*menu, IDC_CONTENT_CONTEXT_SEARCHWEBFOR));
+ }

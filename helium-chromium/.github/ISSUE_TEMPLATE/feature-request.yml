@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an idea
+labels: ["feat", "pending"]
+title: "[FR]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues before you submit this request.
+        You can use AI-assisted tools, but you must review and understand the result.
+        Do not submit automated or duplicate requests.
+
+        Submit macOS-only requests to the Arcium-macOS repository.
+  - type: input
+    id: description
+    attributes:
+      label: Description
+      description: Describe your suggestion in one clear sentence
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Implementation
+      options:
+        - label: I'm willing to implement this feature myself
+  - type: textarea
+    id: prob
+    attributes:
+      label: The problem
+      description: Describe the problem that the feature would solve
+    validations:
+      required: true
+  - type: textarea
+    id: sol
+    attributes:
+      label: Possible solutions
+      description: Describe possible solutions
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add relevant examples, screenshots, or constraints

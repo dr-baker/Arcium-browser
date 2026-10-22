@@ -1,0 +1,180 @@
+--- a/chrome/browser/preloading/prefetch/no_state_prefetch/BUILD.gn
++++ b/chrome/browser/preloading/prefetch/no_state_prefetch/BUILD.gn
+@@ -2,6 +2,7 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
++import("//components/safe_browsing/buildflags.gni")
+ import("//extensions/buildflags/buildflags.gni")
+ 
+ assert(is_win || is_mac || is_linux || is_chromeos || is_android)
+@@ -66,11 +67,16 @@
+     ]
+     public_deps = [
+       ":no_state_prefetch",
+-      "//chrome/browser/safe_browsing:test_support",
+       "//chrome/test:test_support_ui",
+       "//components/no_state_prefetch/browser",
+-      "//components/safe_browsing/core/browser/db:test_database_manager",
++      "//components/safe_browsing:buildflags",
+     ]
++    if (safe_browsing_mode != 0) {
++      public_deps += [
++        "//chrome/browser/safe_browsing:test_support",
++        "//components/safe_browsing/core/browser/db:test_database_manager",
++      ]
++    }
+     deps = [
+       "//base",
+       "//chrome/browser/external_protocol",
+@@ -131,6 +137,8 @@
+       "//components/embedder_support",
+       "//components/no_state_prefetch/browser",
+       "//components/privacy_sandbox:features",
++      "//components/safe_browsing:buildflags",
++      "//components/safe_browsing/core/common",
+       "//components/security_state/content",
+       "//components/ukm:test_support",
+     ]
+--- a/chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_test_utils.cc
++++ b/chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_test_utils.cc
+@@ -24,9 +24,9 @@
+ #include "chrome/common/pref_names.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
+ #include "components/prefs/pref_service.h"
+-#include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/render_view_host.h"
+@@ -397,8 +397,10 @@
+ PrerenderInProcessBrowserTest::PrerenderInProcessBrowserTest()
+     : external_protocol_handler_delegate_(
+           std::make_unique<NeverRunsExternalProtocolHandlerDelegate>()),
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       safe_browsing_factory_(
+           std::make_unique<safe_browsing::TestSafeBrowsingServiceFactory>()),
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       no_state_prefetch_contents_factory_(nullptr),
+       explicitly_set_browser_(nullptr),
+       autostart_test_server_(true) {}
+@@ -406,7 +408,9 @@
+ PrerenderInProcessBrowserTest::~PrerenderInProcessBrowserTest() = default;
+ 
+ void PrerenderInProcessBrowserTest::TearDownInProcessBrowserTestFixture() {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   safe_browsing::SafeBrowsingService::RegisterFactory(nullptr);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ }
+ 
+ content::SessionStorageNamespace*
+@@ -466,6 +470,7 @@
+   return embedded_test_server();
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ safe_browsing::FakeSafeBrowsingDatabaseManager*
+ PrerenderInProcessBrowserTest::GetFakeSafeBrowsingDatabaseManager() {
+   return static_cast<safe_browsing::FakeSafeBrowsingDatabaseManager*>(
+@@ -474,15 +479,18 @@
+           ->database_manager()
+           .get());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ void PrerenderInProcessBrowserTest::CreatedBrowserMainParts(
+     content::BrowserMainParts* browser_main_parts) {
+   InProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   safe_browsing_factory_->SetTestDatabaseManager(
+       new safe_browsing::FakeSafeBrowsingDatabaseManager(
+           content::GetUIThreadTaskRunner({})));
+   safe_browsing::SafeBrowsingService::RegisterFactory(
+       safe_browsing_factory_.get());
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ }
+ 
+ void PrerenderInProcessBrowserTest::SetUpOnMainThread() {
+@@ -517,7 +525,9 @@
+   no_state_prefetch_contents_factory_ = new TestNoStatePrefetchContentsFactory;
+   no_state_prefetch_manager->SetNoStatePrefetchContentsFactoryForTest(
+       no_state_prefetch_contents_factory_);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   CHECK(safe_browsing_factory_->test_safe_browsing_service());
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ }
+ 
+ void PrerenderInProcessBrowserTest::UseHttpsSrcServer() {
+--- a/chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_test_utils.h
++++ b/chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_test_utils.h
+@@ -20,12 +20,15 @@
+ #include "base/synchronization/lock.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "chrome/browser/external_protocol/external_protocol_handler.h"
+-#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
+ #include "components/no_state_prefetch/browser/no_state_prefetch_contents_delegate.h"
+ #include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
+ #include "components/safe_browsing/core/browser/db/fake_database_manager.h"
++#endif
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/render_widget_host_observer.h"
+ #include "url/gurl.h"
+@@ -302,12 +305,14 @@
+   // Returns the currently active server. See |UseHttpsSrcServer|.
+   net::EmbeddedTestServer* src_server();
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   safe_browsing::TestSafeBrowsingServiceFactory* safe_browsing_factory() const {
+     return safe_browsing_factory_.get();
+   }
+ 
+   safe_browsing::FakeSafeBrowsingDatabaseManager*
+   GetFakeSafeBrowsingDatabaseManager();
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   TestNoStatePrefetchContentsFactory* no_state_prefetch_contents_factory()
+       const {
+@@ -368,8 +373,10 @@
+   void MonitorResourceRequest(const net::test_server::HttpRequest& request);
+   std::unique_ptr<ExternalProtocolHandler::Delegate>
+       external_protocol_handler_delegate_;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
+       safe_browsing_factory_;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   raw_ptr<TestNoStatePrefetchContentsFactory, AcrossTasksDanglingUntriaged>
+       no_state_prefetch_contents_factory_;
+   raw_ptr<Browser, AcrossTasksDanglingUntriaged> explicitly_set_browser_;
+--- a/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
++++ b/chrome/browser/preloading/prefetch/no_state_prefetch/prerender_nostate_prefetch_browsertest.cc
+@@ -57,6 +57,7 @@
+ #include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/privacy_sandbox/privacy_sandbox_features.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/ukm/test_ukm_recorder.h"
+ #include "content/public/browser/browser_task_traits.h"
+@@ -1540,6 +1541,7 @@
+   WaitForRequestCount(src_server()->GetURL(kPrefetchJpeg), 1);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // If the main resource is unsafe, the whole prefetch is cancelled.
+ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
+                        PrerenderSafeBrowsingTopLevel) {
+@@ -1568,6 +1570,7 @@
+                       CreateServerRedirect("/prerender/prerender_page.html")),
+                   FINAL_STATUS_SAFE_BROWSING, 0);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Checks that prefetching a page does not add it to browsing history.
+ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, HistoryUntouchedByPrefetch) {

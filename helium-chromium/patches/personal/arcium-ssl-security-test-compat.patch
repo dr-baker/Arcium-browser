@@ -1,0 +1,107 @@
+--- a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
++++ b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/common/pref_names.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/prefs/pref_test_utils.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
+ #include "components/security_interstitials/core/https_only_mode_metrics.h"
+@@ -1263,6 +1264,7 @@
+   EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+   HttpsFirstModeService* service =
+       HttpsFirstModeServiceFactory::GetForProfile(profile());
+@@ -1317,6 +1319,7 @@
+   EXPECT_EQ(service->GetCurrentSetting(),
+             HttpsFirstModeSetting::kEnabledBalanced);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
+   base::HistogramTester histograms;
+@@ -1377,6 +1380,7 @@
+       HttpsFirstModeStartupState::kEnabledBalancedTypicallySecure, 1);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(HttpsFirstModeSettingsTrackerTest,
+        StartupDetailedState_EnabledBalancedEsbPairing) {
+   base::test::ScopedFeatureList feature_list;
+@@ -1397,6 +1401,7 @@
+       "Security.HttpsFirstMode.SettingEnabledAtStartupDetailed",
+       HttpsFirstModeStartupState::kEnabledBalancedEsbPairing, 1);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(HttpsFirstModeSettingsTrackerTest,
+        StartupDetailedState_EnabledBalancedAutoEnable) {
+@@ -1437,6 +1442,7 @@
+       HttpsFirstModeStartupState::kEnabledFull, 1);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(HttpsFirstModeSettingsTrackerTest, ImplicitTransition_EsbToggled) {
+   base::test::ScopedFeatureList feature_list;
+   feature_list.InitWithFeatures(
+@@ -1474,6 +1480,7 @@
+   histograms.ExpectTotalCount(
+       "Security.HttpsFirstMode.SettingImplicitlyChanged", 2);
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(HttpsFirstModeSettingsTrackerTest, GuestOTRProfileHasService) {
+   TestingProfile::Builder builder;
+--- a/chrome/browser/ssl/https_upgrades_browsertest.cc
++++ b/chrome/browser/ssl/https_upgrades_browsertest.cc
+@@ -44,6 +44,7 @@
+ #include "components/embedder_support/pref_names.h"
+ #include "components/omnibox/browser/omnibox_client.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/browser/db/fake_database_manager.h"
+ #include "components/safe_browsing/core/common/threat_enums.h"
+ #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
+@@ -5012,6 +5013,7 @@
+   EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Fixture for testing interactions between HTTPS-Upgrades and Safe Browsing.
+ class HttpsUpgradesSafeBrowsingTest : public InProcessBrowserTest {
+  public:
+@@ -5115,3 +5117,4 @@
+   // HTTP.
+   EXPECT_EQ(https_url, contents->GetVisibleURL());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+--- a/chrome/browser/ssl/security_state_tab_helper_browsertest.cc
++++ b/chrome/browser/ssl/security_state_tab_helper_browsertest.cc
+@@ -47,6 +47,7 @@
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/content/browser/password_protection/password_protection_request_content.h"
+ #include "components/safe_browsing/content/browser/password_protection/password_protection_test_util.h"
+ #include "components/safe_browsing/core/browser/password_protection/metrics_util.h"
+@@ -871,6 +872,7 @@
+   EXPECT_EQ(content::SSLStatus::NORMAL_CONTENT, entry->GetSSL().content_status);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ // Tests the security level and malicious content status for sign-in password
+ // reuse threat type.
+ IN_PROC_BROWSER_TEST_F(
+@@ -968,6 +970,7 @@
+   // Since these are non-Gaia enterprise passwords, Gaia password change won't
+   // have any impact here.
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class PKPModelClientTest : public SecurityStateTabHelperTest {
+  public:

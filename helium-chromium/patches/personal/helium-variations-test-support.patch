@@ -1,0 +1,59 @@
+--- a/components/variations/net/variations_http_headers.cc
++++ b/components/variations/net/variations_http_headers.cc
+@@ -31,6 +31,10 @@
+ #endif  // BUILDFLAG(IS_IOS)
+ 
+ namespace variations {
++
++// The name string for the header for variations information.
++// Note that prior to M33 this header was named X-Chrome-Variations.
++const char kClientDataHeader[] = "X-Client-Data";
+ 
+ namespace {
+ 
+--- a/content/browser/preloading/prefetch/prefetch_container_unittest.cc
++++ b/content/browser/preloading/prefetch/prefetch_container_unittest.cc
+@@ -220,7 +220,7 @@
+ };
+ 
+ TEST_P(PrefetchContainerXClientDataHeaderTest,
+-       AddHeaderForEligibleUrlOnlyWhenNotInIncognito) {
++       NeverAddHeaderForEligibleUrl) {
+   const GURL kTestEligibleUrl = GURL("https://google.com");
+ 
+   variations::VariationsIdsProvider::GetInstance()->ForceVariationIdsForTesting(
+@@ -230,10 +230,9 @@
+       *CreateSpeculationRulesPrefetchRequest(kTestEligibleUrl),
+       /*is_decoy=*/false);
+ 
+-  // Don't add the header when in incognito mode.
+-  EXPECT_EQ(
+-      request->cors_exempt_headers.HasHeader(variations::kClientDataHeader),
+-      !IsIncognito());
++  // Helium never adds the header, even when variation IDs are available.
++  EXPECT_FALSE(
++      request->cors_exempt_headers.HasHeader(variations::kClientDataHeader));
+ }
+ 
+ TEST_P(PrefetchContainerXClientDataHeaderTest,
+@@ -252,7 +251,7 @@
+ }
+ 
+ TEST_P(PrefetchContainerXClientDataHeaderTest,
+-       AddHeaderForEligibleRedirectUrlOnlyWhenNotInIncognito) {
++       NeverAddHeaderForEligibleRedirectUrl) {
+   const GURL kTestNonEligibleUrl = GURL("https://non-eligible.com");
+   const GURL kTestEligibleUrl = GURL("https://google.com");
+ 
+@@ -269,9 +268,8 @@
+       request->cors_exempt_headers.HasHeader(variations::kClientDataHeader));
+ 
+   prefetch_container->SimulatePrefetchRedirectedForTest(kTestEligibleUrl);
+-  EXPECT_EQ(
+-      request->cors_exempt_headers.HasHeader(variations::kClientDataHeader),
+-      !IsIncognito());
++  EXPECT_FALSE(
++      request->cors_exempt_headers.HasHeader(variations::kClientDataHeader));
+ }
+ 
+ TEST_P(PrefetchContainerXClientDataHeaderTest,

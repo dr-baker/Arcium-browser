@@ -1,0 +1,62 @@
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -119,7 +119,8 @@
+   const std::vector<views::View*> children = [&] {
+     std::vector<views::View*> visible;
+     for (views::View* child : this->children()) {
+-      if (child->GetVisible()) {
++      if (child->GetVisible() &&
++          !TabCollectionAnimatingLayoutManager::IsPendingDeletion(*child)) {
+         visible.push_back(child);
+       }
+     }
+@@ -304,7 +305,10 @@
+   // The minimum size should be enough to show a row and a half, if needed.
+   auto collapse_state = GetTabStripCollapseState();
+   const int num_children = std::ranges::count_if(
+-      children(), [](const views::View* child) { return child->GetVisible(); });
++      children(), [](const views::View* child) {
++        return child->GetVisible() &&
++               !TabCollectionAnimatingLayoutManager::IsPendingDeletion(*child);
++      });
+   if (UsesFavoriteGridLayout() &&
+       collapse_state == tabs::VerticalTabStripCollapseState::kExpanded) {
+     const float min_rows = std::min(1.0f, static_cast<float>(num_children));
+@@ -574,7 +578,8 @@
+ bool PinnedTabContainerView::UsesFavoriteGridLayout() const {
+   bool has_visible_child = false;
+   for (const views::View* child : children()) {
+-    if (!child->GetVisible()) {
++    if (!child->GetVisible() ||
++        TabCollectionAnimatingLayoutManager::IsPendingDeletion(*child)) {
+       continue;
+     }
+     has_visible_child = true;
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+@@ -354,6 +354,12 @@
+   // preferred size calculations
+   InterpolateLayout(0.0);
+   InvalidateHost(/*mark_layouts_changed=*/true);
++}
++
++// static
++bool TabCollectionAnimatingLayoutManager::IsPendingDeletion(
++    const views::View& child_view) {
++  return child_view.GetProperty(kPendingDeletion);
+ }
+ 
+ void TabCollectionAnimatingLayoutManager::AnimateAndDestroyChildView(
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
+@@ -96,6 +96,10 @@
+   void ResetViewsToTargetLayout(
+       const std::vector<const views::View*>& views_to_snap);
+ 
++  // Target layouts must omit retiring views, which remain parented only for
++  // their exit animation.
++  static bool IsPendingDeletion(const views::View& child_view);
++
+   // Animates the removal of `child_view` from the `host_view()` associated with
+   // this layout manager. `child_view` will be destroyed by the layout manager
+   // asynchronously.

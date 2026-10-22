@@ -1,0 +1,191 @@
+--- a/chrome/browser/ui/helium/helium_space_service_unittest.cc
++++ b/chrome/browser/ui/helium/helium_space_service_unittest.cc
+@@ -23,6 +23,7 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_strip_collection.h"
++#include "components/tabs/public/unpinned_tab_collection.h"
+ #include "content/public/browser/web_contents.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+@@ -380,6 +381,15 @@
+        LiveAssociationQueriesClearAfterPersistentItemRemoval) {
+   auto [id, pin_tab] = AddLivePin();
+   ASSERT_TRUE(pin_tab);
++  TabStripModel* model = browser()->tab_strip_model();
++  auto* strip = static_cast<tabs::TabStripCollection*>(
++      const_cast<tabs::TabCollection*>(model->Root()));
++  ASSERT_TRUE(strip->IsPinTab(pin_tab));
++  const int pin_index = model->GetIndexOfTab(pin_tab);
++  ASSERT_NE(TabStripModel::kNoTab, pin_index);
++  model->ActivateTabAt(pin_index);
++  content::WebContents* pin_contents = pin_tab->GetContents();
++  ASSERT_EQ(pin_tab, model->GetActiveTab());
+ 
+   EXPECT_EQ(PersistentRecordKind::kPin,
+             service_->GetPersistentItemKind(pin_tab));
+@@ -395,6 +405,11 @@
+   EXPECT_TRUE(extra_data.contains(kHeliumPersistentItemTabExtraDataKey));
+ 
+   ASSERT_TRUE(service_->RemovePersistentItem(pin_tab));
++  EXPECT_FALSE(strip->IsPinTab(pin_tab));
++  EXPECT_EQ(strip->unpinned_collection(), pin_tab->GetParentCollection());
++  EXPECT_NE(TabStripModel::kNoTab, model->GetIndexOfTab(pin_tab));
++  EXPECT_EQ(pin_tab, model->GetActiveTab());
++  EXPECT_EQ(pin_contents, model->GetActiveWebContents());
+   EXPECT_FALSE(service_->GetPersistentItemKind(pin_tab));
+   EXPECT_FALSE(service_->GetPersistentItemId(pin_tab));
+   EXPECT_FALSE(
+--- a/chrome/browser/ui/views/tabs/common/tab_view_browsertest.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view_browsertest.cc
+@@ -16,6 +16,10 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/recently_audible_helper.h"
+ #include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+@@ -23,8 +27,11 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
++#include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
++#include "chrome/browser/ui/views/tabs/common/persistent_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/root_tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
++#include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/hovercard/tab_hover_card_bubble_view.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
+@@ -117,6 +124,26 @@
+  public:
+   void WaitForLayout(views::View* view) {
+     ASSERT_TRUE(base::test::RunUntil([&]() { return !view->needs_layout(); }));
++  }
++};
++
++class HeliumPersistentTabViewTest : public TabViewTest {
++ public:
++  const std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() override {
++    auto features = TabViewTest::GetEnabledFeatures();
++    features.push_back({helium::kHeliumFavoritesAndPins, {}});
++    return features;
++  }
++
++  void SetUpOnMainThread() override {
++    TabViewTest::SetUpOnMainThread();
++    helium::HeliumSpaceService* service =
++        helium::HeliumSpaceServiceFactory::GetForProfile(
++            browser()->profile());
++    ASSERT_TRUE(service);
++    helium::HeliumSpace* default_space = service->GetDefaultSpace();
++    ASSERT_TRUE(default_space);
++    service->SetSpaceForBrowser(browser(), default_space->id());
+   }
+ };
+ 
+@@ -574,6 +601,100 @@
+   EXPECT_FALSE(unpinned_tab->GetBorder());
+ }
+ 
++IN_PROC_BROWSER_TEST_F(HeliumPersistentTabViewTest,
++                       ProjectedLivePinRemainsVisibleAfterUnpin) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++
++  tabs::TabInterface* pin_tab = tab_strip_model()->GetActiveTab();
++  ASSERT_TRUE(pin_tab);
++  content::WebContents* pin_contents = pin_tab->GetContents();
++
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(
++          browser()->profile());
++  ASSERT_TRUE(service);
++  helium::HeliumSpace* space = service->GetDefaultSpace();
++  ASSERT_TRUE(space);
++  ASSERT_TRUE(service->ConvertTabToPinInSpace(
++      browser(), space->id(), pin_tab, /*parent_id=*/{}, /*before_id=*/{}));
++
++  // Sidebar projection hides the native Pin TabView while its virtual row is
++  // displayed. The test must observe that state before exercising removal.
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    TabCollectionNode* node = root_node()->GetNodeForHandle(
++        pin_tab->GetHandle());
++    TabView* view = node ? views::AsViewClass<TabView>(node->view()) : nullptr;
++    return view && !view->GetVisible();
++  }));
++
++  ASSERT_TRUE(service->RemovePersistentItem(pin_tab));
++  base::RunLoop().RunUntilIdle();
++
++  TabCollectionNode* ordinary_node =
++      unpinned_collection_node()->GetNodeForHandle(pin_tab->GetHandle());
++  ASSERT_TRUE(ordinary_node);
++  TabView* ordinary_view =
++      views::AsViewClass<TabView>(ordinary_node->view());
++  ASSERT_TRUE(ordinary_view);
++  EXPECT_TRUE(ordinary_view->GetVisible());
++  EXPECT_EQ(pin_tab, tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(pin_contents, tab_strip_model()->GetActiveWebContents());
++}
++
++IN_PROC_BROWSER_TEST_F(HeliumPersistentTabViewTest,
++                       UnfavoriteRemovesRetiringFavoriteViews) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++
++  tabs::TabInterface* favorite_tab = tab_strip_model()->GetActiveTab();
++  ASSERT_TRUE(favorite_tab);
++  content::WebContents* favorite_contents = favorite_tab->GetContents();
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(
++          browser()->profile());
++  ASSERT_TRUE(service);
++
++  auto* pinned_view = views::AsViewClass<PinnedTabContainerView>(
++      pinned_collection_node()->view());
++  ASSERT_TRUE(pinned_view);
++  ASSERT_TRUE(service->AddFavoriteFromTab(favorite_tab));
++
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    if (pinned_collection_node()->children().size() != 1u) {
++      return false;
++    }
++    for (views::View* child : pinned_view->children()) {
++      if (views::IsViewClass<PersistentTabView>(child)) {
++        return true;
++      }
++    }
++    return false;
++  }));
++
++  ASSERT_TRUE(service->RemovePersistentItem(favorite_tab));
++  base::RunLoop().RunUntilIdle();
++
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    bool has_pending_view = false;
++    for (views::View* child : pinned_view->children()) {
++      has_pending_view |=
++          TabCollectionAnimatingLayoutManager::IsPendingDeletion(*child);
++    }
++    return pinned_collection_node()->children().empty() &&
++           pinned_view->children().empty() && !has_pending_view;
++  }));
++
++  TabCollectionNode* ordinary_node =
++      unpinned_collection_node()->GetNodeForHandle(
++          favorite_tab->GetHandle());
++  ASSERT_TRUE(ordinary_node);
++  EXPECT_EQ(favorite_tab, tab_strip_model()->GetActiveTab());
++  EXPECT_EQ(favorite_contents, tab_strip_model()->GetActiveWebContents());
++}
++
+ IN_PROC_BROWSER_TEST_F(TabViewTest, LogsTabCloseMetrics) {
+   base::UserActionTester user_action_tester;
+ 

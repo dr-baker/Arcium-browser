@@ -1,0 +1,19 @@
+--- a/chrome/browser/ui/hats/trust_safety_sentiment_service_unittest.cc
++++ b/chrome/browser/ui/hats/trust_safety_sentiment_service_unittest.cc
+@@ -617,13 +617,13 @@
+   service()->OpenedNewTabPage();
+   testing::Mock::VerifyAndClearExpectations(mock_hats_service());
+ 
+-  // UKM is only non default while no sync consent is present.
++  // A managed UKM setting is not a user-selected non-default preference.
+   expected_psd["Non default setting"] = false;
+   EXPECT_CALL(*mock_hats_service(),
+               LaunchSurvey(kHatsSurveyTriggerTrustSafetyPrivacySettings, _, _,
+                            expected_psd, _, _, _));
+-  profile()->GetTestingPrefService()->SetUserPref(
+-      prefs::kGoogleServicesConsentedToSync,
++  profile()->GetTestingPrefService()->SetManagedPref(
++      unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
+       std::make_unique<base::Value>(true));
+   service()->InteractedWithPrivacySettings(web_contents.get());
+   task_environment()->RunUntilIdle();

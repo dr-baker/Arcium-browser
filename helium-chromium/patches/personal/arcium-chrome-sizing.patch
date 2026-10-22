@@ -1,0 +1,22 @@
+Index: src/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ src/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -891,6 +891,17 @@
+ 
+ void VerticalTabStripRegionView::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState state) {
++  // The state controller can change the width outside the resize delegate,
++  // such as from the native settings UI. Keep the layout target synchronized.
++  const int previous_uncollapsed_width =
++      target_collapse_state_.uncollapsed_width;
++  target_collapse_state_.uncollapsed_width =
++      state_controller_->GetUncollapsedWidth();
++  if (previous_uncollapsed_width !=
++      target_collapse_state_.uncollapsed_width) {
++    InvalidateLayout();
++  }
++
+   // Apply padding immediately at the start of the animation by including
+   // the collapsing state.
+   bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;

@@ -1,0 +1,70 @@
+favicons/favicon_bookmarks_16.png chrome/app/theme/default_100_percent/common/favicon_bookmarks.png
+favicons/favicon_conflicts_16.png chrome/app/theme/default_100_percent/common/favicon_conflicts.png
+favicons/favicon_downloads_16.png chrome/app/theme/default_100_percent/common/favicon_downloads.png
+favicons/favicon_management_16.png chrome/app/theme/default_100_percent/common/favicon_management.png
+favicons/favicon_ntp_16.png chrome/app/theme/default_100_percent/common/favicon_ntp.png
+favicons/favicon_plugins_16.png chrome/app/theme/default_100_percent/common/favicon_plugins.png
+favicons/favicon_settings_16.png chrome/app/theme/default_100_percent/common/favicon_settings.png
+
+favicons/favicon_bookmarks_32.png chrome/app/theme/default_200_percent/common/favicon_bookmarks.png
+favicons/favicon_conflicts_32.png chrome/app/theme/default_200_percent/common/favicon_conflicts.png
+favicons/favicon_downloads_32.png chrome/app/theme/default_200_percent/common/favicon_downloads.png
+favicons/favicon_management_32.png chrome/app/theme/default_200_percent/common/favicon_management.png
+favicons/favicon_ntp_32.png chrome/app/theme/default_200_percent/common/favicon_ntp.png
+favicons/favicon_plugins_32.png chrome/app/theme/default_200_percent/common/favicon_plugins.png
+favicons/favicon_settings_32.png chrome/app/theme/default_200_percent/common/favicon_settings.png
+
+favicons/favicon_flags_16.png components/resources/default_100_percent/flags_ui/favicon_flags.png
+favicons/favicon_flags_32.png components/resources/default_200_percent/flags_ui/favicon_flags.png
+favicons/favicon_flags_48.png components/resources/default_300_percent/flags_ui/favicon_flags.png
+
+favicons/favicon_history_16.png components/resources/default_100_percent/favicon_history.png
+favicons/favicon_history_32.png components/resources/default_200_percent/favicon_history.png
+favicons/favicon_history_48.png components/resources/default_300_percent/favicon_history.png
+
+favicons/favicon_plugins_16.png extensions/browser/resources/default_100_percent/favicon_extensions.png
+favicons/favicon_plugins_32.png extensions/browser/resources/default_200_percent/favicon_extensions.png
+
+branding/product_logo.png components/resources/default_100_percent/chromium/product_logo.png
+branding/product_logo_white.png components/resources/default_100_percent/chromium/product_logo_white.png
+branding/product_logo_200.png components/resources/default_200_percent/chromium/product_logo.png
+branding/product_logo_white_200.png components/resources/default_200_percent/chromium/product_logo_white.png
+
+branding/product_logo_22_mono.png chrome/app/theme/chromium/product_logo_22_mono.png
+
+branding/product_logo.svg chrome/app/theme/chromium/product_logo.svg
+
+branding/product_logo.icon chrome/app/vector_icons/browser_logo.icon
+branding/product_logo.icon chrome/app/vector_icons/browser_logo_old.icon
+branding/product_logo.icon chrome/app/vector_icons/chrome_product.icon
+branding/product_logo.icon components/omnibox/browser/vector_icons/chrome_product.icon
+branding/product_logo.icon components/omnibox/browser/vector_icons/product_chrome_refresh.icon
+branding/product_logo.icon components/omnibox/browser/vector_icons/product_chrome_refresh_old.icon
+branding/product_logo.icon components/omnibox/browser/vector_icons/product_old.icon
+branding/product_logo.icon components/vector_icons/chromium/product.icon
+branding/product_logo_color.icon components/vector_icons/chromium/product_refresh.icon
+branding/product_logo.icon ui/message_center/vector_icons/chrome_product.icon
+branding/product_logo.icon ui/message_center/vector_icons/product_old.icon
+
+# generated resources
+generated/product_icon/16x16.png chrome/app/theme/chromium/product_logo_16.png
+generated/product_icon/24x24.png chrome/app/theme/chromium/product_logo_24.png
+generated/product_icon/48x48.png chrome/app/theme/chromium/product_logo_48.png
+generated/product_icon/64x64.png chrome/app/theme/chromium/product_logo_64.png
+generated/product_icon/128x128.png chrome/app/theme/chromium/product_logo_128.png
+generated/product_icon/256x256.png chrome/app/theme/chromium/product_logo_256.png
+
+generated/product_icon/16x16.png chrome/app/theme/default_100_percent/chromium/product_logo_16.png
+generated/product_icon/32x32.png chrome/app/theme/default_100_percent/chromium/product_logo_32.png
+
+generated/product_icon/32x32.png chrome/app/theme/default_200_percent/chromium/product_logo_16.png
+generated/product_icon/64x64.png chrome/app/theme/default_200_percent/chromium/product_logo_32.png
+
+generated/product_icon/24x24.png chrome/app/theme/chromium/linux/product_logo_24.png
+generated/product_icon/48x48.png chrome/app/theme/chromium/linux/product_logo_48.png
+generated/product_icon/64x64.png chrome/app/theme/chromium/linux/product_logo_64.png
+generated/product_icon/128x128.png chrome/app/theme/chromium/linux/product_logo_128.png
+generated/product_icon/256x256.png chrome/app/theme/chromium/linux/product_logo_256.png
+
+generated/product_icon/16x16.png chrome/app/theme/default_100_percent/chromium/linux/product_logo_16.png
+generated/product_icon/32x32.png chrome/app/theme/default_100_percent/chromium/linux/product_logo_32.png

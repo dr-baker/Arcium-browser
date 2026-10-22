@@ -1,0 +1,1232 @@
+[
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Helium จะคืนหน่วยความจำจากแท็บที่ไม่ได้ใช้งาน ทำให้แท็บที่ใช้งานอยู่และแอปอื่นๆ มีทรัพยากรคอมพิวเตอร์มากขึ้น และทำให้ Helium ทำงานได้เร็ว แท็บที่ไม่ได้ใช้งานจะกลับมาทำงานอีกครั้งโดยอัตโนมัติเมื่อคุณกลับไปที่แท็บนั้น"
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Helium ประหยัดพลังงานแบตเตอรี่ด้วยการจำกัดกิจกรรมเบื้องหลังและเอฟเฟกต์ภาพ เช่น การเลื่อนหน้าจออย่างราบรื่นและเฟรมเรตวิดีโอ"
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "Helium preloads pages which makes browsing and searching faster.",
+    "message": "Helium โหลดหน้าเว็บล่วงหน้าซึ่งทำให้การเรียกดูและการค้นหาเร็วขึ้น"
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
+    "source": "Sites you add will always stay active and memory won't be freed up from them.",
+    "message": "เว็บไซต์ที่คุณเพิ่มจะยังคงทำงานอยู่เสมอและจะไม่มีการคืนหน่วยความจำจากเว็บไซต์เหล่านั้น"
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_DISCARD_RING_TREATMENT_ENABLED_DESCRIPTION_WITH_LEARN_LINK",
+    "source": "A dotted circle appears around site icons.",
+    "message": "วงกลมเส้นประจะปรากฏรอบไอคอนเว็บไซต์"
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_INTERVENTION_NOTIFICATION_ENABLED_DESCRIPTION",
+    "source": "Get notifications that suggest ways to improve detected performance issues.",
+    "message": "รับการแจ้งเตือนที่แนะนำวิธีแก้ไขปัญหาประสิทธิภาพที่ตรวจพบ"
+  },
+  {
+    "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
+    "message": "นำเข้าจาก <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
+    "source": "Import profile still in use",
+    "message": "โปรไฟล์ที่ต้องการนำเข้ายังถูกใช้งานอยู่"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TEXT",
+    "source": "To continue importing data, first close the browser you're importing from.",
+    "message": "หากต้องการนำเข้าข้อมูลต่อ ให้ปิดเบราว์เซอร์ที่คุณกำลังนำเข้าก่อน"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES",
+    "source": "Helium services",
+    "message": "บริการ Helium"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
+    "source": "Manage what Helium services are allowed in your browser",
+    "message": "จัดการบริการ Helium ที่อนุญาตในเบราว์เซอร์ของคุณ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
+    "source": "Updates to Helium services:",
+    "message": "อัปเดตบริการ Helium:"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
+    "source": "These changes are not active until you dismiss this notice.",
+    "message": "การเปลี่ยนแปลงเหล่านี้จะยังไม่มีผลจนกว่าคุณจะปิดข้อความแจ้งนี้"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_IGNORE",
+    "source": "Don't notify me again",
+    "message": "ไม่ต้องแจ้งฉันอีก"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
+    "source": "Allow connecting to Helium services",
+    "message": "อนุญาตให้เชื่อมต่อกับบริการ Helium"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "เมื่อเปิดใช้งาน Helium จะสามารถเชื่อมต่อกับบริการเว็บแบบไม่ระบุตัวตนเพื่อให้ฟังก์ชันเพิ่มเติม เมื่อปิดใช้งาน ฟีเจอร์เพิ่มเติมจะไม่ทำงาน"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
+    "source": "Use your own instance of Helium services",
+    "message": "ใช้เซิร์ฟเวอร์บริการ Helium ของคุณเอง"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "คุณสามารถโฮสต์เซิร์ฟเวอร์บริการ Helium ของคุณเองและใช้ในเบราว์เซอร์แทนเซิร์ฟเวอร์เริ่มต้น HTTPS เท่านั้น"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
+    "source": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.",
+    "message": "อย่าใช้ฟิลด์นี้เว้นแต่คุณจะรู้ว่ากำลังทำอะไรอยู่ อย่าวาง URL จากผู้อื่นที่นี่เด็ดขาด เพราะพวกเขากำลังพยายามขโมยข้อมูลของคุณ เราไม่รับผิดชอบต่อความเสียหายใดๆ ที่เกิดจากการใช้เซิร์ฟเวอร์ที่กำหนดเอง และจะไม่สามารถช่วยเหลือคุณได้"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
+    "source": "Custom origin URL for Helium services",
+    "message": "URL ต้นทางที่กำหนดเองสำหรับบริการ Helium"
+  },
+  {
+    "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
+    "source": "Helium services have been updated. Please review the changes.",
+    "message": "บริการ Helium ได้รับการอัปเดต กรุณาตรวจสอบการเปลี่ยนแปลง"
+  },
+  {
+    "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
+    "source": "Review Helium services updates",
+    "message": "ตรวจสอบการอัปเดตบริการ Helium"
+  },
+  {
+    "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
+    "source": "Services updated",
+    "message": "อัปเดตบริการแล้ว"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT",
+    "source": "Helium services are not available until setup is complete to ensure your privacy and consent.",
+    "message": "บริการ Helium จะใช้งานไม่ได้จนกว่าจะตั้งค่าเสร็จสมบูรณ์เพื่อรับรองความเป็นส่วนตัวและความยินยอมของคุณ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON",
+    "source": "Complete setup",
+    "message": "ตั้งค่าให้เสร็จสมบูรณ์"
+  },
+  {
+    "name": "IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE_HELIUM",
+    "source": "This list of search engines is shown in random order.",
+    "message": "รายชื่อเครื่องมือค้นหานี้แสดงผลแบบสุ่มลำดับ"
+  },
+  {
+    "name": "IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR",
+    "source": "Appearance and behavior",
+    "message": "ลักษณะที่ปรากฏและพฤติกรรม"
+  },
+  {
+    "name": "IDS_SETTINGS_BEHAVIOR",
+    "source": "Behavior",
+    "message": "พฤติกรรม"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with ⌘+Shift+C",
+    "message": "เปิดใช้การคัดลอกลิงค์หน้าเว็บอย่างรวดเร็วด้วย ⌘+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with Ctrl+Shift+C",
+    "message": "เปิดใช้การคัดลอกลิงค์หน้าเว็บอย่างรวดเร็วด้วย Ctrl+Shift+C"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "ใช้พร็อกซีสำหรับการดาวน์โหลดและอัปเดตส่วนขยาย"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "เมื่อเปิดใช้งาน Helium จะใช้พร็อกซีในการดาวน์โหลดและอัปเดตส่วนขยายเพื่อปกป้องความเป็นส่วนตัวของคุณ เมื่อปิดใช้งาน การดาวน์โหลดและอัปเดตส่วนขยายจะไม่ทำงาน"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "อนุญาตให้ดาวน์โหลดรายการ !bangs"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium จะดึงรายการ bangs ที่ช่วยให้คุณท่องอินเทอร์เน็ตได้เร็วขึ้น เช่น !w หรือ !gh เมื่อปิดใช้งาน bangs จะไม่ทำงาน"
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM",
+    "source": "Please check that Helium services are enabled (including spell check downloads) and make sure that the firewall is not blocking downloads from Helium servers.",
+    "message": "กรุณาตรวจสอบว่าบริการ Helium เปิดใช้งานอยู่ (รวมถึงการดาวน์โหลดตรวจสอบการสะกดคำ) และตรวจสอบให้แน่ใจว่าไฟร์วอลล์ไม่ได้บล็อกการดาวน์โหลดจากเซิร์ฟเวอร์ Helium"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "อนุญาตให้ดาวน์โหลดไฟล์พจนานุกรมสำหรับการตรวจสอบการสะกดคำ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium จะดึงไฟล์พจนานุกรมที่ใช้สำหรับการตรวจสอบการสะกดคำเมื่อมีการร้องขอ เมื่อปิดใช้งาน การตรวจสอบการสะกดคำจะไม่ทำงาน"
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",
+    "source": "Version <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>",
+    "message": "เวอร์ชัน <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "อนุญาตให้ดาวน์โหลดรายการตัวกรองสำหรับ uBlock Origin"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO_DESCRIPTION",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium จะดึงรายการตัวกรองล่าสุดสำหรับ uBlock Origin คำขอไปยังรายการทั้งหมดจะผ่านพร็อกซีเพื่อปกป้องความเป็นส่วนตัวของคุณ เมื่อปิดใช้งาน รายการตัวกรองเริ่มต้นจะถูกโหลดจากที่จัดเก็บในเครื่อง ซึ่งจะอัปเดตเฉพาะพร้อมกับ Helium เท่านั้น รายการตัวกรองที่เลือกเพิ่มเติมจะถูกร้องขอโดยไม่ผ่านพร็อกซี"
+  },
+  {
+    "name": "IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON",
+    "source": "Open new tabs next to the active tab",
+    "message": "เปิดแท็บใหม่ถัดจากแท็บที่ใช้งานอยู่"
+  },
+  {
+    "name": "IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER",
+    "source": "Cycle through tabs in most recently used order with Ctrl+Tab",
+    "message": "สลับแท็บตามลำดับที่ใช้ล่าสุดด้วย Ctrl+Tab"
+  },
+  {
+    "name": "IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES",
+    "source": "Component updates are disabled. See Helium services in settings.",
+    "message": "การอัปเดตคอมโพเนนต์ถูกปิดใช้งาน ดู \"บริการ Helium\" ในการตั้งค่า"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE",
+    "source": "Hibernate",
+    "message": "หยุดพักการทำงานชั่วคราว"
+  },
+  {
+    "name": "IDS_SETTINGS_PERMISSIONS_DESCRIPTION_NORMAL",
+    "source": "Manage site permissions and content settings (cookies, pop-ups, and more)",
+    "message": "จัดการสิทธิ์ของเว็บไซต์และการตั้งค่าเนื้อหา (คุกกี้ ป๊อปอัป และอื่นๆ)"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_DESCRIPTION_NORMAL",
+    "source": "Connection security, DNS settings, certificate management, and other security settings",
+    "message": "ความปลอดภัยของการเชื่อมต่อ การตั้งค่า DNS การจัดการใบรับรอง และการตั้งค่าความปลอดภัยอื่นๆ"
+  },
+  {
+    "name": "IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT_HELIUM",
+    "source": "Enabling \"Do Not Track\" means that Helium will include a request not to be tracked with your browsing traffic. Whether this request is honored depends on whether a website responds to it and on how it is interpreted. For example, some websites may respond by showing you ads that aren't personalized using your previous browsing data. Many websites may still track you regardless of the request.",
+    "message": "การเปิดใช้งาน \"Do Not Track\" หมายความว่า Helium จะส่งคำขอไม่ให้ติดตามพร้อมกับทราฟฟิกการท่องเว็บของคุณ การที่คำขอนี้จะได้รับการตอบรับหรือไม่ขึ้นอยู่กับว่าเว็บไซต์ตอบสนองต่อคำขอหรือไม่และตีความอย่างไร ตัวอย่างเช่น บางเว็บไซต์อาจตอบสนองโดยแสดงโฆษณาที่ไม่ได้ปรับแต่งตามข้อมูลการเรียกดูก่อนหน้าของคุณ เว็บไซต์จำนวนมากอาจยังคงติดตามคุณโดยไม่คำนึงถึงคำขอนี้"
+  },
+  {
+    "name": "IDS_SETTINGS_ALLOWED_THIRD_PARTY_COOKIES_DESCRIPTION_HELIUM",
+    "source": "Affects the sites listed here. Inserting “[*.]” before a domain name creates an exception for the entire domain. For example, adding “[*.]example.com” means that third-party cookies can also be active for second.example.com, because it’s part of example.com.",
+    "message": "มีผลต่อเว็บไซต์เหล่านี้ การใส่ \"[*.]\" ก่อนชื่อโดเมนจะสร้างข้อยกเว้นสำหรับทั้งโดเมน ตัวอย่างเช่น การเพิ่ม \"[*.]example.com\" หมายความว่าคุกกี้ของบุคคลที่สามสามารถทำงานได้สำหรับ second.example.com เช่นกัน เนื่องจากเป็นส่วนหนึ่งของ example.com"
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC_HELIUM",
+    "source": "When you type in the address bar, Helium sends what you type to your default search engine to get suggestions. This is off in Incognito.",
+    "message": "เมื่อคุณพิมพ์ในแถบที่อยู่ Helium จะส่งสิ่งที่คุณพิมพ์ไปยังเครื่องมือค้นหาเริ่มต้นเพื่อรับคำแนะนำ ฟีเจอร์นี้จะถูกปิดในโหมดไม่ระบุตัวตน"
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_HELIUM",
+    "source": "Suggestions from the search engine",
+    "message": "คำแนะนำจากเครื่องมือค้นหา"
+  },
+  {
+    "name": "IDS_SETTINGS_AUTO_PIN_NEW_TAB_GROUPS_HELIUM",
+    "source": "Automatically pin new tab groups to the bookmarks bar",
+    "message": "ปักหมุดกลุ่มแท็บใหม่ไว้ที่แถบบุ๊กมาร์กโดยอัตโนมัติ"
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE",
+    "source": "Add search engine",
+    "message": "เพิ่มเครื่องมือค้นหา"
+  },
+  {
+    "name": "IDS_ADD_AS_DEFAULT",
+    "source": "Add as default",
+    "message": "เพิ่มเป็นค่าเริ่มต้น"
+  },
+  {
+    "name": "IDS_POLICY_SOURCE_HOP",
+    "source": "Helium defaults",
+    "message": "ค่าเริ่มต้นของ Helium"
+  },
+  {
+    "name": "IDS_ACCNAME_APP_MENU",
+    "source": "Main Menu",
+    "message": "เมนูหลัก"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_HELIUM_SERVICES_DISABLED",
+    "source": "Extension downloads are disabled. Enable this feature in Helium services settings and try again.",
+    "message": "การดาวน์โหลดส่วนขยายถูกปิดใช้งาน เปิดใช้ฟีเจอร์นี้ในการตั้งค่าบริการ Helium แล้วลองอีกครั้ง"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_EXTENSION_DL_DISABLED",
+    "source": "Extension downloads are disabled",
+    "message": "การดาวน์โหลดส่วนขยายถูกปิดใช้งาน"
+  },
+  {
+    "name": "IDS_NTP_CUSTOMIZE_CHROME_CHANGE_WALLPAPER_LABEL",
+    "source": "Change wallpaper",
+    "message": "เปลี่ยนภาพพื้นหลัง"
+  },
+  {
+    "name": "IDS_NEW_TAB_OTR_SUBTITLE_HELIUM",
+    "source": "Helium will not save anything about your browsing in Incognito, but downloads and bookmarks will stick around. Your browsing won't leave any traces on this device, and other users won't be able to see your activity.",
+    "message": "Helium จะไม่บันทึกข้อมูลเกี่ยวกับการท่องเว็บของคุณในโหมดไม่ระบุตัวตน แต่การดาวน์โหลดและบุ๊กมาร์กจะยังคงอยู่ การท่องเว็บของคุณจะไม่ทิ้งร่องรอยบนอุปกรณ์นี้ และผู้ใช้คนอื่นจะไม่สามารถเห็นกิจกรรมของคุณ"
+  },
+  {
+    "name": "IDS_EXTENSIONS_INSTALL_LOCATION_HELIUM",
+    "source": "Helium component",
+    "message": "คอมโพเนนต์ Helium"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT",
+    "source": "Browser layout",
+    "message": "รูปแบบการแสดงผลเบราว์เซอร์"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "คลาสสิก"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "ไดนามิก"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "กะทัดรัด"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "แนวตั้ง"
+  },
+  {
+    "name": "IDS_SETTINGS_TAB_STRIP_RIGHT_ALIGN",
+    "source": "Show vertical tabs on right side",
+    "message": "แสดงแท็บทางด้านขวา"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser Layout",
+    "message": "รูปแบบการแสดงผลเบราว์เซอร์"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "คลาสสิก"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "ไดนามิก"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "กะทัดรัด"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "แนวตั้ง"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on Right Side",
+    "message": "แท็บอยู่ด้านขวา"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser layout",
+    "message": "รูปแบบการแสดงผลเบราว์เซอร์"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on right side",
+    "message": "แท็บอยู่ด้านขวา"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use ⌘+S to toggle vertical tabs in Vertical layout",
+    "message": "ใช้ ⌘+S เพื่อเปิด/ปิดแถบแท็บในรูปแบบการแสดงผลแนวตั้ง"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use Ctrl+S to toggle vertical tabs in Vertical layout",
+    "message": "ใช้ Ctrl+S เพื่อเปิด/ปิดแถบแท็บในรูปแบบการแสดงผลแนวตั้ง"
+  },
+  {
+    "name": "IDS_SETTINGS_CENTERED_LOCATION_BAR",
+    "source": "Center the address bar",
+    "message": "จัดแถบที่อยู่ให้อยู่ตรงกลาง"
+  },
+  {
+    "name": "IDS_SETTINGS_MINIMAL_LOCATION_BAR",
+    "source": "Minimal address bar",
+    "message": "แถบที่อยู่แบบเรียบง่าย"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "Helium cannot be set as default, because no <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.",
+    "message": "ไม่สามารถตั้ง Helium เป็นค่าเริ่มต้นได้ เนื่องจากไม่พบไฟล์ <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> ในตำแหน่งใดๆ ต่อไปนี้: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications"
+  },
+  {
+    "name": "IDS_SETTINGS_CHOOSE_CUSTOM_AVATAR_FILE",
+    "source": "Choose file",
+    "message": "เลือกไฟล์"
+  },
+  {
+    "name": "IDS_SETTINGS_CLEAR_CUSTOM_AVATAR_DIALOG_TITLE",
+    "source": "Clear custom avatar?",
+    "message": "ล้างรูปโปรไฟล์ที่กำหนดเองหรือไม่"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_FILE_TOO_LARGE",
+    "source": "Selected file is too large. Please select a file smaller than 30MB.",
+    "message": "ไฟล์ที่เลือกมีขนาดใหญ่เกินไป โปรดเลือกไฟล์ที่มีขนาดเล็กกว่า 30MB"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_ERROR",
+    "source": "Image could not be loaded",
+    "message": "ไม่สามารถโหลดรูปภาพได้"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_LABEL",
+    "source": "Custom avatar",
+    "message": "รูปโปรไฟล์ที่กำหนดเอง"
+  },
+  {
+    "name": "IDS_SETTINGS_ROUNDED_FRAME",
+    "source": "Show a rounded frame around web contents",
+    "message": "แสดงกรอบมนรอบเนื้อหาเว็บ"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_SIDEBAR",
+    "source": "Always show the sidebar",
+    "message": "แสดงแถบด้านข้างเสมอ"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_TOP_TOOLBAR",
+    "source": "Always show the top bar",
+    "message": "แสดงแถบด้านบนเสมอ"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_TITLE",
+    "source": "Full Disk Access required",
+    "message": "ต้องมีสิทธิ์การเข้าถึงดิสก์ทั้งหมด"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
+    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Helium ต้องมีสิทธิ์การเข้าถึงดิสก์ทั้งหมดเพื่อนำเข้าบุ๊กมาร์กจาก Safari"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
+    "source": "Learn how to grant Full Disk Access from your System Preferences.",
+    "message": "ดูวิธีอนุญาตการเข้าถึงดิสก์ทั้งหมดจากการตั้งค่าระบบ"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_OPEN_SETTINGS",
+    "source": "Open System Preferences",
+    "message": "เปิดการตั้งค่าระบบ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
+    "source": "Invalid origin",
+    "message": "ต้นทางไม่ถูกต้อง"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close tabs above",
+    "message": "ปิดแท็บด้านบน"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close Tabs Above",
+    "message": "ปิดแท็บด้านบน"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_NEXT_TAB",
+    "source": "Next tab",
+    "message": "แท็บถัดไป"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_PREVIOUS_TAB",
+    "source": "Previous tab",
+    "message": "แท็บก่อนหน้า"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_LOCATION",
+    "source": "Focus address bar",
+    "message": "โฟกัสแถบที่อยู่"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_NEXT",
+    "source": "Find next",
+    "message": "ค้นหาถัดไป"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_PREVIOUS",
+    "source": "Find previous",
+    "message": "ค้นหาก่อนหน้า"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_BACK",
+    "source": "Back",
+    "message": "ย้อนกลับ"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FORWARD",
+    "source": "Forward",
+    "message": "ไปข้างหน้า"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_HOME",
+    "source": "Home",
+    "message": "หน้าแรก"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB",
+    "source": "New split tab",
+    "message": "แท็บแยกใหม่"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_LAST_TAB",
+    "source": "Last tab",
+    "message": "แท็บสุดท้าย"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_TAB",
+    "source": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>",
+    "message": "แท็บ <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_NEXT",
+    "source": "Move tab right",
+    "message": "ย้ายแท็บไปทางขวา"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_PREVIOUS",
+    "source": "Move tab left",
+    "message": "ย้ายแท็บไปทางซ้าย"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_TAB_GROUP",
+    "source": "Next tab group",
+    "message": "กลุ่มแท็บถัดไป"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_TAB_GROUP",
+    "source": "Previous tab group",
+    "message": "กลุ่มแท็บก่อนหน้า"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_TAB_GROUP",
+    "source": "Close tab group",
+    "message": "ปิดกลุ่มแท็บ"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_BOOKMARKS",
+    "source": "Focus bookmarks bar",
+    "message": "โฟกัสแถบบุ๊กมาร์ก"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS",
+    "source": "Toggle vertical tabs",
+    "message": "เปิด/ปิดแท็บแนวตั้ง"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP",
+    "source": "Close find bar or stop loading",
+    "message": "ปิดแถบค้นหาหรือหยุดโหลด"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_SEARCH",
+    "source": "Focus search",
+    "message": "โฟกัสการค้นหา"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_PANE",
+    "source": "Focus next pane",
+    "message": "โฟกัสบานหน้าต่างถัดไป"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_PANE",
+    "source": "Focus previous pane",
+    "message": "โฟกัสบานหน้าต่างก่อนหน้า"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_WEB_CONTENTS_PANE",
+    "source": "Focus page content",
+    "message": "โฟกัสเนื้อหาหน้าเว็บ"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_MENU_BAR",
+    "source": "Focus menu bar",
+    "message": "โฟกัสแถบเมนู"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_TOOLBAR",
+    "source": "Focus toolbar",
+    "message": "โฟกัสแถบเครื่องมือ"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_INACTIVE_POPUP",
+    "source": "Focus inactive popup",
+    "message": "โฟกัสป๊อปอัปที่ไม่ได้ใช้งาน"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_AVATAR_MENU",
+    "source": "Profile menu",
+    "message": "เมนูโปรไฟล์"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_APP_MENU",
+    "source": "App menu",
+    "message": "เมนูแอป"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_ZEN_MODE_TOP_CHROME_PIN",
+    "source": "Pin top toolbar",
+    "message": "ปักหมุดแถบเครื่องมือด้านบน"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_DEV_TOOLS",
+    "source": "Toggle developer tools",
+    "message": "เปิด/ปิดเครื่องมือสำหรับนักพัฒนา"
+  },
+  {
+    "name": "IDS_APP_PLUS_KEY",
+    "source": "Plus",
+    "message": "บวก"
+  },
+  {
+    "name": "IDS_APP_NUMPAD_KEY",
+    "source": "Numpad <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>",
+    "message": "แป้นตัวเลข <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_TITLE",
+    "source": "Keyboard shortcuts",
+    "message": "แป้นพิมพ์ลัด"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SEARCH_LABEL",
+    "source": "Search shortcuts",
+    "message": "ค้นหาปุ่มลัด"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_REMOVE_A11Y_LABEL",
+    "source": "Remove <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> from <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>",
+    "message": "นำ <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> ออกจาก <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_ALL",
+    "source": "Reset all to defaults",
+    "message": "รีเซ็ตทั้งหมดเป็นค่าเริ่มต้น"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_ADD_DIALOG_TITLE",
+    "source": "Add shortcut",
+    "message": "เพิ่มปุ่มลัด"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_DIALOG_DESCRIPTION",
+    "source": "All keyboard shortcuts will be reset to their default values. Any custom shortcuts you've set will be lost.",
+    "message": "แป้นพิมพ์ลัดทั้งหมดจะถูกรีเซ็ตเป็นค่าเริ่มต้น ปุ่มลัดแบบกำหนดเองที่คุณตั้งไว้จะถูกล้าง"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_PRESS_SHORTCUT",
+    "source": "Press a combination of keys to create a new shortcut",
+    "message": "กดปุ่มพร้อมกันเพื่อสร้างปุ่มลัดใหม่"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_NEED_KEY",
+    "source": "Include a key that is not a modifier.",
+    "message": "ต้องมีปุ่มที่ไม่ใช่ปุ่มปรับค่า"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_WILL_OVERRIDE",
+    "source": "Saving will remove this shortcut from <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>.",
+    "message": "การบันทึกจะนำปุ่มลัดนี้ออกจาก <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SYSTEM_CONFLICT",
+    "source": "This shortcut is managed by <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> and cannot be changed.",
+    "message": "ปุ่มลัดนี้จัดการโดย <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> และเปลี่ยนแปลงไม่ได้"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_INVALID",
+    "source": "This shortcut cannot be saved.",
+    "message": "บันทึกปุ่มลัดนี้ไม่ได้"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_NOTICE",
+    "source": "Some keyboard shortcuts are protected and can't be changed here. To change them, go to:",
+    "message": "แป้นพิมพ์ลัดบางรายการได้รับการปกป้องและเปลี่ยนที่นี่ไม่ได้ หากต้องการเปลี่ยน ให้ไปที่:"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_LINK",
+    "source": "System Settings &gt; Keyboard &gt; Keyboard Shortcuts &gt; App Shortcuts",
+    "message": "การตั้งค่าระบบ &gt; แป้นพิมพ์ &gt; ปุ่มลัดแป้นพิมพ์ &gt; ปุ่มลัดแอป"
+  },
+  {
+    "name": "IDS_ZEN_MODE_NEW_TAB_CREATED_TOAST_BODY",
+    "source": "New tab opened",
+    "message": "เปิดแท็บใหม่แล้ว"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic browser updates",
+    "message": "อนุญาตให้อัปเดตเบราว์เซอร์โดยอัตโนมัติ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium จะตรวจหาการอัปเดตและติดตั้งโดยอัตโนมัติ ซึ่งรวมถึงการอัปเดตเบราว์เซอร์และคอมโพเนนต์ เราขอแนะนำให้เปิดใช้การตั้งค่านี้ไว้เพื่อให้คุณได้รับฟีเจอร์ล่าสุดและการอัปเดตความปลอดภัย"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic component updates",
+    "message": "อนุญาตให้อัปเดตคอมโพเนนต์โดยอัตโนมัติ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium จะตรวจหาการอัปเดตคอมโพเนนต์และติดตั้งโดยอัตโนมัติ เราขอแนะนำให้เปิดใช้การตั้งค่านี้ไว้ บน Linux การอัปเดตเบราว์เซอร์จะจัดการโดยตัวจัดการแพ็กเกจของดิสโทรของคุณ โปรดตรวจสอบการอัปเดตแพ็กเกจ Helium อย่างน้อยทุกสัปดาห์"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate other tabs",
+    "message": "หยุดพักการทำงานแท็บอื่นๆ ชั่วคราว"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate Other Tabs",
+    "message": "หยุดพักการทำงานแท็บอื่นๆ ชั่วคราว"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URL",
+    "source": "Copy URL",
+    "message": "คัดลอก URL"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URLS",
+    "source": "Copy URLs",
+    "message": "คัดลอก URL"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_TITLE",
+    "source": "Background action confirmation toasts",
+    "message": "การแจ้งเตือนยืนยันการทำงานเบื้องหลัง"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_DESCRIPTION",
+    "source": "Shows a toast notification when you copy content, such as links and images, or open a new background tab in Frameless mode",
+    "message": "แสดงการแจ้งเตือนแบบป๊อปอัปเมื่อคุณคัดลอกเนื้อหา เช่น ลิงก์และรูปภาพ หรือเปิดแท็บใหม่ในเบื้องหลังในโหมดไร้กรอบ"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE",
+    "source": "Frameless mode",
+    "message": "โหมดไร้กรอบ"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE_DESCRIPTION",
+    "source": "Automatically hide browser UI until you hover the window edge",
+    "message": "ซ่อน UI ของเบราว์เซอร์โดยอัตโนมัติจนกว่าคุณจะวางเมาส์เหนือขอบหน้าต่าง"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_NEXT",
+    "source": "Next",
+    "message": "ถัดไป"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES",
+    "source": "Yes",
+    "message": "ใช่"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_HISTORY",
+    "source": "History",
+    "message": "ประวัติการเข้าชม"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALLED",
+    "source": "Installed",
+    "message": "ติดตั้งแล้ว"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALL",
+    "source": "Install",
+    "message": "ติดตั้ง"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_BACK",
+    "source": "Back",
+    "message": "กลับ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO",
+    "source": "No",
+    "message": "ไม่"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_PRIVACY",
+    "source": "Privacy",
+    "message": "ความเป็นส่วนตัว"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_EXTENSIONS",
+    "source": "Extensions",
+    "message": "ส่วนขยาย"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_CONFIGURE",
+    "source": "Configure",
+    "message": "กำหนดค่า"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_IMPORT_GUIDE",
+    "source": "Import",
+    "message": "การนำเข้า"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_BOOKMARKS",
+    "source": "Bookmarks",
+    "message": "บุ๊กมาร์ก"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SEARCHWEBWITH",
+    "source": "&amp;Search with <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>",
+    "message": "&amp;ค้นหาด้วย <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force paste",
+    "message": "บังคับวาง"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force Paste",
+    "message": "บังคับวาง"
+  },
+  {
+    "name": "IDS_SETTINGS_SHIFT_RIGHT_CLICK_CONTEXT_MENU",
+    "source": "Force context menu with Shift+Right Click",
+    "message": "บังคับแสดงเมนูบริบทด้วย Shift+คลิกขวา"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_TITLE",
+    "source": "Crash reporting",
+    "message": "การรายงานข้อขัดข้อง"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DESCRIPTION",
+    "source": "Choose whether Helium can ask to send crash reports or send them automatically. Disabling reports will delete all pending reports.",
+    "message": "เลือกว่าจะให้ Helium ถามเพื่อส่งรายงานข้อขัดข้องหรือส่งโดยอัตโนมัติ การปิดใช้งานการรายงานจะลบรายงานที่รอดำเนินการทั้งหมด"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED",
+    "source": "Disabled",
+    "message": "ปิดใช้งาน"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_ASK",
+    "source": "Ask after a crash",
+    "message": "ถามหลังเกิดข้อขัดข้อง"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC",
+    "source": "Send automatically",
+    "message": "ส่งโดยอัตโนมัติ"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_TITLE",
+    "source": "{COUNT, plural, =1 {Would you like to send a crash report?} other {Would you like to send # crash reports?}}",
+    "message": "{COUNT, plural, =1 {ต้องการส่งรายงานข้อขัดข้องหรือไม่} other {ต้องการส่งรายงานข้อขัดข้อง # รายการหรือไม่}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_DESCRIPTION",
+    "source": "Helium closed unexpectedly. A crash report could help us fix the issue you ran into and prevent it from happening again.",
+    "message": "Helium ปิดตัวลงโดยไม่คาดคิด รายงานข้อขัดข้องอาจช่วยให้เราแก้ไขปัญหาที่คุณพบและป้องกันไม่ให้เกิดขึ้นอีก"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_PRIVACY",
+    "source": "A crash report may incidentally include some sensitive data present in Helium's memory at the time of crash.",
+    "message": "รายงานข้อขัดข้องอาจมีข้อมูลที่ละเอียดอ่อนบางส่วนที่อยู่ในหน่วยความจำของ Helium ในขณะที่เกิดข้อขัดข้องรวมอยู่ด้วยโดยไม่ตั้งใจ"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_OPTIONAL",
+    "source": "Nothing has been sent yet. Sending a crash report is optional.",
+    "message": "ยังไม่มีการส่งข้อมูลใดๆ การส่งรายงานข้อขัดข้องเป็นทางเลือก"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send Report} other {Send # Reports}}",
+    "message": "{COUNT, plural, =1 {ส่งรายงาน} other {ส่งรายงาน # รายการ}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send report} other {Send # reports}}",
+    "message": "{COUNT, plural, =1 {ส่งรายงาน} other {ส่งรายงาน # รายการ}}"
+  },
+  {
+    "name": "IDS_CRASH_DISABLED_MESSAGE",
+    "source": "Crash reporting is disabled in Helium settings or by policy.",
+    "message": "การรายงานข้อขัดข้องถูกปิดใช้งานในการตั้งค่า Helium หรือโดยนโยบาย"
+  },
+  {
+    "name": "IDS_CRASH_BUG_LINK_LABEL",
+    "source": "Create an issue with details",
+    "message": "สร้าง issue พร้อมรายละเอียด"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS",
+    "source": "Use native frame materials (experimental)",
+    "message": "ใช้วัสดุเฟรมแบบเนทีฟ (ทดลอง)"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION",
+    "source": "Applies native materials to the browser frame surfaces. May cause UI clarity issues.",
+    "message": "ใช้วัสดุแบบเนทีฟกับพื้นผิวเฟรมของเบราว์เซอร์ อาจทำให้เกิดปัญหาความชัดเจนของ UI"
+  },
+  {
+    "name": "IDS_SETTINGS_SHOW_ZOOM_INDICATOR",
+    "source": "Show the zoom indicator in the address bar",
+    "message": "แสดงตัวบ่งชี้การซูมในแถบที่อยู่"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
+    "source": "Translate “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”",
+    "message": "แปล “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PAGE_TITLE",
+    "source": "Helium Setup",
+    "message": "การตั้งค่า Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_USE_DEFAULTS",
+    "source": "Use defaults",
+    "message": "ใช้ค่าเริ่มต้น"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_LETS_GO",
+    "source": "Let's go!",
+    "message": "เริ่มกันเลย!"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TITLE",
+    "source": "Helium Partner",
+    "message": "พาร์ทเนอร์ Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TOOLTIP",
+    "source": "Paying for this service will support the development of Helium.",
+    "message": "การจ่ายเงินสำหรับบริการนี้จะสนับสนุน การพัฒนา Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_GREETING",
+    "source": "Meet Helium",
+    "message": "พบกับ Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_FINISH_TITLE",
+    "source": "Ready to browse?",
+    "message": "พร้อมท่องเว็บหรือยัง?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_TITLE",
+    "source": "Helium services",
+    "message": "บริการ Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SUBTITLE",
+    "source": "Services are not active until you consent to using them. Changes will be applied after you go to the next page.",
+    "message": "บริการจะไม่ทำงานจนกว่าคุณจะยินยอมให้ใช้งาน การเปลี่ยนแปลงจะมีผลหลังจากที่คุณไปยังหน้าถัดไป"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_TITLE",
+    "source": "Allow connecting to Helium services",
+    "message": "อนุญาตการเชื่อมต่อกับบริการ Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_DESC",
+    "source": "Helium services provide additional functionality, such as: extension downloads, native !bangs, filter list updates, and browser updates. When disabled, none of these features will work, but Helium will not make any web requests.",
+    "message": "บริการ Helium มอบฟังก์ชันเพิ่มเติม เช่น การดาวน์โหลดส่วนขยาย, !bangs แบบเนทีฟ, การอัปเดตรายการตัวกรอง และการอัปเดตเบราว์เซอร์ เมื่อปิดใช้งาน คุณสมบัติเหล่านี้จะไม่ทำงาน แต่ Helium จะไม่ส่งคำขอทางเว็บใดๆ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_TITLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "อนุญาตการดาวน์โหลดรายการ !bangs"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_DESC",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium จะดึงรายการ bangs ที่ช่วยให้คุณท่องอินเทอร์เน็ตได้เร็วขึ้น เช่น !w หรือ !gh เมื่อปิดใช้งาน bangs จะไม่ทำงาน"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_TITLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "พร็อกซีการดาวน์โหลดและอัปเดตส่วนขยาย"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_DESC",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "เมื่อเปิดใช้งาน Helium จะพร็อกซีการดาวน์โหลดและอัปเดตส่วนขยายเพื่อปกป้องความเป็นส่วนตัวของคุณ เมื่อปิดใช้งาน การดาวน์โหลดและอัปเดตส่วนขยายจะไม่ทำงาน"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_TITLE",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "อนุญาตการดาวน์โหลดรายการตัวกรองสำหรับ uBlock Origin"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_DESC",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium จะดึงรายการตัวกรองใหม่สำหรับ uBlock Origin คำขอไปยังรายการทั้งหมดจะถูกพร็อกซีเพื่อปกป้องความเป็นส่วนตัวของคุณ เมื่อปิดใช้งาน รายการตัวกรองเริ่มต้นจะถูกโหลดจากที่จัดเก็บในเครื่อง ซึ่งจะอัปเดตพร้อมกับ Helium เท่านั้น รายการตัวกรองเสริมจะถูกร้องขอโดยไม่มีการพร็อกซี"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE",
+    "source": "Allow automatic browser updates",
+    "message": "อนุญาตการอัปเดตเบราว์เซอร์อัตโนมัติ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium จะตรวจหาการอัปเดตและติดตั้งโดยอัตโนมัติ ซึ่งรวมถึงการอัปเดตเบราว์เซอร์และคอมโพเนนต์ เราแนะนำให้เปิดใช้งานการตั้งค่านี้ไว้เพื่อให้แน่ใจว่าคุณจะได้รับคุณสมบัติและการอัปเดตความปลอดภัยล่าสุด"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE_LINUX",
+    "source": "Allow automatic component updates",
+    "message": "อนุญาตการอัปเดตคอมโพเนนต์อัตโนมัติ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC_LINUX",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium จะตรวจหาการอัปเดตคอมโพเนนต์และติดตั้งโดยอัตโนมัติ เราแนะนำให้เปิดใช้งานการตั้งค่านี้ไว้ บน Linux การอัปเดตเบราว์เซอร์จะจัดการโดยตัวจัดการแพ็กเกจของดิสโทรของคุณ โปรดตรวจหาการอัปเดตแพ็กเกจ Helium อย่างน้อยทุกสัปดาห์"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_TITLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "อนุญาตการดาวน์โหลดไฟล์พจนานุกรมสำหรับการตรวจการสะกด"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_DESC",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium จะดึงไฟล์พจนานุกรมที่ใช้สำหรับการตรวจการสะกดเมื่อมีการร้องขอ เมื่อปิดใช้งาน การตรวจการสะกดจะไม่ทำงาน"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_TITLE",
+    "source": "Use your own instance of Helium services",
+    "message": "ใช้อินสแตนซ์บริการ Helium ของคุณเอง"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_DESC",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the pre-hosted server. If you have one, you can set it in Helium settings.",
+    "message": "คุณสามารถโฮสต์อินสแตนซ์บริการ Helium ของคุณเองและใช้ในเบราว์เซอร์แทนเซิร์ฟเวอร์ที่โฮสต์ไว้ล่วงหน้าได้ หากคุณมี คุณสามารถตั้งค่าได้ในการตั้งค่า Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_PRIVATE",
+    "source": "A privacy-first search engine which doesn't profile or track you.",
+    "message": "เครื่องมือค้นหาที่ให้ความสำคัญกับความเป็นส่วนตัวเป็นอันดับแรก ซึ่ง ไม่สร้างโปรไฟล์หรือติดตามคุณ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_SMALL",
+    "source": "Transparent, but not privacy-focused. Offers better privacy than mainstream search engines.",
+    "message": "โปร่งใส แต่ไม่ได้เน้นความเป็นส่วนตัว ให้ความเป็นส่วนตัวที่ดีกว่าเครื่องมือค้นหา กระแสหลัก"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_MAINSTREAM",
+    "source": "A mainstream search engine which collects extensive personal data.",
+    "message": "เครื่องมือค้นหากระแสหลักซึ่ง เก็บรวบรวมข้อมูลส่วนบุคคลจำนวนมาก"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_CUSTOM",
+    "source": "A custom search engine. Its privacy wasn't verified by Helium.",
+    "message": "เครื่องมือค้นหาที่กำหนดเอง ความเป็นส่วนตัวของมัน ไม่ได้รับการยืนยันโดย Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BING",
+    "source": "Collects extensive personal data. Privacy controls are buried and limited. Subjectively overwhelming UI.",
+    "message": "เก็บรวบรวมข้อมูลส่วนบุคคลจำนวนมาก การควบคุมความเป็นส่วนตัวถูกซ่อนไว้และมีจำกัด UI ที่ล้นหลามในมุมมองส่วนตัว"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_GOOGLE",
+    "source": "It's Google. It dominates the search market, collects extensive personal data, and profiles you.",
+    "message": "นี่คือ Google มันครองตลาดการค้นหา เก็บรวบรวมข้อมูลส่วนบุคคลจำนวนมาก และสร้างโปรไฟล์คุณ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_TITLE",
+    "source": "Ready to switch to Helium?",
+    "message": "พร้อมเปลี่ยนมาใช้ Helium หรือยัง?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES_DESC",
+    "source": "Make Helium my default browser.",
+    "message": "ตั้ง Helium เป็นเบราว์เซอร์เริ่มต้นของฉัน"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO_DESC",
+    "source": "Just trying Helium for now.",
+    "message": "แค่ลองใช้ Helium ไปก่อน"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_TITLE",
+    "source": "Take your stuff with you",
+    "message": "นำข้อมูลของคุณติดตัวไปด้วย"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_SUBTITLE",
+    "source": "Transfer your most important bookmarks, history, and extensions from other browsers.",
+    "message": "โอนบุ๊กมาร์ก ประวัติการเข้าชม และส่วนขยายที่สำคัญที่สุดของคุณจากเบราว์เซอร์อื่น"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_TITLE",
+    "source": "Password manager",
+    "message": "ตัวจัดการรหัสผ่าน"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_SETUP_GUIDE",
+    "source": "Setup",
+    "message": "ตั้งค่า"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_ERROR",
+    "source": "Error:",
+    "message": "ข้อผิดพลาด:"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_MANAGERS_DASHLANE",
+    "source": "Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.",
+    "message": "ตัวจัดการรหัสผ่านที่ได้รับความนิยม แบบชำระเงิน และซอร์สปิด จัดเก็บข้อมูลในยุโรป เป็นที่รู้จักจากกลวิธีการเสนอขายที่ก้าวร้าว"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE",
+    "source": "Fingerprinting protection",
+    "message": "การป้องกันการเก็บลายนิ้วมือดิจิทัล"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_LINK_DESCRIPTION",
+    "source": "Manage how Helium protects you against fingerprinting",
+    "message": "จัดการวิธีที่ Helium ปกป้องคุณจากการเก็บลายนิ้วมือดิจิทัล"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_TOGGLE_DESCRIPTION",
+    "source": "Make it harder for sites to fingerprint your browser and device",
+    "message": "ทำให้เว็บไซต์เก็บลายนิ้วมือดิจิทัลของเบราว์เซอร์และอุปกรณ์ของคุณได้ยากขึ้น"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you. Each site sees consistent randomized information during your browsing session to reduce the chances of detection.",
+    "message": "เมื่อเปิดใช้งานการป้องกันการเก็บลายนิ้วมือดิจิทัล Helium จะเพิ่มสัญญาณรบกวนให้กับคุณลักษณะบางอย่างของเบราว์เซอร์ เพื่อให้เว็บไซต์ติดตามและสร้างโปรไฟล์ของคุณได้ยากขึ้น แต่ละเว็บไซต์จะเห็นข้อมูลแบบสุ่มที่สอดคล้องกันตลอดเซสชันการท่องเว็บของคุณ เพื่อลดโอกาสในการถูกตรวจจับ"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DISCLAIMER",
+    "source": "Fingerprinting cannot be fully prevented, but Helium's analysis defenses make it harder to recover the original fingerprint.",
+    "message": "ไม่สามารถป้องกันการเก็บลายนิ้วมือดิจิทัลได้อย่างสมบูรณ์ แต่การป้องกันเชิงวิเคราะห์ของ Helium ทำให้การกู้คืนลายนิ้วมือดิจิทัลดั้งเดิมทำได้ยากขึ้น"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION",
+    "source": "When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting \"[*.]\" before a domain name applies it to the entire domain.",
+    "message": "เมื่อเปิดใช้งานคุณลักษณะการป้องกันการเก็บลายนิ้วมือดิจิทัลทั่วไป เว็บไซต์ที่แสดงด้านล่างจะใช้การตั้งค่าที่กำหนดเอง การใส่ \"[*.]\" ไว้หน้าชื่อโดเมนจะทำให้มีผลกับทั้งโดเมน"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_EXCEPTIONS_TITLE",
+    "source": "Sites without fingerprinting protection",
+    "message": "เว็บไซต์ที่ไม่มีการป้องกันการเก็บลายนิ้วมือดิจิทัล"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_ALLOW_OVERRIDES_TITLE",
+    "source": "Overrides to allow fingerprinting protection",
+    "message": "การลบล้างเพื่ออนุญาตการป้องกันการเก็บลายนิ้วมือดิจิทัล"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_HEADER",
+    "source": "Fingerprinting protection",
+    "message": "การป้องกันการเก็บลายนิ้วมือดิจิทัล"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP",
+    "source": "Manage fingerprinting protection for this site",
+    "message": "จัดการการป้องกันการเก็บลายนิ้วมือดิจิทัลสำหรับเว็บไซต์นี้"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you.",
+    "message": "เมื่อเปิดใช้งานการป้องกันการเก็บลายนิ้วมือดิจิทัล Helium จะเพิ่มสัญญาณรบกวนให้กับคุณลักษณะบางอย่างของเบราว์เซอร์ เพื่อให้เว็บไซต์ติดตามและสร้างโปรไฟล์ของคุณได้ยากขึ้น"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_BREAKAGE",
+    "source": "Turning off the protection will reduce your privacy, but may fix site features that require fingerprinting.",
+    "message": "การปิดการป้องกันจะลดความเป็นส่วนตัวของคุณ แต่อาจแก้ปัญหาคุณลักษณะของเว็บไซต์ที่จำเป็นต้องใช้การเก็บลายนิ้วมือดิจิทัล"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_GLOBALLY_DISABLED",
+    "source": "Fingerprinting protection is turned off in Helium settings.",
+    "message": "การป้องกันการเก็บลายนิ้วมือดิจิทัลถูกปิดอยู่ในการตั้งค่าของ Helium"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_SETTINGS_BUTTON",
+    "source": "Manage fingerprinting protection",
+    "message": "จัดการการป้องกันการเก็บลายนิ้วมือดิจิทัล"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_TERMS",
+    "source": "By continuing, you agree to the <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privacy policy<ph name=\"END_LINK_PRIVACY\">$2</ph> and <ph name=\"BEGIN_LINK_TERMS\">$3</ph>terms of use<ph name=\"END_LINK_TERMS\">$4</ph>.",
+    "message": "การดำเนินการต่อถือว่าคุณยอมรับ<ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>นโยบายความเป็นส่วนตัว<ph name=\"END_LINK_PRIVACY\">$2</ph>และ<ph name=\"BEGIN_LINK_TERMS\">$3</ph>ข้อกำหนดการใช้งาน<ph name=\"END_LINK_TERMS\">$4</ph>"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_DUCKDUCKGO",
+    "source": "Privacy-focused. Relies on Bing for results. Promises not to track or profile you.",
+    "message": "เน้นความเป็นส่วนตัว ใช้ผลการค้นหาจาก Bing สัญญาว่าจะไม่ติดตามหรือสร้างโปรไฟล์คุณ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_KAGI",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Has custom ranking. Requires a paid account. No ads, tracking, or profiling.",
+    "message": "เน้นความเป็นส่วนตัว ไม่ใช้ Google หรือ Bing มีการจัดอันดับของตัวเอง ต้องมีบัญชีแบบเสียเงิน ไม่มีโฆษณา การติดตาม หรือการสร้างโปรไฟล์"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_QWANT",
+    "source": "Based in Europe. Relies on Bing for results. Sends tracking data to Microsoft.",
+    "message": "ตั้งอยู่ในยุโรป ใช้ผลการค้นหาจาก Bing ส่งข้อมูลการติดตามไปยัง Microsoft"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_ECOSIA",
+    "source": "May plant trees for clicking ads. Relies on Google and Bing for results. Sends tracking data to Google and Microsoft.",
+    "message": "อาจปลูกต้นไม้เมื่อคุณคลิกโฆษณา ใช้ผลการค้นหาจาก Google และ Bing ส่งข้อมูลการติดตามไปยัง Google และ Microsoft"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_STARTPAGE",
+    "source": "Privacy-focused. Relies on Google and Bing for results. Promises not to track or profile you.",
+    "message": "เน้นความเป็นส่วนตัว ใช้ผลการค้นหาจาก Google และ Bing สัญญาว่าจะไม่ติดตามหรือสร้างโปรไฟล์คุณ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BRAVE",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Promises not to track or profile you. May show promotions related to Brave services.",
+    "message": "เน้นความเป็นส่วนตัว ไม่ใช้ Google หรือ Bing สัญญาว่าจะไม่ติดตามหรือสร้างโปรไฟล์คุณ อาจแสดงโปรโมชันที่เกี่ยวข้องกับบริการของ Brave"
+  }
+]

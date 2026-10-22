@@ -1,0 +1,1030 @@
+--- a/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_unittest.cc
++++ b/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_unittest.cc
+@@ -42,6 +42,7 @@
+ #include "base/time/time.h"
+ #include "base/uuid.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/browser/autocomplete/zero_suggest_cache_service_factory.h"
+ #include "chrome/browser/autofill/personal_data_manager_factory.h"
+ #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+@@ -421,6 +422,7 @@
+   mojo::Remote<network::mojom::CookieManager> cookie_manager_;
+ };
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class RemoveSafeBrowsingCookieTester : public RemoveCookieTester {
+  public:
+   explicit RemoveSafeBrowsingCookieTester(Profile* profile)
+@@ -463,6 +465,7 @@
+  private:
+   raw_ptr<TestingBrowserProcess> browser_process_;
+ };
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class RemoveHistoryTester {
+  public:
+@@ -1460,6 +1463,7 @@
+ 
+ // TODO(crbug.com/41370786): Disabled due to flakiness in cookie store
+ //                         initialization.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
+        DISABLED_RemoveSafeBrowsingCookieForever) {
+   RemoveSafeBrowsingCookieTester tester(GetProfile());
+@@ -1476,9 +1480,11 @@
+             GetOriginTypeMask());
+   EXPECT_FALSE(tester.ContainsCookie());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // TODO(crbug.com/41370786): Disabled due to flakiness in cookie store
+ //                         initialization.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
+        DISABLED_RemoveSafeBrowsingCookieLastHour) {
+   RemoveSafeBrowsingCookieTester tester(GetProfile());
+@@ -1497,9 +1503,11 @@
+   // browsing cookies.
+   EXPECT_TRUE(tester.ContainsCookie());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // TODO(crbug.com/41370786): Disabled due to flakiness in cookie store
+ //                         initialization.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
+        DISABLED_RemoveSafeBrowsingCookieForeverWithPredicate) {
+   RemoveSafeBrowsingCookieTester tester(GetProfile());
+@@ -1528,6 +1536,7 @@
+                               std::move(filter2));
+   EXPECT_FALSE(tester.ContainsCookie());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearWebAppData) {
+--- a/chrome/browser/download/download_browsertest.cc
++++ b/chrome/browser/download/download_browsertest.cc
+@@ -56,6 +56,7 @@
+ #include "chrome/browser/download/download_target_determiner.h"
+ #include "chrome/browser/download/download_test_file_activity_observer.h"
+ #include "chrome/browser/download/simple_download_manager_coordinator_factory.h"
++#include "components/download/public/common/simple_download_manager_coordinator.h"
+ #include "chrome/browser/extensions/scoped_test_mv2_enabler.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -99,6 +100,7 @@
+ #include "components/permissions/permission_request_manager.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/safe_browsing/buildflags.h"
++#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/safe_browsing/content/browser/safe_browsing_service_interface.h"
+ #include "components/safe_browsing/content/common/file_type_policies_test_util.h"
+ #include "components/safe_browsing/content/common/proto/download_file_types.pb.h"
+@@ -644,6 +646,7 @@
+ 
+ namespace {
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ class FakeDownloadProtectionService
+     : public safe_browsing::DownloadProtectionService {
+  public:
+@@ -735,6 +738,7 @@
+  protected:
+   std::unique_ptr<TestSafeBrowsingServiceFactory> test_safe_browsing_factory_;
+ };
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ 
+ class DownloadWakeLockTest : public DownloadTestBase {
+  public:
+@@ -1734,9 +1738,11 @@
+ 
+ // Make sure a dangerous file shows up properly in the history.
+ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadHistoryDangerCheck) {
+-  // Disable SafeBrowsing so that danger will be determined by downloads system.
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++  // Disable Safe Browsing so danger is determined by the downloads system.
+   browser()->profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled,
+                                                false);
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ 
+   // .swf file so that it's dangerous on all platforms (including CrOS).
+   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
+--- a/chrome/browser/download/download_item_model_unittest.cc
++++ b/chrome/browser/download/download_item_model_unittest.cc
+@@ -903,7 +903,8 @@
+   EXPECT_EQ(60, model().PercentComplete());
+ }
+ 
+-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
++#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS) && \
++    BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ class DownloadItemModelTailoredWarningTest : public DownloadItemModelTest {
+  public:
+   DownloadItemModelTailoredWarningTest() {
+--- a/chrome/browser/enterprise/reporting/test/test_utils.cc
++++ b/chrome/browser/enterprise/reporting/test/test_utils.cc
+@@ -13,6 +13,7 @@
+ #include "components/enterprise/browser/reporting/report_util.h"
+ #include "components/policy/core/common/cloud/cloud_policy_util.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+ namespace enterprise_reporting {
+@@ -37,17 +38,21 @@
+   EXPECT_EQ(profile_signals_report.chrome_remote_desktop_app_blocked(),
+             device_signals::GetChromeRemoteDesktopAppBlocked(
+                 ChromePolicyBlocklistServiceFactory::GetForProfile(profile)));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_EQ(profile_signals_report.password_protection_warning_trigger(),
+             TranslatePasswordProtectionTrigger(
+                 device_signals::GetPasswordProtectionWarningTrigger(
+                     profile->GetPrefs())));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   CheckReportMatchSignal(
+       profile_signals_report.profile_enrollment_domain(),
+       device_signals::TryGetEnrollmentDomain(profile->GetCloudPolicyManager()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_EQ(
+       profile_signals_report.safe_browsing_protection_level(),
+       TranslateSafeBrowsingLevel(
+           device_signals::GetSafeBrowsingProtectionLevel(profile->GetPrefs())));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_EQ(profile_signals_report.site_isolation_enabled(),
+             device_signals::GetSiteIsolationEnabled());
+ }
+--- a/chrome/browser/enterprise/signals/profile_signals_collector_browsertest.cc
++++ b/chrome/browser/enterprise/signals/profile_signals_collector_browsertest.cc
+@@ -24,7 +24,10 @@
+ #include "components/policy/core/common/cloud/cloud_policy_util.h"
+ #include "components/policy/proto/device_management_backend.pb.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "content/public/test/browser_test.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+@@ -66,17 +69,20 @@
+ 
+     g_browser_process->local_state()->SetBoolean(
+         prefs::kBuiltInDnsClientEnabled, true);
+-
+-    // Give the testing profile a safe browsing level of "STANDARD_PROTECTION"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++    // Give the testing profile a safe browsing level of "STANDARD_PROTECTION".
+     profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+     profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnhanced, false);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   }
+ 
+   // Helper function to check the profile level signals are collected correctly.
+   void CheckSignalsCollected(ProfileSignalsResponse& response) {
+     EXPECT_EQ(response.profile_enrollment_domain, kFakeUserEnrollmentDomain);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     EXPECT_EQ(response.safe_browsing_protection_level,
+               safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     EXPECT_TRUE(response.built_in_dns_client_enabled);
+   }
+ 
+--- a/chrome/browser/net/network_context_configuration_browsertest.cc
++++ b/chrome/browser/net/network_context_configuration_browsertest.cc
+@@ -23,6 +23,7 @@
+ #include "base/threading/thread_restrictions.h"
+ #include "base/uuid.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/content_settings/cookie_settings_factory.h"
+@@ -30,7 +31,9 @@
+ #include "chrome/browser/net/profile_network_context_service_factory.h"
+ #include "chrome/browser/net/system_network_context_manager.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/safe_browsing_service.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/common/chrome_paths.h"
+ #include "chrome/common/chrome_switches.h"
+@@ -148,7 +151,9 @@
+ // This list should be kept in sync with the NetworkContextType enum.
+ const NetworkContextType kNetworkContextTypes[] = {
+     NetworkContextType::kSystem,
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     NetworkContextType::kSafeBrowsing,
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     NetworkContextType::kProfile,
+     NetworkContextType::kIncognitoProfile,
+     NetworkContextType::kOnDiskApp,
+@@ -377,9 +382,14 @@
+         return g_browser_process->system_network_context_manager()
+             ->GetURLLoaderFactory();
+       case NetworkContextType::kSafeBrowsing:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+         return g_browser_process->safe_browsing_service()
+             ->GetURLLoaderFactory(browser()->profile())
+             .get();
++#else
++        NOTREACHED();
++        return nullptr;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       case NetworkContextType::kProfile:
+       case NetworkContextType::kIncognitoProfile:
+       case NetworkContextType::kOnDiskApp:
+@@ -403,8 +413,13 @@
+         return g_browser_process->system_network_context_manager()
+             ->GetContext();
+       case NetworkContextType::kSafeBrowsing:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+         return g_browser_process->safe_browsing_service()->GetNetworkContext(
+             browser()->profile());
++#else
++        NOTREACHED();
++        return nullptr;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       case NetworkContextType::kProfile:
+       case NetworkContextType::kIncognitoProfile:
+       case NetworkContextType::kOnDiskApp:
+@@ -623,8 +638,12 @@
+             ->FlushNetworkInterfaceForTesting();
+         break;
+       case NetworkContextType::kSafeBrowsing:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+         g_browser_process->safe_browsing_service()
+             ->FlushNetworkInterfaceForTesting(GetProfile());
++#else
++        NOTREACHED();
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+         break;
+       case NetworkContextType::kProfile:
+       case NetworkContextType::kIncognitoProfile:
+--- a/chrome/browser/notifications/persistent_notification_handler_unittest.cc
++++ b/chrome/browser/notifications/persistent_notification_handler_unittest.cc
+@@ -15,6 +15,7 @@
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/test_future.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/notifications/metrics/mock_notification_metrics_logger.h"
+@@ -26,16 +27,24 @@
+ #include "chrome/browser/optimization_guide/mock_optimization_guide_keyed_service.h"
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/notification_content_detection/mock_notification_content_detection_service.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/notification_content_detection/notification_content_detection_service_factory.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/test/base/testing_browser_process.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "chrome/test/base/testing_profile_manager.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/optimization_guide/core/model_quality/test_model_quality_logs_uploader_service.h"
+ #include "components/safe_browsing/content/browser/notification_content_detection/notification_content_detection_constants.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/content/browser/notification_content_detection/notification_content_detection_service.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/content/browser/notification_content_detection/test_model_observer_tracker.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/core/browser/safe_browsing_metrics_collector.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+@@ -377,6 +386,7 @@
+ }
+ #endif
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class PersistentNotificationHandlerWithNotificationContentDetection
+     : public PersistentNotificationHandlerTest,
+       public testing::WithParamInterface<bool> {
+@@ -776,3 +786,5 @@
+           .value_or(false));
+ }
+ #endif
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+--- a/chrome/browser/notifications/platform_notification_service_unittest.cc
++++ b/chrome/browser/notifications/platform_notification_service_unittest.cc
+@@ -21,6 +21,7 @@
+ #include "base/test/test_future.h"
+ #include "base/time/time.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/engagement/site_engagement_service_factory.h"
+ #include "chrome/browser/history/history_service_factory.h"
+@@ -31,18 +32,30 @@
+ #include "chrome/browser/notifications/platform_notification_service_factory.h"
+ #include "chrome/browser/notifications/platform_notification_service_impl.h"
+ #include "chrome/browser/permissions/notifications_engagement_service_factory.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/notification_content_detection/mock_notification_content_detection_service.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/notification_content_detection/notification_content_detection_service_factory.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/ui/safety_hub/abusive_notification_permissions_manager.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/ui/safety_hub/disruptive_notification_permissions_manager.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/ui/safety_hub/safety_hub_util.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/history/core/browser/history_service.h"
+ #include "components/history/core/test/test_history_database.h"
+ #include "components/permissions/notifications_engagement_service.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/content/browser/notification_content_detection/notification_content_detection_constants.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/content/browser/notification_content_detection/test_model_observer_tracker.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/site_engagement/content/site_engagement_service.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+@@ -752,6 +765,7 @@
+ }
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class PlatformNotificationServiceTest_NotificationContentDetection
+     : public PlatformNotificationServiceTest,
+       public testing::WithParamInterface<bool> {
+@@ -1193,3 +1207,5 @@
+           safe_browsing::kNotificationContentDetectionMetadataDictionaryKey));
+ }
+ #endif
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+--- a/chrome/browser/permissions/BUILD.gn
++++ b/chrome/browser/permissions/BUILD.gn
+@@ -246,6 +246,13 @@
+     "prediction_service/permissions_ai_ui_selector_unittest.cc",
+     "pref_based_quiet_permission_ui_selector_unittest.cc",
+   ]
++  if (safe_browsing_mode == 0) {
++    sources -= [
++      "permission_revocation_request_unittest.cc",
++      "prediction_service/contextual_notification_permission_ui_selector_unittest.cc",
++    ]
++  }
++
+ 
+   if (!is_android) {
+     sources += [ "one_time_permissions_tracker_unittest.cc" ]
+--- a/chrome/browser/policy/BUILD.gn
++++ b/chrome/browser/policy/BUILD.gn
+@@ -282,6 +282,12 @@
+     "test/web_rtc_udp_port_range_policy_browsertest.cc",
+     "test/xslt_policy_browsertest.cc",
+   ]
++  if (safe_browsing_mode == 0) {
++    sources -= [
++      "test/safe_browsing_policy_browsertest.cc",
++    ]
++  }
++
+   deps = [
+     ":test_support",
+     "//base",
+--- a/chrome/browser/policy/test/quic_allowed_browsertest.cc
++++ b/chrome/browser/policy/test/quic_allowed_browsertest.cc
+@@ -13,7 +13,10 @@
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/profiles/profile_test_util.h"
+ #include "chrome/browser/profiles/profiles_state.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/safe_browsing_service.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "components/network_session_configurator/common/network_switches.h"
+@@ -58,10 +61,12 @@
+       g_browser_process->system_network_context_manager()->GetContext());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ bool IsQuicEnabledForSafeBrowsing(Profile* profile) {
+   return IsQuicEnabled(
+       g_browser_process->safe_browsing_service()->GetNetworkContext(profile));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ }  // namespace
+ 
+@@ -173,6 +178,7 @@
+   }
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse,
+                        QuicDisallowedForSafeBrowsing) {
+   EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
+@@ -187,6 +193,7 @@
+     EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse, QuicDisallowedForProfile) {
+   EXPECT_FALSE(IsQuicEnabled(browser()->profile()));
+@@ -244,6 +251,7 @@
+   }
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForSafeBrowsing) {
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
+ 
+@@ -257,6 +265,7 @@
+     EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
+   }
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // TODO(crbug.com/40777997): Flaky on multiple platforms
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue,
+@@ -291,7 +300,9 @@
+ 
+ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsNotSet, NoQuicRegulations) {
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabled(browser()->profile()));
+ }
+ 
+@@ -424,7 +435,9 @@
+   // After browser start, QuicAllowed=false comes in dynamically
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ 
+   // Set the QuicAllowed policy to true again
+@@ -432,7 +445,9 @@
+   // Effectively, QUIC is still disabled because QUIC re-enabling is not
+   // supported.
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ 
+   // Completely remove the QuicAllowed policy
+@@ -440,13 +455,17 @@
+   // Effectively, QUIC is still disabled because QUIC re-enabling is not
+   // supported.
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ 
+   // QuicAllowed=false is set again
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ }
+ 
+@@ -456,25 +475,33 @@
+   // After browser start, QuicAllowed=true comes in dynamically
+   SetQuicAllowedPolicy(policy_for_profile_1(), true);
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+ 
+   // Completely remove the QuicAllowed policy
+   RemoveAllPolicies(policy_for_profile_1());
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+ 
+   // Set the QuicAllowed policy to true again
+   SetQuicAllowedPolicy(policy_for_profile_1(), true);
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+ 
+   // Now set QuicAllowed=false
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ }
+ 
+@@ -489,14 +516,18 @@
+ 
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+ 
+   CreateSecondProfile();
+ 
+   // QUIC is disabled in both profiles
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+   EXPECT_FALSE(IsQuicEnabled(profile_2()));
+ }
+@@ -516,21 +547,27 @@
+ 
+   // QUIC is enabled in both profiles
+   EXPECT_TRUE(IsQuicEnabledForSystem());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_TRUE(IsQuicEnabled(profile_1()));
+   EXPECT_TRUE(IsQuicEnabled(profile_2()));
+ 
+   // Disable QUIC in first profile
+   SetQuicAllowedPolicy(policy_for_profile_1(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+   EXPECT_FALSE(IsQuicEnabled(profile_2()));
+ 
+   // Disable QUIC in second profile
+   SetQuicAllowedPolicy(policy_for_profile_2(), false);
+   EXPECT_FALSE(IsQuicEnabledForSystem());
+-  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  EXPECT_FALSE(IsQuicEnabledForSafeBrowsing(browser()->profile()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(IsQuicEnabled(profile_1()));
+   EXPECT_FALSE(IsQuicEnabled(profile_2()));
+ }
+--- a/chrome/browser/safe_browsing/BUILD.gn
++++ b/chrome/browser/safe_browsing/BUILD.gn
+@@ -704,6 +704,12 @@
+     "application_advanced_protection_status_detector_unittest.cc",
+     "metrics/bundled_settings_metrics_provider_unittest.cc",
+   ]
++  if (safe_browsing_mode == 0) {
++    sources -= [
++      "metrics/bundled_settings_metrics_provider_unittest.cc",
++    ]
++  }
++
+ 
+   deps = [
+     ":safe_browsing",
+--- a/chrome/browser/safe_browsing/advanced_protection_status_manager_unittest.cc
++++ b/chrome/browser/safe_browsing/advanced_protection_status_manager_unittest.cc
+@@ -8,6 +8,7 @@
+ #include "base/test/task_environment.h"
+ #include "build/build_config.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/safe_browsing/core/common/safebrowsing_switches.h"
+ #include "components/signin/public/identity_manager/account_info.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+--- a/chrome/browser/site_protection/BUILD.gn
++++ b/chrome/browser/site_protection/BUILD.gn
+@@ -3,6 +3,7 @@
+ # found in the LICENSE file.
+ 
+ import("//build/config/chrome_build.gni")
++import("//components/safe_browsing/buildflags.gni")
+ 
+ static_library("utils") {
+   sources = [
+@@ -75,6 +76,13 @@
+       "site_familiarity_utils_unittest.cc",
+       "site_protection_metrics_observer_unittest.cc",
+     ]
++    if (safe_browsing_mode == 0) {
++      sources -= [
++        "site_familiarity_process_selection_deferring_condition_unittest.cc",
++        "site_protection_metrics_observer_unittest.cc",
++      ]
++    }
++
+ 
+     deps = [
+       ":site_protection",
+--- a/chrome/browser/ssl/ssl_browsertest.cc
++++ b/chrome/browser/ssl/ssl_browsertest.cc
+@@ -43,6 +43,7 @@
+ #include "base/time/default_tick_clock.h"
+ #include "base/time/time.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/chrome_content_browser_client.h"
+@@ -7537,6 +7538,7 @@
+   EXPECT_EQ(std::nullopt, timer);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class SSLUITestWithEnhancedProtectionMessage : public SSLUITest {
+  public:
+   SSLUITestWithEnhancedProtectionMessage() = default;
+@@ -7610,6 +7612,8 @@
+   ExpectInterstitialElementHidden(contents, "enhanced-protection-message",
+                                   true /* expect_hidden */);
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ class InsecureFormNavigationThrottleFencedFrameBrowserTest
+     : public InProcessBrowserTest {
+--- a/chrome/browser/ui/download/download_bubble_row_view_info_unittest.cc
++++ b/chrome/browser/ui/download/download_bubble_row_view_info_unittest.cc
+@@ -9,7 +9,6 @@
+ #include "chrome/browser/download/download_item_model.h"
+ #include "chrome/browser/download/download_ui_model.h"
+ #include "chrome/browser/download/offline_item_utils.h"
+-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+ #include "chrome/browser/signin/identity_manager_factory.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/test/base/testing_profile.h"
+@@ -17,6 +16,7 @@
+ #include "components/download/public/common/mock_download_item.h"
+ #include "components/offline_items_collection/core/offline_item.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/safe_browsing/core/common/proto/csd.pb.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+@@ -30,6 +30,10 @@
+ #include "ui/base/ui_base_features.h"
+ #include "ui/views/vector_icons.h"
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++
+ namespace {
+ 
+ void SetOnCall(bool* to_set) {
+@@ -90,6 +94,7 @@
+     on_download_destroyed_ = std::move(callback);
+   }
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+   void SetupTailoredWarningForItem(
+       download::DownloadDangerType danger_type,
+       TailoredVerdict::TailoredVerdictType tailored_verdict_type,
+@@ -105,6 +110,7 @@
+         safe_browsing::ClientDownloadResponse::SAFE,  // placeholder
+         tailored_verdict);
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ 
+  private:
+   // DownloadBubbleRowViewInfoObserver implementation:
+@@ -363,6 +369,7 @@
+   }
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ TEST_F(DownloadBubbleRowViewInfoTest, GetInfoForTailoredWarning_CookieTheft) {
+   SetupTailoredWarningForItem(
+       download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE,
+@@ -414,6 +421,8 @@
+   EXPECT_TRUE(info().has_subpage());
+ }
+ 
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++
+ TEST_F(DownloadBubbleRowViewInfoTest, InsecurePrimaryButtonCommand) {
+   for (const auto& insecure_download_status :
+        {download::DownloadItem::InsecureDownloadStatus::BLOCK,
+--- a/chrome/browser/ui/download/download_bubble_security_view_info_unittest.cc
++++ b/chrome/browser/ui/download/download_bubble_security_view_info_unittest.cc
+@@ -9,11 +9,11 @@
+ #include "base/test/scoped_feature_list.h"
+ #include "chrome/browser/download/download_item_model.h"
+ #include "chrome/browser/download/download_ui_model.h"
+-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+ #include "chrome/browser/signin/identity_manager_factory.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/download/public/common/mock_download_item.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/signin/public/identity_manager/identity_manager.h"
+@@ -27,8 +27,14 @@
+ #include "ui/base/ui_base_features.h"
+ #include "ui/views/vector_icons.h"
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++
+ using DownloadUIModelPtr = DownloadUIModel::DownloadUIModelPtr;
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ using TailoredVerdict = safe_browsing::ClientDownloadResponse::TailoredVerdict;
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ using download::DownloadItem;
+ using ::testing::NiceMock;
+ using ::testing::Return;
+@@ -382,7 +388,8 @@
+ }
+ #endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ 
+-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
++#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS) && \
++    BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ class DownloadBubbleSecurityViewInfoTailoredWarningTest
+     : public DownloadBubbleSecurityViewInfoTest {
+  public:
+@@ -439,4 +446,4 @@
+   EXPECT_EQ(info().warning_summary(),
+             u"This archive file includes other files that may hide malware");
+ }
+-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
++#endif  // Safe Browsing tailored warning tests.
+--- a/chrome/browser/ui/safety_hub/BUILD.gn
++++ b/chrome/browser/ui/safety_hub/BUILD.gn
+@@ -3,6 +3,7 @@
+ # found in the LICENSE file.
+ 
+ import("//extensions/buildflags/buildflags.gni")
++import("//components/safe_browsing/buildflags.gni")
+ 
+ assert(is_win || is_mac || is_linux || is_chromeos || is_android)
+ 
+@@ -249,6 +250,12 @@
+     "safety_hub_service_unittest.cc",
+     "unused_site_permissions_manager_unittest.cc",
+   ]
++  if (safe_browsing_mode == 0) {
++    sources -= [
++      "abusive_notification_permissions_manager_unittest.cc",
++    ]
++  }
++
+ 
+   deps = [
+     ":safety_hub",
+--- a/chrome/browser/ui/safety_hub/revoked_permissions_service_unittest.cc
++++ b/chrome/browser/ui/safety_hub/revoked_permissions_service_unittest.cc
+@@ -56,6 +56,7 @@
+ #include "components/permissions/features.h"
+ #include "components/permissions/permission_uma_util.h"
+ #include "components/permissions/permission_util.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/safety_check/safety_check.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+@@ -482,7 +483,13 @@
+                      /*should_setup_unused_sites*/ bool,
+                      /*should_setup_disruptive_sites*/ bool>> {
+  public:
+-  bool ShouldSetupSafeBrowsing() const { return std::get<0>(GetParam()); }
++  bool ShouldSetupSafeBrowsing() const {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++    return std::get<0>(GetParam());
++#else
++    return false;
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  }
+   bool ShouldSetupUnusedSites() const { return std::get<1>(GetParam()); }
+   bool ShouldSetupDisruptiveSites() const { return std::get<2>(GetParam()); }
+ 
+@@ -513,6 +520,7 @@
+ 
+  private:
+   void SetUpSafeBrowsingService() override {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     if (!ShouldSetupSafeBrowsing()) {
+       return;
+     }
+@@ -525,13 +533,16 @@
+         fake_database_manager_.get());
+     TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(
+         safe_browsing_factory_->CreateSafeBrowsingService());
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   }
+ 
+   void TearDownSafeBrowsingService() override {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+     if (!ShouldSetupSafeBrowsing()) {
+       return;
+     }
+     TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(nullptr);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   }
+ 
+   scoped_refptr<MockSafeBrowsingDatabaseManager> fake_database_manager_;
+@@ -1660,7 +1671,9 @@
+   // timer.
+   prefs()->SetBoolean(safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled,
+                       false);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   prefs()->SetBoolean(prefs::kSafeBrowsingEnabled, false);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(service()->IsTimerRunningForTesting());
+ 
+   // Reset the service so auto-revocation is off on the service creation. The
+@@ -1670,9 +1683,11 @@
+ 
+   // Enable auto-revocation by setting kUnusedSitePermissionsRevocationEnabled
+   // pref to true. This should restart the repeated timer.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   if (ShouldSetupSafeBrowsing()) {
+     prefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+   }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   if (ShouldSetupUnusedSites()) {
+     prefs()->SetBoolean(
+         safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled, true);
+@@ -1926,6 +1941,7 @@
+   EXPECT_EQ(GetRevokedDisruptiveNotificationPermissionSize(), 1);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ INSTANTIATE_TEST_SUITE_P(
+     All,
+     RevokedPermissionsServiceTest,
+@@ -1933,6 +1949,15 @@
+         /*should_setup_abusive_notification_sites=*/testing::Bool(),
+         /*should_setup_unused_sites=*/testing::Bool(),
+         /*should_setup_disruptive_sites=*/testing::Bool()));
++#else
++INSTANTIATE_TEST_SUITE_P(
++    All,
++    RevokedPermissionsServiceTest,
++    testing::Combine(
++        /*should_setup_abusive_notification_sites=*/testing::Values(false),
++        /*should_setup_unused_sites=*/testing::Bool(),
++        /*should_setup_disruptive_sites=*/testing::Bool()));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // TODO(crbug.com/40267370): Clean-up after the backfill is done.
+ class RevokedPermissionsServiceBackfillTest
+--- a/chrome/browser/ui/views/file_system_access/file_system_access_browsertest.cc
++++ b/chrome/browser/ui/views/file_system_access/file_system_access_browsertest.cc
+@@ -21,8 +21,7 @@
+ #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_request_manager.h"
+-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_actions.h"
+@@ -41,7 +40,11 @@
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/permissions/permission_util.h"
+ #include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
++#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+ #include "components/safe_browsing/content/common/file_type_policies_test_util.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ #include "content/public/browser/file_system_access_permission_context.h"
+ #include "content/public/common/content_features.h"
+ #include "content/public/common/content_switches.h"
+@@ -60,7 +63,9 @@
+ #include "third_party/blink/public/common/features.h"
+ #include "ui/webui/webui_allowlist.h"
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ using safe_browsing::ClientDownloadRequest;
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ 
+ // End-to-end tests for the File System Access API. Among other things, these
+ // test the integration between usage of the File System Access API and the
+--- a/chrome/browser/ui/webui/downloads/downloads_dom_handler_unittest.cc
++++ b/chrome/browser/ui/webui/downloads/downloads_dom_handler_unittest.cc
+@@ -12,8 +12,6 @@
+ #include "base/test/metrics/histogram_tester.h"
+ #include "chrome/browser/download/download_item_model.h"
+ #include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+-#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
+ #include "chrome/browser/ui/hats/mock_trust_safety_sentiment_service.h"
+ #include "chrome/browser/ui/hats/trust_safety_sentiment_service_factory.h"
+ #include "chrome/browser/ui/webui/downloads/downloads.mojom.h"
+@@ -23,8 +21,13 @@
+ #include "components/download/public/common/download_danger_type.h"
+ #include "components/download/public/common/mock_download_item.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
++#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
++#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
+ #include "components/safe_browsing/core/common/features.h"
+ #include "components/safe_browsing/core/common/proto/csd.pb.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ #include "content/public/browser/download_item_utils.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "content/public/test/mock_download_manager.h"
+@@ -42,8 +45,10 @@
+ using ::testing::ReturnRef;
+ using ::testing::ReturnRefOfCopy;
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ const char kTestDangerousDownloadUrl[] = "http://evildownload.com";
+ const char kTestDangerousDownloadReferrerUrl[] = "http://referrer.test";
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ 
+ class TestDownloadsDOMHandler : public DownloadsDOMHandler {
+  public:
+@@ -202,6 +207,7 @@
+   handler.RemoveDownloads(downloads);
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ class DownloadsDOMHandlerWithFakeSafeBrowsingTest
+     : public DownloadsDOMHandlerTest {
+  public:
+@@ -500,3 +506,5 @@
+   EXPECT_CALL(dangerous_download_, ValidateDangerousDownload());
+   handler.SaveDangerousFromDialogRequiringGesture("1");
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+--- a/chrome/browser/ui/webui/downloads/downloads_list_tracker_unittest.cc
++++ b/chrome/browser/ui/webui/downloads/downloads_list_tracker_unittest.cc
+@@ -23,6 +23,7 @@
+ #include "components/download/public/common/download_item.h"
+ #include "components/download/public/common/download_item_rename_handler.h"
+ #include "components/download/public/common/mock_download_item.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "content/public/browser/download_item_utils.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "content/public/test/mock_download_manager.h"
+@@ -45,7 +46,9 @@
+ using testing::_;
+ using testing::Return;
+ using testing::ReturnRefOfCopy;
++#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ using TailoredVerdict = safe_browsing::ClientDownloadResponse::TailoredVerdict;
++#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+ 
+ namespace {
+ 
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -5700,6 +5700,14 @@
+     "../renderer/v8_unwinder_unittest.cc",
+   ]
+ 
++  if (safe_browsing_mode == 0) {
++    sources -= [
++      "../browser/safe_browsing/notification_content_detection/notification_content_detection_service_factory_unittest.cc",
++      "../browser/safe_browsing/notification_telemetry/notification_telemetry_service_factory_unittest.cc",
++      "../browser/safe_browsing/notification_telemetry/notification_telemetry_service_unittest.cc",
++    ]
++  }
++
+   if (is_win || is_mac || is_linux) {
+     sources += [
+       "../browser/enterprise/reporting/browser_launch/browser_launch_data_collector_desktop_unittest.cc",
+--- a/components/safe_browsing/core/common/safe_browsing_prefs.cc
++++ b/components/safe_browsing/core/common/safe_browsing_prefs.cc
+@@ -10,6 +10,7 @@
+ #include "base/notreached.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/time/time.h"
++#include "components/content_settings/core/common/pref_names.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_registry_simple.h"
+ #include "components/prefs/pref_service.h"

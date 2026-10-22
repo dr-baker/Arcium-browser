@@ -1,0 +1,109 @@
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/glass_surface_configuration.h
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration.h
+@@ -126,7 +126,7 @@
+   double tint_strength = 0.0;
+   double grain = 0.0;
+   double grain_scale = 0.5;
+-  bool match_color_adjustments = false;
++  bool match_color_adjustments = true;
+   GlassSurfaceColorHarmony color_harmony = GlassSurfaceColorHarmony::kCustom;
+   std::array<GlassColorPoint, kMaxGlassColorPoints> points;
+   size_t point_count = 0;
+
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/glass_surface_configuration.cc
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration.cc
+@@ -332,6 +332,7 @@
+ 
+ GlassSurfaceConfiguration DefaultGlassSurfaceConfiguration() {
+   GlassSurfaceConfiguration configuration;
++  configuration.match_color_adjustments = true;
+   configuration.tint_strength = 0.4;
+   configuration.grain = 0.06;
+   configuration.points[0] = {.id = "yellow",
+@@ -344,8 +345,8 @@
+                              .color = {0.411765f, 0.576471f, 0.929412f, 1.0f},
+                              .x = 0.8,
+                              .y = 0.65,
+-                             .radius = 0.9,
+-                             .opacity = 0.4};
++                             .radius = 0.8,
++                             .opacity = 0.5};
+   configuration.point_count = 2;
+   return configuration;
+ }
+@@ -357,7 +358,8 @@
+   configuration.enabled =
+       dict.FindBool(kGlassAppearanceEnabledKey).value_or(configuration.enabled);
+   configuration.match_color_adjustments =
+-      dict.FindBool(kGlassAppearanceMatchColorAdjustmentsKey).value_or(false);
++      dict.FindBool(kGlassAppearanceMatchColorAdjustmentsKey)
++          .value_or(configuration.match_color_adjustments);
+   if (const std::string* color_harmony =
+           dict.FindString(kGlassAppearanceColorHarmonyKey)) {
+     configuration.color_harmony =
+
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
+@@ -27,10 +27,15 @@
+   EXPECT_DOUBLE_EQ(configuration.tint_strength, 0.4);
+   EXPECT_DOUBLE_EQ(configuration.grain, 0.06);
+   EXPECT_DOUBLE_EQ(configuration.grain_scale, 0.5);
++  EXPECT_TRUE(configuration.match_color_adjustments);
+   EXPECT_EQ(configuration.color_harmony, GlassSurfaceColorHarmony::kCustom);
+   ASSERT_EQ(configuration.point_count, 2u);
+   EXPECT_EQ(configuration.points[0].id, "yellow");
+   EXPECT_EQ(configuration.points[1].id, "blue");
++  EXPECT_DOUBLE_EQ(configuration.points[0].radius, 0.8);
++  EXPECT_DOUBLE_EQ(configuration.points[1].radius, 0.8);
++  EXPECT_DOUBLE_EQ(configuration.points[0].opacity, 0.5);
++  EXPECT_DOUBLE_EQ(configuration.points[1].opacity, 0.5);
+ 
+   const base::DictValue serialized =
+       SerializeGlassSurfaceConfiguration(configuration);
+@@ -76,6 +81,7 @@
+   EXPECT_EQ(configuration.frosted_style, GlassSurfaceFrostedStyle::kAutomatic);
+   EXPECT_DOUBLE_EQ(configuration.frosted_tint_strength, 1.0);
+   EXPECT_DOUBLE_EQ(configuration.grain_scale, 0.5);
++  EXPECT_TRUE(configuration.match_color_adjustments);
+   EXPECT_EQ(configuration.point_count, 0u);
+   EXPECT_EQ(configuration.color_harmony, GlassSurfaceColorHarmony::kCustom);
+ }
+@@ -519,14 +525,19 @@
+   EXPECT_DOUBLE_EQ(*canonical_point->FindDouble(kGlassPointRadiusKey), 0.1);
+ }
+ 
+-TEST(GlassSurfaceConfigurationTest, PersistsMatchedColorAdjustments) {
++TEST(GlassSurfaceConfigurationTest, PreservesExplicitMatchAndPointValues) {
+   auto configuration = DefaultGlassSurfaceConfiguration();
+-  EXPECT_FALSE(configuration.match_color_adjustments);
+-  configuration.match_color_adjustments = true;
++  EXPECT_TRUE(configuration.match_color_adjustments);
++  configuration.match_color_adjustments = false;
++  configuration.points[1].radius = 1.2;
++  configuration.points[1].opacity = 0.7;
+   auto serialized = SerializeGlassSurfaceConfiguration(configuration);
+   auto parsed = ParseGlassSurfaceConfigurationStrict(serialized);
+   ASSERT_TRUE(parsed);
+-  EXPECT_TRUE(parsed->match_color_adjustments);
++  EXPECT_FALSE(parsed->match_color_adjustments);
++  ASSERT_EQ(parsed->point_count, 2u);
++  EXPECT_DOUBLE_EQ(parsed->points[1].radius, 1.2);
++  EXPECT_DOUBLE_EQ(parsed->points[1].opacity, 0.7);
+   serialized.Set(kGlassAppearanceMatchColorAdjustmentsKey, 1);
+   EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(serialized));
+ }
+@@ -538,7 +549,7 @@
+   auto complete = CompleteGlassSurfaceConfigurationForEditing(saved);
+   auto parsed = ParseGlassSurfaceConfigurationStrict(complete);
+   ASSERT_TRUE(parsed);
+-  EXPECT_FALSE(parsed->match_color_adjustments);
++  EXPECT_TRUE(parsed->match_color_adjustments);
+ }
+ 
+ }  // namespace helium

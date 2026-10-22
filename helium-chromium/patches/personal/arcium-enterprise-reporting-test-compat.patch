@@ -1,0 +1,30 @@
+--- a/chrome/browser/enterprise/reporting/test/BUILD.gn
++++ b/chrome/browser/enterprise/reporting/test/BUILD.gn
+@@ -3,6 +3,8 @@
+ # found in the LICENSE file.
+ 
+ import("//build/config/features.gni")
++import("//components/enterprise/buildflags/buildflags.gni")
++import("//components/safe_browsing/buildflags.gni")
+ 
+ source_set("test_support") {
+   testonly = true
+@@ -31,11 +33,13 @@
+   ]
+ 
+   if (is_mac || is_linux || is_win) {
+-    public += [ "realtime_event_uploader_test_base.h" ]
+-    sources += [
+-      "realtime_event_uploader_test_base.cc",
+-      "test_utils_desktop.cc",
+-    ]
++    sources += [ "test_utils_desktop.cc" ]
++    if (enterprise_cloud_content_analysis || is_android ||
++        safe_browsing_mode == 1) {
++      public += [ "realtime_event_uploader_test_base.h" ]
++      sources += [ "realtime_event_uploader_test_base.cc" ]
++      public_deps += [ "//chrome/browser/enterprise/connectors/test:test_support" ]
++    }
+   } else if (is_android) {
+     sources += [ "test_utils_android.cc" ]
+     deps += [

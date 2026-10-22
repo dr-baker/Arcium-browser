@@ -1,0 +1,2983 @@
+--- a/content/browser/attribution_reporting/attribution_aggregatable_report_golden_unittest.cc
++++ b/content/browser/attribution_reporting/attribution_aggregatable_report_golden_unittest.cc
+@@ -2,68 +2,28 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-#include <stdint.h>
+-
+-#include <optional>
+ #include <string>
+ #include <string_view>
+ #include <utility>
+-#include <variant>
+ #include <vector>
+ 
+-#include "base/base64.h"
+ #include "base/base_paths.h"
+-#include "base/check.h"
+ #include "base/files/file_enumerator.h"
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+-#include "base/functional/function_ref.h"
+ #include "base/path_service.h"
+-#include "base/run_loop.h"
+ #include "base/strings/string_util.h"
+-#include "base/test/bind.h"
+-#include "base/test/gmock_expected_support.h"
+ #include "base/test/values_test_util.h"
+-#include "base/time/time.h"
+-#include "components/aggregation_service/aggregation_coordinator_utils.h"
+-#include "components/attribution_reporting/aggregatable_filtering_id_max_bytes.h"
+-#include "components/attribution_reporting/source_registration_time_config.mojom.h"
+-#include "components/attribution_reporting/suitable_origin.h"
+-#include "content/browser/aggregation_service/aggregatable_report.h"
+-#include "content/browser/aggregation_service/aggregation_service.h"
+-#include "content/browser/aggregation_service/aggregation_service_impl.h"
+-#include "content/browser/aggregation_service/aggregation_service_test_utils.h"
+-#include "content/browser/aggregation_service/public_key.h"
+-#include "content/browser/attribution_reporting/aggregatable_attribution_utils.h"
+-#include "content/browser/attribution_reporting/aggregatable_debug_report.h"
+-#include "content/browser/attribution_reporting/attribution_test_utils.h"
+-#include "content/browser/storage_partition_impl.h"
++#include "base/values.h"
+ #include "content/public/common/content_paths.h"
+-#include "content/public/test/browser_task_environment.h"
+-#include "content/public/test/test_browser_context.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+-#include "third_party/abseil-cpp/absl/numeric/int128.h"
+-#include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom.h"
+-#include "third_party/boringssl/src/include/openssl/hpke.h"
+-#include "url/gurl.h"
+-#include "url/origin.h"
+ 
+ namespace content {
+ namespace {
+ 
+-using ::attribution_reporting::SuitableOrigin;
+-using ::blink::mojom::AggregatableReportHistogramContribution;
+-
+-constexpr char kKeyAggregationServicePayloads[] =
+-    "aggregation_service_payloads";
+-
+-std::string ReadStringFromFile(const base::FilePath& file, bool trim = false) {
++std::string ReadStringFromFile(const base::FilePath& file) {
+   std::string str;
+   EXPECT_TRUE(base::ReadFileToString(file, &str));
+-  if (trim) {
+-    str = std::string(base::TrimString(str, base::kWhitespaceASCII,
+-                                       base::TrimPositions::TRIM_ALL));
+-  }
+   return str;
+ }
+ 
+@@ -71,728 +31,6 @@ base::Value ParseJsonFromFile(const base
+   return base::test::ParseJson(ReadStringFromFile(file));
+ }
+ 
+-// See
+-// //content/test/data/attribution_reporting/aggregatable_report_goldens/README.md.
+-class AggregatableReportGoldenLatestVersionTest : public testing::Test {
+- public:
+-  void SetUp() override {
+-    ASSERT_OK_AND_ASSIGN(
+-        PublicKeyset keyset,
+-        aggregation_service::ReadAndParsePublicKeys(
+-            input_dir_.AppendASCII("public_key.json"), base::Time::Now()));
+-    ASSERT_EQ(keyset.keys.size(), 1u);
+-
+-    aggregation_service().SetPublicKeysForTesting(
+-        GetAggregationServiceProcessingUrl(url::Origin::Create(GURL(
+-            ::aggregation_service::kDefaultAggregationCoordinatorAwsCloud))),
+-        keyset);
+-    aggregation_service().SetPublicKeysForTesting(
+-        GetAggregationServiceProcessingUrl(url::Origin::Create(GURL(
+-            ::aggregation_service::kDefaultAggregationCoordinatorGcpCloud))),
+-        keyset);
+-
+-    std::optional<std::vector<uint8_t>> private_key =
+-        base::Base64Decode(ReadStringFromFile(
+-            input_dir_.AppendASCII("private_key.txt"), /*trim=*/true));
+-    ASSERT_TRUE(private_key);
+-    ASSERT_EQ(static_cast<int>(private_key->size()), X25519_PRIVATE_KEY_LEN);
+-
+-    ASSERT_TRUE(EVP_HPKE_KEY_init(full_hpke_key_.get(),
+-                                  EVP_hpke_x25519_hkdf_sha256(),
+-                                  private_key->data(), private_key->size()));
+-  }
+-
+- protected:
+-  // Assembles the report for `request`, and verifies that the assembled report
+-  // matches the expected report specified in `report_file` and
+-  //`cleartext_payloads_file`.
+-  // `get_report_body` is a function ref to create report body from the
+-  // assembled report.
+-  void AssembleAndVerifyReport(
+-      AggregatableReportRequest request,
+-      base::FunctionRef<base::DictValue(AggregatableReport)> get_report_body,
+-      std::string_view report_file,
+-      std::string_view cleartext_payloads_file) {
+-    base::Value expected_report =
+-        ParseJsonFromFile(input_dir_.AppendASCII(report_file));
+-    ASSERT_TRUE(expected_report.is_dict());
+-
+-    base::Value expected_cleartext_payloads =
+-        ParseJsonFromFile(input_dir_.AppendASCII(cleartext_payloads_file));
+-    ASSERT_TRUE(expected_cleartext_payloads.is_list());
+-    ASSERT_EQ(expected_cleartext_payloads.GetList().size(), 1u);
+-
+-    const std::string* base64_encoded_expected_cleartext_payload =
+-        expected_cleartext_payloads.GetList().front().GetIfString();
+-    ASSERT_TRUE(base64_encoded_expected_cleartext_payload);
+-
+-    base::RunLoop run_loop;
+-
+-    aggregation_service().AssembleReport(
+-        std::move(request),
+-        base::BindLambdaForTesting(
+-            [&](AggregatableReportRequest,
+-                std::optional<AggregatableReport> assembled_report,
+-                AggregationService::AssemblyStatus status) {
+-              EXPECT_EQ(status, AggregationService::AssemblyStatus::kOk);
+-              ASSERT_TRUE(assembled_report);
+-
+-              base::DictValue report_body =
+-                  get_report_body(*std::move(assembled_report));
+-
+-              EXPECT_TRUE(VerifyReport(
+-                  report_body.Clone(), std::move(expected_report).TakeDict(),
+-                  *base64_encoded_expected_cleartext_payload))
+-                  << "There was an error, consider bumping report version, "
+-                     " actual output for "
+-                  << report_file << " is:\n"
+-                  << report_body;
+-              run_loop.Quit();
+-            }));
+-
+-    run_loop.Run();
+-  }
+-
+-  base::FilePath input_dir_;
+-
+- private:
+-  AggregationServiceImpl& aggregation_service() {
+-    return *static_cast<AggregationServiceImpl*>(
+-        static_cast<StoragePartitionImpl*>(
+-            browser_context_.GetDefaultStoragePartition())
+-            ->GetAggregationService());
+-  }
+-
+-  testing::AssertionResult VerifyReport(
+-      base::DictValue actual_report,
+-      base::DictValue expected_report,
+-      const std::string& base64_encoded_expected_cleartext_payload) {
+-    std::optional<base::Value> actual_payloads =
+-        actual_report.Extract(kKeyAggregationServicePayloads);
+-    if (!actual_payloads) {
+-      return testing::AssertionFailure() << kKeyAggregationServicePayloads
+-                                         << " not present in the actual report";
+-    }
+-
+-    std::optional<base::Value> expected_payloads =
+-        expected_report.Extract(kKeyAggregationServicePayloads);
+-    if (!expected_payloads) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not present in the expected report";
+-    }
+-
+-    // All other fields are deterministic.
+-    if (actual_report != expected_report) {
+-      return testing::AssertionFailure()
+-             << "The actual report and expected reports do not match, ignoring "
+-                "the aggregation service payloads";
+-    }
+-
+-    static constexpr char kKeySharedInfo[] = "shared_info";
+-    const std::string* shared_info = expected_report.FindString(kKeySharedInfo);
+-    if (!shared_info) {
+-      return testing::AssertionFailure()
+-             << kKeySharedInfo << " not present in the report";
+-    }
+-
+-    base::ListValue* actual_payloads_list = actual_payloads->GetIfList();
+-    if (!actual_payloads_list) {
+-      return testing::AssertionFailure() << kKeyAggregationServicePayloads
+-                                         << " not a list in the actual report";
+-    }
+-
+-    base::ListValue* expected_payloads_list = expected_payloads->GetIfList();
+-    if (!expected_payloads_list) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not a list in the expected report";
+-    }
+-
+-    return VerifyAggregationServicePayloads(
+-        std::move(*actual_payloads_list), std::move(*expected_payloads_list),
+-        base64_encoded_expected_cleartext_payload, *shared_info);
+-  }
+-
+-  testing::AssertionResult VerifyAggregationServicePayloads(
+-      base::ListValue actual_payloads,
+-      base::ListValue expected_payloads,
+-      const std::string& base64_encoded_expected_cleartext_payload,
+-      const std::string& shared_info) {
+-    if (actual_payloads.size() != 1u) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not a list of size 1 in the actual report";
+-    }
+-
+-    base::DictValue* actual_payload = actual_payloads.front().GetIfDict();
+-    if (!actual_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << "[0] not a dictionary in the actual report";
+-    }
+-
+-    if (expected_payloads.size() != 1u) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not a list of size 1 in the expected report";
+-    }
+-
+-    base::DictValue* expected_payload = expected_payloads.front().GetIfDict();
+-    if (!expected_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << "[0] not a dictionary in the expected report";
+-    }
+-
+-    static constexpr char kKeyPayload[] = "payload";
+-
+-    std::optional<base::Value> actual_encrypted_payload =
+-        actual_payload->Extract(kKeyPayload);
+-    if (!actual_encrypted_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyPayload << " not present in the actual report";
+-    }
+-
+-    std::optional<base::Value> expected_encrypted_payload =
+-        expected_payload->Extract(kKeyPayload);
+-    if (!expected_encrypted_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyPayload << " not present in the expected report";
+-    }
+-
+-    // All other fields are deterministic.
+-    if (*actual_payload != *expected_payload) {
+-      return testing::AssertionFailure()
+-             << "The actual and expected aggregation service payloads do not "
+-                "match, ignoring the encrypted payloads";
+-    }
+-
+-    std::vector<uint8_t> actual_decrypted_payload =
+-        DecryptPayload(actual_encrypted_payload->GetString(), shared_info);
+-    if (actual_decrypted_payload.empty()) {
+-      return testing::AssertionFailure()
+-             << "Failed to decrypt payload in the actual report";
+-    }
+-
+-    std::vector<uint8_t> expected_decrypted_payload =
+-        DecryptPayload(expected_encrypted_payload->GetString(), shared_info);
+-    if (expected_decrypted_payload.empty()) {
+-      return testing::AssertionFailure()
+-             << "Failed to decrypt payload in the expected payload";
+-    }
+-
+-    if (actual_decrypted_payload != expected_decrypted_payload) {
+-      return testing::AssertionFailure()
+-             << "The actual and expected decrypted payloads do not match";
+-    }
+-
+-    if (std::string base64_encoded_decrypted_payload =
+-            base::Base64Encode(actual_decrypted_payload);
+-        base64_encoded_decrypted_payload !=
+-        base64_encoded_expected_cleartext_payload) {
+-      return testing::AssertionFailure()
+-             << "The expected cleartext payload does not match actual "
+-                "decrypted payload, actual output is "
+-             << base64_encoded_decrypted_payload;
+-    }
+-
+-    return testing::AssertionSuccess();
+-  }
+-
+-  // Returns empty vector in case of an error.
+-  std::vector<uint8_t> DecryptPayload(
+-      const std::string& base64_encoded_encrypted_payload,
+-      const std::string& shared_info) {
+-    std::optional<std::vector<uint8_t>> encrypted_payload =
+-        base::Base64Decode(base64_encoded_encrypted_payload);
+-    if (!encrypted_payload) {
+-      return {};
+-    }
+-
+-    return aggregation_service::DecryptPayloadWithHpke(
+-        *encrypted_payload, *full_hpke_key_.get(), shared_info);
+-  }
+-
+-  BrowserTaskEnvironment task_environment_;
+-  TestBrowserContext browser_context_;
+-  bssl::ScopedEVP_HPKE_KEY full_hpke_key_;
+-};
+-
+-class AttributionAggregatableReportGoldenLatestVersionTest
+-    : public AggregatableReportGoldenLatestVersionTest {
+- public:
+-  void SetUp() override {
+-    base::PathService::Get(content::DIR_TEST_DATA, &input_dir_);
+-    input_dir_ = input_dir_.AppendASCII(
+-        "attribution_reporting/aggregatable_report_goldens/latest");
+-
+-    AggregatableReportGoldenLatestVersionTest::SetUp();
+-  }
+-
+- protected:
+-  void VerifyAttributionReport(AttributionReport report,
+-                               std::string_view report_file,
+-                               std::string_view cleartext_payloads_file) {
+-    std::optional<AggregatableReportRequest> request =
+-        CreateAggregatableReportRequest(report);
+-    ASSERT_TRUE(request);
+-
+-    const auto get_report_body = [&](AggregatableReport assembled_report) {
+-      auto* data =
+-          std::get_if<AttributionReport::AggregatableData>(&report.data());
+-      CHECK(data);
+-      data->SetAssembledReport(std::move(assembled_report));
+-      return report.ReportBody();
+-    };
+-
+-    AssembleAndVerifyReport(*std::move(request), get_report_body, report_file,
+-                            cleartext_payloads_file);
+-  }
+-};
+-
+-TEST_F(AttributionAggregatableReportGoldenLatestVersionTest,
+-       VerifyGoldenReport) {
+-  const auto kGcpCoordinatorOrigin = *SuitableOrigin::Deserialize(
+-      ::aggregation_service::kDefaultAggregationCoordinatorGcpCloud);
+-
+-  struct {
+-    AttributionReport report;
+-    std::string_view report_file;
+-    std::string_view cleartext_payloads_file;
+-  } kTestCases[] = {
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().SetDebugKey(456).Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .SetDebugKey(123)
+-                         .SetCookieBasedDebugAllowed(true)
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/1,
+-                             /*value=*/2, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_1.json",
+-       .cleartext_payloads_file = "report_1_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/1,
+-                             /*value=*/2, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_2.json",
+-       .cleartext_payloads_file = "report_2_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().SetDebugKey(456).Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483300000))
+-                         .SetDebugKey(123)
+-                         .SetCookieBasedDebugAllowed(true)
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                              /*bucket=*/1,
+-                              /*value=*/2, /*filtering_id=*/std::nullopt),
+-                          AggregatableReportHistogramContribution(
+-                              /*bucket=*/3,
+-                              /*value=*/4, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486500000))
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_3.json",
+-       .cleartext_payloads_file = "report_3_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483300000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                              /*bucket=*/1,
+-                              /*value=*/2, /*filtering_id=*/std::nullopt),
+-                          AggregatableReportHistogramContribution(
+-                              /*bucket=*/3,
+-                              /*value=*/4, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486500000))
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_4.json",
+-       .cleartext_payloads_file = "report_4_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().SetDebugKey(456).Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483400000))
+-                         .SetDebugKey(123)
+-                         .SetCookieBasedDebugAllowed(true)
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/absl::Uint128Max(), /*value=*/1000,
+-                             /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486600000))
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_5.json",
+-       .cleartext_payloads_file = "report_5_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483400000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/absl::Uint128Max(), /*value=*/1000,
+-                             /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486600000))
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_6.json",
+-       .cleartext_payloads_file = "report_6_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/0,
+-                             /*value=*/1, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetSourceRegistrationTimeConfig(
+-                         attribution_reporting::mojom::
+-                             SourceRegistrationTimeConfig::kExclude)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_7.json",
+-       .cleartext_payloads_file = "report_7_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetSourceRegistrationTimeConfig(
+-                         attribution_reporting::mojom::
+-                             SourceRegistrationTimeConfig::kExclude)
+-                     .BuildNullAggregatable(),
+-       .report_file = "report_8.json",
+-       .cleartext_payloads_file = "report_8_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/0,
+-                             /*value=*/1, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetSourceRegistrationTimeConfig(
+-                         attribution_reporting::mojom::
+-                             SourceRegistrationTimeConfig::kExclude)
+-                     .SetTriggerContextId("example")
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_9.json",
+-       .cleartext_payloads_file = "report_9_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/0,
+-                             /*value=*/33, /*filtering_id=*/257)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetSourceRegistrationTimeConfig(
+-                         attribution_reporting::mojom::
+-                             SourceRegistrationTimeConfig::kExclude)
+-                     .SetTriggerContextId("example")
+-                     .SetAggregatableFilteringIdsMaxBytes(
+-                         *attribution_reporting::
+-                             AggregatableFilteringIdsMaxBytes::Create(2))
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_10.json",
+-       .cleartext_payloads_file = "report_10_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().SetDebugKey(456).Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .SetDebugKey(123)
+-                         .SetCookieBasedDebugAllowed(true)
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/1,
+-                             /*value=*/2, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_1.json",
+-       .cleartext_payloads_file = "report_gcp_1_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/1,
+-                             /*value=*/2, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_2.json",
+-       .cleartext_payloads_file = "report_gcp_2_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().SetDebugKey(456).Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483300000))
+-                         .SetDebugKey(123)
+-                         .SetCookieBasedDebugAllowed(true)
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                              /*bucket=*/1,
+-                              /*value=*/2, /*filtering_id=*/std::nullopt),
+-                          AggregatableReportHistogramContribution(
+-                              /*bucket=*/3,
+-                              /*value=*/4, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486500000))
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_3.json",
+-       .cleartext_payloads_file = "report_gcp_3_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483300000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                              /*bucket=*/1,
+-                              /*value=*/2, /*filtering_id=*/std::nullopt),
+-                          AggregatableReportHistogramContribution(
+-                              /*bucket=*/3,
+-                              /*value=*/4, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486500000))
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_4.json",
+-       .cleartext_payloads_file = "report_gcp_4_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().SetDebugKey(456).Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483400000))
+-                         .SetDebugKey(123)
+-                         .SetCookieBasedDebugAllowed(true)
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/absl::Uint128Max(), /*value=*/1000,
+-                             /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486600000))
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_5.json",
+-       .cleartext_payloads_file = "report_gcp_5_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483400000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/absl::Uint128Max(), /*value=*/1000,
+-                             /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486600000))
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_6.json",
+-       .cleartext_payloads_file = "report_gcp_6_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/0,
+-                             /*value=*/1, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetSourceRegistrationTimeConfig(
+-                         attribution_reporting::mojom::
+-                             SourceRegistrationTimeConfig::kExclude)
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_7.json",
+-       .cleartext_payloads_file = "report_gcp_7_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetSourceRegistrationTimeConfig(
+-                         attribution_reporting::mojom::
+-                             SourceRegistrationTimeConfig::kExclude)
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildNullAggregatable(),
+-       .report_file = "report_gcp_8.json",
+-       .cleartext_payloads_file = "report_gcp_8_cleartext_payloads.json"},
+-      {.report = ReportBuilder(
+-                     AttributionInfoBuilder().Build(),
+-                     SourceBuilder(base::Time::FromMillisecondsSinceUnixEpoch(
+-                                       1234483200000))
+-                         .BuildStored())
+-                     .SetAggregatableHistogramContributions(
+-                         {AggregatableReportHistogramContribution(
+-                             /*bucket=*/0,
+-                             /*value=*/1, /*filtering_id=*/std::nullopt)})
+-                     .SetReportTime(base::Time::FromMillisecondsSinceUnixEpoch(
+-                         1234486400000))
+-                     .SetSourceRegistrationTimeConfig(
+-                         attribution_reporting::mojom::
+-                             SourceRegistrationTimeConfig::kExclude)
+-                     .SetTriggerContextId("example")
+-                     .SetAggregationCoordinatorOrigin(kGcpCoordinatorOrigin)
+-                     .BuildAggregatableAttribution(),
+-       .report_file = "report_gcp_9.json",
+-       .cleartext_payloads_file = "report_gcp_9_cleartext_payloads.json"},
+-  };
+-
+-  for (auto& test_case : kTestCases) {
+-    VerifyAttributionReport(std::move(test_case.report), test_case.report_file,
+-                            test_case.cleartext_payloads_file);
+-  }
+-}
+-
+-class AggregatableDebugReportGoldenLatestVersionTest
+-    : public AggregatableReportGoldenLatestVersionTest {
+- public:
+-  void SetUp() override {
+-    base::PathService::Get(content::DIR_TEST_DATA, &input_dir_);
+-    input_dir_ = input_dir_.AppendASCII(
+-        "attribution_reporting/aggregatable_debug_report_goldens/latest");
+-
+-    AggregatableReportGoldenLatestVersionTest::SetUp();
+-  }
+-
+- protected:
+-  void VerifyAggregatableDebugReport(AggregatableDebugReport report,
+-                                     std::string_view report_file,
+-                                     std::string_view cleartext_payloads_file) {
+-    std::optional<AggregatableReportRequest> request =
+-        report.CreateAggregatableReportRequest();
+-    ASSERT_TRUE(request);
+-
+-    const auto get_report_body = [](AggregatableReport assembled_report) {
+-      return assembled_report.GetAsJson();
+-    };
+-
+-    AssembleAndVerifyReport(*std::move(request), get_report_body, report_file,
+-                            cleartext_payloads_file);
+-  }
+-};
+-
+-TEST_F(AggregatableDebugReportGoldenLatestVersionTest, VerifyGoldenReport) {
+-  const auto kGcpCoordinatorOrigin = *SuitableOrigin::Deserialize(
+-      ::aggregation_service::kDefaultAggregationCoordinatorGcpCloud);
+-
+-  const auto context_site =
+-      net::SchemefulSite::Deserialize("https://context.test");
+-  const auto reporting_origin =
+-      *SuitableOrigin::Deserialize("https://report.test");
+-  const auto effective_destination =
+-      net::SchemefulSite::Deserialize("https://conversion.test");
+-  const auto time = base::Time::FromMillisecondsSinceUnixEpoch(1234486400000);
+-
+-  struct {
+-    std::vector<AggregatableReportHistogramContribution> contributions;
+-    std::optional<SuitableOrigin> aggregation_coordinator_origin;
+-    std::string_view report_file;
+-    std::string_view cleartext_payloads_file;
+-  } kTestCases[] = {
+-      {
+-          .contributions = {AggregatableReportHistogramContribution(
+-              /*bucket=*/123, /*value=*/456,
+-              /*filtering_id=*/std::nullopt)},
+-          .report_file = "report_1.json",
+-          .cleartext_payloads_file = "report_1_cleartext_payloads.json",
+-      },
+-      {
+-          .contributions = {AggregatableReportHistogramContribution(
+-                                /*bucket=*/123, /*value=*/456,
+-                                /*filtering_id=*/std::nullopt),
+-                            AggregatableReportHistogramContribution(
+-                                /*bucket=*/321, /*value=*/654,
+-                                /*filtering_id=*/std::nullopt)},
+-          .report_file = "report_2.json",
+-          .cleartext_payloads_file = "report_2_cleartext_payloads.json",
+-      },
+-      {
+-          // null report
+-          .report_file = "report_3.json",
+-          .cleartext_payloads_file = "report_3_cleartext_payloads.json",
+-      },
+-      {
+-          .contributions = {AggregatableReportHistogramContribution(
+-              /*bucket=*/123, /*value=*/456,
+-              /*filtering_id=*/std::nullopt)},
+-          .aggregation_coordinator_origin = kGcpCoordinatorOrigin,
+-          .report_file = "report_gcp_1.json",
+-          .cleartext_payloads_file = "report_gcp_1_cleartext_payloads.json",
+-      },
+-      {
+-          .contributions = {AggregatableReportHistogramContribution(
+-                                /*bucket=*/123, /*value=*/456,
+-                                /*filtering_id=*/std::nullopt),
+-                            AggregatableReportHistogramContribution(
+-                                /*bucket=*/321, /*value=*/654,
+-                                /*filtering_id=*/std::nullopt)},
+-          .aggregation_coordinator_origin = kGcpCoordinatorOrigin,
+-          .report_file = "report_gcp_2.json",
+-          .cleartext_payloads_file = "report_gcp_2_cleartext_payloads.json",
+-      },
+-      {
+-          // null report
+-          .aggregation_coordinator_origin = kGcpCoordinatorOrigin,
+-          .report_file = "report_gcp_3.json",
+-          .cleartext_payloads_file = "report_gcp_3_cleartext_payloads.json",
+-      },
+-  };
+-
+-  for (auto& test_case : kTestCases) {
+-    auto report = AggregatableDebugReport::CreateForTesting(
+-        test_case.contributions, context_site, reporting_origin,
+-        effective_destination, test_case.aggregation_coordinator_origin, time);
+-    report.set_report_id(DefaultExternalReportID());
+-    VerifyAggregatableDebugReport(std::move(report), test_case.report_file,
+-                                  test_case.cleartext_payloads_file);
+-  }
+-}
+-
+-// Returns the legacy versions of attribution and debug aggregatable reports.
+ std::vector<base::FilePath> GetLegacyVersions() {
+   std::vector<base::FilePath> input_paths;
+ 
+--- a/content/browser/attribution_reporting/attribution_host_unittest.cc
++++ b/content/browser/attribution_reporting/attribution_host_unittest.cc
+@@ -12,24 +12,18 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/metrics/metrics_hashes.h"
+-#include "base/run_loop.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "components/attribution_reporting/data_host.mojom.h"
+ #include "components/attribution_reporting/registration_eligibility.mojom.h"
+-#include "components/attribution_reporting/suitable_origin.h"
+ #include "components/metrics/dwa/dwa_recorder.h"
+-#include "content/browser/attribution_reporting/attribution_data_host_manager.h"
+-#include "content/browser/attribution_reporting/attribution_input_event.h"
+ #include "content/browser/attribution_reporting/attribution_manager.h"
+-#include "content/browser/attribution_reporting/attribution_suitable_context.h"
+ #include "content/browser/attribution_reporting/attribution_test_utils.h"
+ #include "content/browser/attribution_reporting/test/mock_attribution_data_host_manager.h"
+ #include "content/browser/attribution_reporting/test/mock_attribution_manager.h"
+ #include "content/browser/storage_partition_impl.h"
+ #include "content/browser/web_contents/web_contents_impl.h"
+ #include "content/public/browser/browser_context.h"
+-#include "content/public/browser/global_routing_id.h"
+ #include "content/public/common/content_features.h"
+ #include "content/public/test/test_renderer_host.h"
+ #include "content/public/test/test_utils.h"
+@@ -65,16 +59,6 @@ class AttributionHostTestPeer {
+ 
+ namespace {
+ 
+-using ::attribution_reporting::SuitableOrigin;
+-
+-using ::testing::_;
+-using ::testing::AllOf;
+-using ::testing::Optional;
+-using ::testing::Pair;
+-using ::testing::Property;
+-using ::testing::Return;
+-using ::testing::UnorderedElementsAre;
+-
+ using ::attribution_reporting::mojom::RegistrationEligibility;
+ 
+ const char kConversionUrl[] = "https://b.com";
+@@ -123,22 +107,6 @@ class AttributionHostTest : public Rende
+     return AttributionHost::FromWebContents(web_contents());
+   }
+ 
+-  void SetFencedFrameConfigPermissions(RenderFrameHost* fenced_frame) {
+-    // Permissions in a fenced frame are tied to its urn:uuid-bound properties
+-    // object. Because no navigation actually takes place in these tests, the
+-    // code path that sets the permissions in the properties is never actually
+-    // exercised. Instead, we need to manually inject the permissions into the
+-    // properties object to ensure that the fenced frame loads with the needed
+-    // permissions policy set.
+-    FrameTreeNode* fenced_frame_node =
+-        static_cast<RenderFrameHostImpl*>(fenced_frame)->frame_tree_node();
+-    FencedFrameConfig new_config = FencedFrameConfig(GURL("about:blank"));
+-    new_config.AddEffectiveEnabledPermissionForTesting(
+-        network::mojom::PermissionsPolicyFeature::kAttributionReporting);
+-    FencedFrameProperties new_props = FencedFrameProperties(new_config);
+-    fenced_frame_node->set_fenced_frame_properties(new_props);
+-  }
+-
+   network::ParsedPermissionsPolicy RestrictivePermissionsPolicy(
+       const url::Origin& allowed_origin) {
+     return {network::ParsedPermissionsPolicyDeclaration(
+@@ -188,30 +156,44 @@ class ScopedAttributionHostTargetFrame {
+   const raw_ptr<AttributionHost> attribution_host_;
+ };
+ 
+-TEST_F(AttributionHostTest, NavigationWithNoImpression_Ignored) {
++TEST_F(AttributionHostTest, AttributionHostIsNotInstalled) {
++  EXPECT_EQ(nullptr, attribution_host());
++
+   EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationStarted)
+       .Times(0);
++  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationData)
++      .Times(0);
++  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationCompleted)
++      .Times(0);
++
++  contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
++  auto navigation = NavigationSimulatorImpl::CreateRendererInitiated(
++      GURL(kConversionUrl), main_rfh());
++  navigation->SetInitiatorFrame(main_rfh());
++  navigation->set_impression(blink::Impression());
++  navigation->Commit();
++}
++
++// Active direct Mojo-host coverage was removed because this product does not
++// install AttributionHost in WebContents. Navigation-level no-host behavior
++// remains covered above and in the adjacent cases.
++
++TEST_F(AttributionHostTest, NavigationWithNoImpression_Ignored) {
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationStarted)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+   NavigationSimulatorImpl::NavigateAndCommitFromDocument(GURL(kConversionUrl),
+                                                          main_rfh());
+ }
+ 
+-TEST_F(AttributionHostTest, ValidAttributionSrc_ForwardedToManager) {
++TEST_F(AttributionHostTest, ValidAttributionSrc_NotForwardedWithoutHost) {
+   blink::Impression impression;
+ 
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      NotifyNavigationRegistrationStarted(
+-          /*suitable_context=*/AllOf(
+-              Property(&AttributionSuitableContext::context_origin,
+-                       *SuitableOrigin::Deserialize(
+-                           "https://secure_impression.com")),
+-              Property(&AttributionSuitableContext::root_render_frame_id,
+-                       main_rfh()->GetGlobalId())),
+-          impression.attribution_src_token,
+-          /*navigation_id=*/_, /*devtools_request_id*/ _,
+-          /*from_context_menu=*/false));
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationStarted)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+   auto navigation = NavigationSimulatorImpl::CreateRendererInitiated(
+@@ -221,52 +203,25 @@ TEST_F(AttributionHostTest, ValidAttribu
+   navigation->Commit();
+ }
+ 
+-TEST_F(AttributionHostTest, ValidSourceRegistrations_ForwardedToManager) {
++TEST_F(AttributionHostTest, ValidSourceRegistrations_NotForwardedWithoutHost) {
+   blink::Impression impression;
+ 
+   auto redirect_headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+       std::string(kRedirectHeaderData, std::size(kRedirectHeaderData)));
+   auto headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
+ 
+-  const SuitableOrigin source_origin =
+-      *SuitableOrigin::Deserialize("https://secure_impression.com");
+-
+   const GURL b_url(kConversionUrl);
+-  const SuitableOrigin b_origin = *SuitableOrigin::Create(b_url);
+-
+   const GURL c_url("https://c.com");
+-  const SuitableOrigin c_origin = *SuitableOrigin::Create(c_url);
+-
+   const GURL d_url("https://d.com");
+-  const SuitableOrigin d_origin = *SuitableOrigin::Create(d_url);
+-
+-  GlobalRenderFrameHostId frame_id = main_rfh()->GetGlobalId();
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      NotifyNavigationRegistrationStarted(
+-          /*suitable_context=*/AllOf(
+-              Property(&AttributionSuitableContext::context_origin,
+-                       source_origin),
+-              Property(&AttributionSuitableContext::root_render_frame_id,
+-                       frame_id)),
+-          impression.attribution_src_token,
+-          /*navigation_id=*/_, /*devtools_request_id=*/_,
+-          /*from_context_menu=*/false));
+-  EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationData(impression.attribution_src_token,
+-                                               redirect_headers.get(),
+-                                               /*reporting_url=*/b_url));
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationData(impression.attribution_src_token,
+-                                               redirect_headers.get(),
+-                                               /*reporting_url=*/c_url));
++              NotifyNavigationRegistrationStarted)
++      .Times(0);
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationData(impression.attribution_src_token,
+-                                               headers.get(),
+-                                               /*reporting_url=*/d_url));
++              NotifyNavigationRegistrationData)
++      .Times(0);
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationCompleted(
+-                  impression.attribution_src_token, _));
++              NotifyNavigationRegistrationCompleted)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+ 
+@@ -283,51 +238,26 @@ TEST_F(AttributionHostTest, ValidSourceR
+ }
+ 
+ TEST_F(AttributionHostTest,
+-       ValidAndInvalidSourceRegistrations_ForwardedToManager) {
++       ValidAndInvalidSourceRegistrations_NotForwardedWithoutHost) {
+   blink::Impression impression;
+ 
+   auto redirect_headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+       std::string(kRedirectHeaderData, std::size(kRedirectHeaderData)));
+   auto headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
+ 
+-  const SuitableOrigin source_origin =
+-      *SuitableOrigin::Deserialize("https://secure_impression.com");
+-
+   const GURL b_url(kConversionUrl);
+-  const SuitableOrigin b_origin = *SuitableOrigin::Create(b_url);
+-
+   const GURL c_url("https://c.com");
+-  const SuitableOrigin c_origin = *SuitableOrigin::Create(c_url);
+-
+   const GURL d_url("http://d.com");
+-
+-  GlobalRenderFrameHostId frame_id = main_rfh()->GetGlobalId();
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      NotifyNavigationRegistrationStarted(
+-          /*suitable_context=*/AllOf(
+-              Property(&AttributionSuitableContext::context_origin,
+-                       source_origin),
+-              Property(&AttributionSuitableContext::root_render_frame_id,
+-                       frame_id)),
+-          impression.attribution_src_token,
+-          /*navigation_id=*/_, /*devtools_request_id=*/_,
+-          /*from_context_menu=*/false));
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationData(impression.attribution_src_token,
+-                                               redirect_headers.get(),
+-                                               /*reporting_url=*/b_url));
++              NotifyNavigationRegistrationStarted)
++      .Times(0);
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationData(impression.attribution_src_token,
+-                                               redirect_headers.get(),
+-                                               /*reporting_url=*/c_url));
+-  // Expect no call for origin d as the reporting origin is not suitable.
+-
+-  // Expect that `NotifyNavigationRegistrationCompleted` gets called even if the
+-  // last reporting_origin was not suitable.
++              NotifyNavigationRegistrationData)
++      .Times(0);
++  // With no AttributionHost installed, no reporting origin is forwarded.
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationCompleted(
+-                  impression.attribution_src_token, _));
++              NotifyNavigationRegistrationCompleted)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+ 
+@@ -344,7 +274,8 @@ TEST_F(AttributionHostTest,
+ }
+ 
+ TEST_F(AttributionHostTest, ImpressionInSubframe_Ignored) {
+-  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationStarted)
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationStarted)
+       .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+@@ -365,13 +296,16 @@ TEST_F(AttributionHostTest, ImpressionIn
+ // Test that if we cannot access the initiator frame of the navigation, we
+ // ignore the associated impression but still notify when the navigation
+ // completes.
+-TEST_F(AttributionHostTest, ImpressionNavigationWithDeadInitiator_Ignored) {
+-  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationStarted)
++TEST_F(AttributionHostTest, ImpressionNavigationWithDeadInitiator_NoHost) {
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationStarted)
+       .Times(0);
+-  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationData)
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationData)
++      .Times(0);
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationCompleted)
+       .Times(0);
+-  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationCompleted)
+-      .Times(1);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+ 
+@@ -384,12 +318,12 @@ TEST_F(AttributionHostTest, ImpressionNa
+ }
+ 
+ TEST_F(AttributionHostTest,
+-       AttributionSrcNavigationCommitsToErrorPage_Notified) {
++       AttributionSrcNavigationCommitsToErrorPage_NoHost) {
+   blink::Impression impression;
+ 
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      NotifyNavigationRegistrationData(impression.attribution_src_token, _, _));
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationData)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+ 
+@@ -401,12 +335,12 @@ TEST_F(AttributionHostTest,
+   navigation->CommitErrorPage();
+ }
+ 
+-TEST_F(AttributionHostTest, AttributionSrcNavigationAborts_Notified) {
++TEST_F(AttributionHostTest, AttributionSrcNavigationAborts_NoHost) {
+   blink::Impression impression;
+ 
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      NotifyNavigationRegistrationData(impression.attribution_src_token, _, _));
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationData)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+ 
+@@ -418,8 +352,10 @@ TEST_F(AttributionHostTest, AttributionS
+ }
+ 
+ TEST_F(AttributionHostTest,
+-       CommittedOriginDiffersFromConversionDesintation_Notified) {
+-  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationData);
++       CommittedOriginDiffersFromConversionDestination_NoHost) {
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationData)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+ 
+@@ -436,25 +372,18 @@ const char kLocalHost[] = "http://localh
+ struct OriginTrustworthyChecksTestCase {
+   const char* source_origin;
+   const char* destination_origin;
+-  bool expected_valid;
+ };
+ 
+ const OriginTrustworthyChecksTestCase kOriginTrustworthyChecksTestCases[] = {
+-    {.source_origin = kLocalHost,
+-     .destination_origin = kLocalHost,
+-     .expected_valid = true},
++    {.source_origin = kLocalHost, .destination_origin = kLocalHost},
+     {.source_origin = "http://127.0.0.1",
+-     .destination_origin = "http://127.0.0.1",
+-     .expected_valid = true},
++     .destination_origin = "http://127.0.0.1"},
+     {.source_origin = kLocalHost,
+-     .destination_origin = "http://insecure.com",
+-     .expected_valid = true},
++     .destination_origin = "http://insecure.com"},
+     {.source_origin = "http://insecure.com",
+-     .destination_origin = kLocalHost,
+-     .expected_valid = false},
++     .destination_origin = kLocalHost},
+     {.source_origin = "https://secure.com",
+-     .destination_origin = "https://secure.com",
+-     .expected_valid = true},
++     .destination_origin = "https://secure.com"},
+ };
+ 
+ class AttributionHostOriginTrustworthyChecksTest
+@@ -464,11 +393,12 @@ class AttributionHostOriginTrustworthyCh
+ }  // namespace
+ 
+ TEST_P(AttributionHostOriginTrustworthyChecksTest,
+-       ImpressionNavigation_OriginTrustworthyChecksPerformed) {
++       ImpressionNavigation_NoAttributionHostInstalled) {
+   const OriginTrustworthyChecksTestCase& test_case = GetParam();
+ 
+-  EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationStarted)
+-      .Times(test_case.expected_valid);
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationStarted)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL(test_case.source_origin));
+   auto navigation = NavigationSimulatorImpl::CreateRendererInitiated(
+@@ -484,36 +414,6 @@ INSTANTIATE_TEST_SUITE_P(
+     AttributionHostOriginTrustworthyChecksTest,
+     ::testing::ValuesIn(kOriginTrustworthyChecksTestCases));
+ 
+-TEST_F(AttributionHostTest, DataHost_RegisteredWithContext) {
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      RegisterDataHost(
+-          _,
+-          AllOf(Property(&AttributionSuitableContext::context_origin,
+-                         *SuitableOrigin::Deserialize("https://top.example")),
+-                Property(&AttributionSuitableContext::root_render_frame_id,
+-                         main_rfh()->GetGlobalId())),
+-          RegistrationEligibility::kSource, kIsForBackgroundRequests));
+-
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-  ScopedAttributionHostTargetFrame frame_scope(attribution_host(), main_rfh());
+-
+-  // Create a fake dispatch context to trigger a bad message in.
+-  mojo::FakeMessageDispatchContext fake_dispatch_context;
+-  mojo::test::BadMessageObserver bad_message_observer;
+-
+-  mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-  attribution_host_mojom()->RegisterDataHost(
+-      data_host_remote.BindNewPipeAndPassReceiver(),
+-      RegistrationEligibility::kSource, kIsForBackgroundRequests,
+-      /*reporting_origins=*/{});
+-
+-  // Run loop to allow the bad message code to run if a bad message was
+-  // triggered.
+-  base::RunLoop().RunUntilIdle();
+-  EXPECT_FALSE(bad_message_observer.got_bad_message());
+-}
+-
+ // crbug.com/1378749.
+ TEST_F(AttributionHostTest, DISABLED_DataHostOnInsecurePage_BadMessage) {
+   contents()->NavigateAndCommit(GURL("http://top.example"));
+@@ -556,105 +456,6 @@ TEST_F(AttributionHostTest,
+       bad_message_observer.WaitForBadMessage());
+ }
+ 
+-TEST_F(AttributionHostTest, DuplicateAttributionSrcToken_BadMessage) {
+-  ON_CALL(*mock_data_host_manager(), RegisterNavigationDataHost)
+-      .WillByDefault(Return(false));
+-
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-  ScopedAttributionHostTargetFrame frame_scope(attribution_host(), main_rfh());
+-
+-  // Create a fake dispatch context to trigger a bad message in.
+-  mojo::FakeMessageDispatchContext fake_dispatch_context;
+-  mojo::test::BadMessageObserver bad_message_observer;
+-
+-  mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-  attribution_host_mojom()->RegisterNavigationDataHost(
+-      data_host_remote.BindNewPipeAndPassReceiver(),
+-      blink::AttributionSrcToken());
+-
+-  EXPECT_EQ(
+-      "Renderer attempted to register a data host with a duplicate "
+-      "AttributionSrcToken.",
+-      bad_message_observer.WaitForBadMessage());
+-}
+-
+-TEST_F(
+-    AttributionHostTest,
+-    NotifyNavigationWithBackgroundRegistrationsWillStart_DuplicateAttributionSrcToken_BadMessage) {
+-  ON_CALL(*mock_data_host_manager(),
+-          NotifyNavigationWithBackgroundRegistrationsWillStart)
+-      .WillByDefault(Return(false));
+-
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-  ScopedAttributionHostTargetFrame frame_scope(attribution_host(), main_rfh());
+-
+-  // Create a fake dispatch context to trigger a bad message in.
+-  mojo::FakeMessageDispatchContext fake_dispatch_context;
+-  mojo::test::BadMessageObserver bad_message_observer;
+-
+-  mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-  attribution_host_mojom()
+-      ->NotifyNavigationWithBackgroundRegistrationsWillStart(
+-          blink::AttributionSrcToken(), /*expected_registrations=*/1);
+-
+-  EXPECT_EQ(
+-      "Renderer attempted to notify of expected registrations with a duplicate "
+-      "AttributionSrcToken or an invalid number of expected registrations.",
+-      bad_message_observer.WaitForBadMessage());
+-}
+-
+-TEST_F(
+-    AttributionHostTest,
+-    NotifyNavigationWithBackgroundRegistrationsWillStart_InsecureContext_Ignored) {
+-  contents()->NavigateAndCommit(GURL("http://top.example"));
+-  ScopedAttributionHostTargetFrame frame_scope(attribution_host(), main_rfh());
+-
+-  EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationWithBackgroundRegistrationsWillStart)
+-      .Times(0);
+-
+-  mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-  attribution_host_mojom()
+-      ->NotifyNavigationWithBackgroundRegistrationsWillStart(
+-          blink::AttributionSrcToken(), /*expected_registrations=*/1);
+-}
+-
+-TEST_F(AttributionHostTest, DataHostInSubframe_ContextIsOutermostFrame) {
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      RegisterDataHost(
+-          _,
+-          AllOf(Property(&AttributionSuitableContext::context_origin,
+-                         *SuitableOrigin::Deserialize("https://top.example")),
+-                Property(&AttributionSuitableContext::root_render_frame_id,
+-                         main_rfh()->GetGlobalId())),
+-          RegistrationEligibility::kSource, kIsForBackgroundRequests));
+-
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-
+-  content::RenderFrameHostTester* rfh_tester =
+-      content::RenderFrameHostTester::For(main_rfh());
+-  content::RenderFrameHost* subframe = rfh_tester->AppendChild("subframe");
+-  subframe = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
+-      GURL("https://subframe.example"), subframe);
+-  ScopedAttributionHostTargetFrame frame_scope(attribution_host(), subframe);
+-
+-  // Create a fake dispatch context to trigger a bad message in.
+-  mojo::FakeMessageDispatchContext fake_dispatch_context;
+-  mojo::test::BadMessageObserver bad_message_observer;
+-
+-  mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-  attribution_host_mojom()->RegisterDataHost(
+-      data_host_remote.BindNewPipeAndPassReceiver(),
+-      RegistrationEligibility::kSource, kIsForBackgroundRequests,
+-      /*reporting_origins=*/{});
+-
+-  // Run loop to allow the bad message code to run if a bad message was
+-  // triggered.
+-  base::RunLoop().RunUntilIdle();
+-  EXPECT_FALSE(bad_message_observer.got_bad_message());
+-}
+-
+ // crbug.com/1378749.
+ TEST_F(AttributionHostTest,
+        DISABLED_DataHostInSubframeOnInsecurePage_BadMessage) {
+@@ -683,64 +484,23 @@ TEST_F(AttributionHostTest,
+       bad_message_observer.WaitForBadMessage());
+ }
+ 
+-TEST_F(AttributionHostTest, DataHost_RegisteredWithFencedFrame) {
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      RegisterDataHost(
+-          _,
+-          AllOf(Property(&AttributionSuitableContext::context_origin,
+-                         *SuitableOrigin::Deserialize("https://top.example")),
+-                Property(&AttributionSuitableContext::root_render_frame_id,
+-                         main_rfh()->GetGlobalId())),
+-          RegistrationEligibility::kSource, kIsForBackgroundRequests));
+-
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-  RenderFrameHost* fenced_frame =
+-      RenderFrameHostTester::For(main_rfh())->AppendFencedFrame();
+-  static_cast<RenderFrameHostImpl*>(fenced_frame)
+-      ->frame_tree_node()
+-      ->SetFencedFramePropertiesOpaqueAdsModeForTesting();
+-  SetFencedFrameConfigPermissions(fenced_frame);
+-  fenced_frame = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
+-      GURL("https://fencedframe.example"), fenced_frame);
+-  ScopedAttributionHostTargetFrame frame_scope(attribution_host(),
+-                                               fenced_frame);
+-
+-  // Create a fake dispatch context to trigger a bad message in.
+-  mojo::FakeMessageDispatchContext fake_dispatch_context;
+-  mojo::test::BadMessageObserver bad_message_observer;
+-
+-  mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-  attribution_host_mojom()->RegisterDataHost(
+-      data_host_remote.BindNewPipeAndPassReceiver(),
+-      RegistrationEligibility::kSource, kIsForBackgroundRequests,
+-      /*reporting_origins=*/{});
+-
+-  // Run loop to allow the bad message code to run if a bad message was
+-  // triggered.
+-  base::RunLoop().RunUntilIdle();
+-  EXPECT_FALSE(bad_message_observer.got_bad_message());
+-}
+-
+-TEST_F(AttributionHostTest, ImpressionNavigation_FeaturePolicyChecked) {
++TEST_F(AttributionHostTest,
++       ImpressionNavigationNotForwardedWithoutAttributionHost) {
+   blink::Impression impression;
+ 
+   static constexpr char kAllowedOriginUrl[] = "https://a.test";
+-
+-  const struct {
+-    const char* url;
+-    bool expected;
+-  } kTestCases[] = {
+-      {kAllowedOriginUrl, true},
+-      {"https://b.test", false},
++  const char* const kNavigationUrls[] = {
++      kAllowedOriginUrl,
++      "https://b.test",
+   };
+ 
+-  for (const auto& test_case : kTestCases) {
+-    EXPECT_CALL(*mock_data_host_manager(), NotifyNavigationRegistrationStarted)
+-        .Times(test_case.expected);
++  EXPECT_CALL(*mock_data_host_manager(),
++              NotifyNavigationRegistrationStarted)
++      .Times(0);
+ 
++  for (const char* url : kNavigationUrls) {
+     auto simulator1 = NavigationSimulatorImpl::CreateRendererInitiated(
+-        GURL(test_case.url), main_rfh());
++        GURL(url), main_rfh());
+     simulator1->SetPermissionsPolicyHeader(RestrictivePermissionsPolicy(
+         url::Origin::Create(GURL(kAllowedOriginUrl))));
+     simulator1->Commit();
+@@ -753,161 +513,24 @@ TEST_F(AttributionHostTest, ImpressionNa
+   }
+ }
+ 
+-TEST_F(AttributionHostTest, RegisterDataHost_FeaturePolicyChecked) {
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-
+-  static constexpr char kAllowedOriginUrl[] = "https://a.test";
+-
+-  const struct {
+-    const char* subframe_url;
+-    bool expected;
+-  } kTestCases[] = {
+-      {kAllowedOriginUrl, true},
+-      {"https://b.test", false},
+-  };
+-
+-  for (const auto& test_case : kTestCases) {
+-    EXPECT_CALL(*mock_data_host_manager(), RegisterDataHost)
+-        .Times(test_case.expected);
+-
+-    content::RenderFrameHostTester* rfh_tester =
+-        content::RenderFrameHostTester::For(main_rfh());
+-    content::RenderFrameHost* subframe = rfh_tester->AppendChildWithPolicy(
+-        "subframe", RestrictivePermissionsPolicy(
+-                        url::Origin::Create(GURL(kAllowedOriginUrl))));
+-    subframe = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
+-        GURL(test_case.subframe_url), subframe);
+-    ScopedAttributionHostTargetFrame frame_scope(attribution_host(), subframe);
+-
+-    mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-    attribution_host_mojom()->RegisterDataHost(
+-        data_host_remote.BindNewPipeAndPassReceiver(),
+-        RegistrationEligibility::kSource, kIsForBackgroundRequests,
+-        /*reporting_origins=*/{});
+-
+-    base::RunLoop().RunUntilIdle();
+-  }
+-}
+-TEST_F(AttributionHostTest, RegisterNavigationDataHost_FeaturePolicyChecked) {
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-
+-  static constexpr char kAllowedOriginUrl[] = "https://a.test";
+-
+-  const struct {
+-    const char* subframe_url;
+-    bool expected;
+-  } kTestCases[] = {
+-      {kAllowedOriginUrl, true},
+-      {"https://b.test", false},
+-  };
+-
+-  for (const auto& test_case : kTestCases) {
+-    if (test_case.expected) {
+-      EXPECT_CALL(*mock_data_host_manager(), RegisterNavigationDataHost)
+-          .WillOnce(Return(true));
+-    } else {
+-      EXPECT_CALL(*mock_data_host_manager(), RegisterNavigationDataHost)
+-          .Times(0);
+-    }
+-
+-    content::RenderFrameHostTester* rfh_tester =
+-        content::RenderFrameHostTester::For(main_rfh());
+-    content::RenderFrameHost* subframe = rfh_tester->AppendChildWithPolicy(
+-        "subframe", RestrictivePermissionsPolicy(
+-                        url::Origin::Create(GURL(kAllowedOriginUrl))));
+-    subframe = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
+-        GURL(test_case.subframe_url), subframe);
+-    ScopedAttributionHostTargetFrame frame_scope(attribution_host(), subframe);
+-
+-    mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-    attribution_host_mojom()->RegisterNavigationDataHost(
+-        data_host_remote.BindNewPipeAndPassReceiver(),
+-        blink::AttributionSrcToken());
+-
+-    base::RunLoop().RunUntilIdle();
+-  }
+-}
+-TEST_F(
+-    AttributionHostTest,
+-    NotifyNavigationWithBackgroundRegistrationsWillStart_FeaturePolicyChecked) {
+-  contents()->NavigateAndCommit(GURL("https://top.example"));
+-
+-  static constexpr char kAllowedOriginUrl[] = "https://a.test";
+-
+-  const struct {
+-    const char* subframe_url;
+-    bool expected;
+-  } kTestCases[] = {
+-      {kAllowedOriginUrl, true},
+-      {"https://b.test", false},
+-  };
+-
+-  for (const auto& test_case : kTestCases) {
+-    if (test_case.expected) {
+-      EXPECT_CALL(*mock_data_host_manager(),
+-                  NotifyNavigationWithBackgroundRegistrationsWillStart)
+-          .WillOnce(Return(true));
+-    } else {
+-      EXPECT_CALL(*mock_data_host_manager(),
+-                  NotifyNavigationWithBackgroundRegistrationsWillStart)
+-          .Times(0);
+-    }
+-
+-    content::RenderFrameHostTester* rfh_tester =
+-        content::RenderFrameHostTester::For(main_rfh());
+-    content::RenderFrameHost* subframe = rfh_tester->AppendChildWithPolicy(
+-        "subframe", RestrictivePermissionsPolicy(
+-                        url::Origin::Create(GURL(kAllowedOriginUrl))));
+-    subframe = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
+-        GURL(test_case.subframe_url), subframe);
+-    ScopedAttributionHostTargetFrame frame_scope(attribution_host(), subframe);
+-
+-    attribution_host_mojom()
+-        ->NotifyNavigationWithBackgroundRegistrationsWillStart(
+-            blink::AttributionSrcToken(), /*expected_registrations=*/1);
+-
+-    base::RunLoop().RunUntilIdle();
+-  }
+-}
+-
+-TEST_F(AttributionHostTest, InsecureTaintTracking) {
++TEST_F(AttributionHostTest,
++       InsecureRedirectDoesNotRecordTaintMetricWithoutHost) {
+   blink::Impression impression;
+ 
+   auto redirect_headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+       std::string(kRedirectHeaderData, std::size(kRedirectHeaderData)));
+   auto headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
+ 
+-  const SuitableOrigin source_origin =
+-      *SuitableOrigin::Deserialize("https://secure_impression.com");
+-
+   const GURL b_url(kConversionUrl);
+-  const SuitableOrigin b_origin = *SuitableOrigin::Create(b_url);
+-
+   const GURL insecure_url("http://insecure.com");
+-
+   const GURL d_url("https://d.com");
+-  const SuitableOrigin d_origin = *SuitableOrigin::Create(d_url);
+ 
+-  EXPECT_CALL(
+-      *mock_data_host_manager(),
+-      NotifyNavigationRegistrationStarted(
+-          AllOf(Property(&AttributionSuitableContext::context_origin,
+-                         source_origin),
+-                Property(&AttributionSuitableContext::root_render_frame_id,
+-                         main_rfh()->GetGlobalId())),
+-          impression.attribution_src_token,
+-          /*navigation_id=*/_, /*devtools_request_id=*/_,
+-          /*from_context_menu=*/false));
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationData(impression.attribution_src_token,
+-                                               redirect_headers.get(),
+-                                               /*reporting_url=*/b_url))
+-      .WillOnce(Return(true));
++              NotifyNavigationRegistrationStarted)
++      .Times(0);
+   EXPECT_CALL(*mock_data_host_manager(),
+-              NotifyNavigationRegistrationData(impression.attribution_src_token,
+-                                               headers.get(),
+-                                               /*reporting_url=*/d_url))
+-      .WillOnce(Return(true));
++              NotifyNavigationRegistrationData)
++      .Times(0);
+ 
+   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
+ 
+@@ -924,116 +547,7 @@ TEST_F(AttributionHostTest, InsecureTain
+   navigation->SetResponseHeaders(headers);
+   navigation->Commit();
+ 
+-  histograms.ExpectUniqueSample("Conversions.IncrementalTaintingFailures", 1,
+-                                1);
+-}
+-
+-TEST_F(AttributionHostTest, ClientBounce_RecordMetric) {
+-  base::test::ScopedFeatureList scoped_feature_list;
+-  scoped_feature_list.InitAndEnableFeature(metrics::dwa::kDwaFeature);
+-
+-  metrics::dwa::DwaRecorder::Get()->EnableRecording();
+-  metrics::dwa::DwaRecorder::Get()->Purge();
+-  ASSERT_THAT(metrics::dwa::DwaRecorder::Get()->GetEntriesForTesting(),
+-              testing::IsEmpty());
+-
+-  contents()->NavigateAndCommit(GURL("https://top1.example"));
+-  ScopedAttributionHostTargetFrame frame_scope(attribution_host(), main_rfh());
+-
+-  base::RunLoop run_loop_1;
+-  EXPECT_CALL(*mock_data_host_manager(), RegisterDataHost)
+-      .WillOnce([&run_loop_1]() { run_loop_1.Quit(); });
+-
+-  mojo::Remote<attribution_reporting::mojom::DataHost> data_host_remote;
+-  attribution_host_mojom()->RegisterDataHost(
+-      data_host_remote.BindNewPipeAndPassReceiver(),
+-      RegistrationEligibility::kSource, kIsForBackgroundRequests,
+-      // Counts 2 for https://a.r1.test, 1 for https://a.r2.test, and 1 for
+-      // https://b.r1.test.
+-      {url::Origin::Create(GURL("https://a.r1.test")),
+-       url::Origin::Create(GURL("https://a.r2.test")),
+-       url::Origin::Create(GURL("https://a.r1.test")),
+-       url::Origin::Create(GURL("https://b.r1.test"))});
+-  run_loop_1.Run();
+-
+-  base::RunLoop run_loop_2;
+-  EXPECT_CALL(*mock_data_host_manager(), RegisterDataHost)
+-      .WillOnce([&run_loop_2]() { run_loop_2.Quit(); });
+-
+-  data_host_remote.reset();
+-  attribution_host_mojom()->RegisterDataHost(
+-      data_host_remote.BindNewPipeAndPassReceiver(),
+-      RegistrationEligibility::kSource, kIsForBackgroundRequests,
+-      // Counts 1 for https://a.r1.test.
+-      {url::Origin::Create(GURL("https://a.r1.test"))});
+-  run_loop_2.Run();
+-
+-  auto navigation = NavigationSimulatorImpl::CreateRendererInitiated(
+-      GURL("https://top2.example"), main_rfh());
+-  navigation->SetInitiatorFrame(main_rfh());
+-  navigation->SetHasUserGesture(false);
+-  navigation->Commit();
+-
+-  static constexpr char kUserActivation1s[] = "UserActivation.1s";
+-  static constexpr char kUserActivation5s[] = "UserActivation.5s";
+-  static constexpr char kUserActivation10s[] = "UserActivation.10s";
+-  static constexpr char kUserInteraction1s[] = "UserInteraction.1s";
+-  static constexpr char kUserInteraction5s[] = "UserInteraction.5s";
+-  static constexpr char kUserInteraction10s[] = "UserInteraction.10s";
+-
+-  ASSERT_THAT(metrics::dwa::DwaRecorder::Get()->GetEntriesForTesting().size(),
+-              3);
+-  EXPECT_THAT(metrics::dwa::DwaRecorder::Get()
+-                  ->GetEntriesForTesting()
+-                  .at(0)
+-                  ->event_hash,
+-              base::HashMetricName("AttributionConversionsClientBounce"));
+-
+-  // DWA content sanitization extracts the eTLD+1 from this value, yielding
+-  // "r1.test" for "a.r1.test".
+-  EXPECT_THAT(metrics::dwa::DwaRecorder::Get()
+-                  ->GetEntriesForTesting()
+-                  .at(0)
+-                  ->content_hash,
+-              base::HashMetricName("r1.test"));
+-  EXPECT_THAT(
+-      metrics::dwa::DwaRecorder::Get()->GetEntriesForTesting().at(0)->metrics,
+-      UnorderedElementsAre(Pair(base::HashMetricName(kUserActivation1s), 3),
+-                           Pair(base::HashMetricName(kUserActivation5s), 3),
+-                           Pair(base::HashMetricName(kUserActivation10s), 3),
+-                           Pair(base::HashMetricName(kUserInteraction1s), 3),
+-                           Pair(base::HashMetricName(kUserInteraction5s), 3),
+-                           Pair(base::HashMetricName(kUserInteraction10s), 3)));
+-
+-  // Yielding "r2.test" for "a.r2.test".
+-  EXPECT_THAT(metrics::dwa::DwaRecorder::Get()
+-                  ->GetEntriesForTesting()
+-                  .at(1)
+-                  ->content_hash,
+-              base::HashMetricName("r2.test"));
+-  EXPECT_THAT(
+-      metrics::dwa::DwaRecorder::Get()->GetEntriesForTesting().at(1)->metrics,
+-      UnorderedElementsAre(Pair(base::HashMetricName(kUserActivation1s), 1),
+-                           Pair(base::HashMetricName(kUserActivation5s), 1),
+-                           Pair(base::HashMetricName(kUserActivation10s), 1),
+-                           Pair(base::HashMetricName(kUserInteraction1s), 1),
+-                           Pair(base::HashMetricName(kUserInteraction5s), 1),
+-                           Pair(base::HashMetricName(kUserInteraction10s), 1)));
+-
+-  // Yielding "r1.test" for "b.r1.test".
+-  EXPECT_THAT(metrics::dwa::DwaRecorder::Get()
+-                  ->GetEntriesForTesting()
+-                  .at(2)
+-                  ->content_hash,
+-              base::HashMetricName("r1.test"));
+-  EXPECT_THAT(
+-      metrics::dwa::DwaRecorder::Get()->GetEntriesForTesting().at(2)->metrics,
+-      UnorderedElementsAre(Pair(base::HashMetricName(kUserActivation1s), 1),
+-                           Pair(base::HashMetricName(kUserActivation5s), 1),
+-                           Pair(base::HashMetricName(kUserActivation10s), 1),
+-                           Pair(base::HashMetricName(kUserInteraction1s), 1),
+-                           Pair(base::HashMetricName(kUserInteraction5s), 1),
+-                           Pair(base::HashMetricName(kUserInteraction10s), 1)));
++  histograms.ExpectTotalCount("Conversions.IncrementalTaintingFailures", 0);
+ }
+ 
+ }  // namespace
+--- a/content/browser/attribution_reporting/attribution_suitable_context_unittest.cc
++++ b/content/browser/attribution_reporting/attribution_suitable_context_unittest.cc
+@@ -12,7 +12,6 @@
+ #include "base/test/scoped_feature_list.h"
+ #include "base/test/task_environment.h"
+ #include "components/attribution_reporting/features.h"
+-#include "components/attribution_reporting/suitable_origin.h"
+ #include "content/browser/renderer_host/render_frame_host_impl.h"
+ #include "content/public/browser/global_routing_id.h"
+ #include "content/public/browser/render_frame_host.h"
+@@ -32,8 +31,6 @@ namespace content {
+ 
+ namespace {
+ 
+-using ::attribution_reporting::SuitableOrigin;
+-
+ class AttributionSuitableContextTest : public RenderViewHostTestHarness {
+  public:
+   AttributionSuitableContextTest()
+@@ -76,23 +73,17 @@ class AttributionSuitableContextTest : p
+ };
+ 
+ TEST_F(AttributionSuitableContextTest,
+-       SecureContextCreatedFromMainframe_Suitable) {
++       SecureContextCreatedFromMainframe_UnavailableInProduct) {
+   const GURL context_url("https://top.example");
+ 
+   test_web_contents()->NavigateAndCommit(context_url);
+ 
+   auto context = AttributionSuitableContext::Create(main_rfh_impl());
+-  ASSERT_TRUE(context.has_value());
+-
+-  EXPECT_FALSE(context->is_nested_within_fenced_frame());
+-  EXPECT_EQ(context->root_render_frame_id(), main_rfh()->GetGlobalId());
+-  EXPECT_EQ(context->context_origin(), *SuitableOrigin::Create(context_url));
+-  EXPECT_EQ(context->last_navigation_id(), main_rfh_impl()->navigation_id());
+-  EXPECT_EQ(context->ukm_source_id(), main_rfh()->GetPageUkmSourceId());
++  ASSERT_FALSE(context.has_value());
+ }
+ 
+ TEST_F(AttributionSuitableContextTest,
+-       SecureContextCreatedFromSubframe_Suitable) {
++       SecureContextCreatedFromSubframe_UnavailableInProduct) {
+   const GURL context_url("https://top.example");
+   const GURL subframe_url("https://subframe.example");
+ 
+@@ -106,36 +97,22 @@ TEST_F(AttributionSuitableContextTest,
+ 
+   auto context = AttributionSuitableContext::Create(
+       static_cast<RenderFrameHostImpl*>(subframe));
+-  ASSERT_TRUE(context.has_value());
+-
+-  EXPECT_FALSE(context->is_nested_within_fenced_frame());
+-  EXPECT_EQ(context->root_render_frame_id(),
+-            subframe->GetOutermostMainFrame()->GetGlobalId());
+-  EXPECT_EQ(context->context_origin(), *SuitableOrigin::Create(context_url));
+-  EXPECT_EQ(context->last_navigation_id(),
+-            static_cast<RenderFrameHostImpl*>(subframe)->navigation_id());
+-  EXPECT_EQ(context->ukm_source_id(), main_rfh()->GetPageUkmSourceId());
++  ASSERT_FALSE(context.has_value());
+ }
+ 
+ TEST_F(AttributionSuitableContextTest,
+-       ConversionMeasurementDisabled_NonSuitable) {
+-  scoped_feature_list().InitAndDisableFeature(
++       EnablingConversionMeasurementDoesNotCreateContext) {
++  scoped_feature_list().InitAndEnableFeature(
+       attribution_reporting::features::kConversionMeasurement);
+ 
+   test_web_contents()->NavigateAndCommit(GURL("https://top.example"));
+ 
+-  auto context = AttributionSuitableContext::Create(main_rfh_impl());
+-  ASSERT_FALSE(context.has_value());
+-
+-  // Validates that it would create with the feature enabled.
+-  scoped_feature_list().Reset();
+-  scoped_feature_list().InitWithFeatures(
+-      {attribution_reporting::features::kConversionMeasurement}, {});
+-  auto context_ok = AttributionSuitableContext::Create(main_rfh_impl());
+-  ASSERT_TRUE(context_ok.has_value());
++  // This Arcium build removes AttributionManager creation independently of the
++  // feature flag, so enabling it cannot make a context available.
++  EXPECT_FALSE(AttributionSuitableContext::Create(main_rfh_impl()).has_value());
+ }
+ 
+-TEST_F(AttributionSuitableContextTest, MissingPolicy_NonSuitable) {
++TEST_F(AttributionSuitableContextTest, MatchingPolicyStillUnavailable) {
+   const GURL context_url("https://top.example");
+   const GURL subframe_url("https://subframe.example");
+ 
+@@ -153,23 +130,24 @@ TEST_F(AttributionSuitableContextTest, M
+       static_cast<RenderFrameHostImpl*>(subframe));
+   ASSERT_FALSE(context.has_value());
+ 
+-  // Validates that it would create with a matching policy
+-  subframe = NavigationSimulatorImpl::NavigateAndCommitFromDocument(context_url,
+-                                                                    subframe);
+-  auto context_ok = AttributionSuitableContext::Create(
+-      static_cast<RenderFrameHostImpl*>(subframe));
+-  ASSERT_TRUE(context_ok.has_value());
++  // A matching policy still cannot create a context when attribution is
++  // removed from the product.
++  subframe = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
++      context_url, subframe);
++  EXPECT_FALSE(AttributionSuitableContext::Create(
++                   static_cast<RenderFrameHostImpl*>(subframe))
++                   .has_value());
+ }
+ 
+-TEST_F(AttributionSuitableContextTest, InsecureContextOrigin_NonSuitable) {
++TEST_F(AttributionSuitableContextTest, SecureAndInsecureOriginsUnavailable) {
+   test_web_contents()->NavigateAndCommit(GURL("http://top.example"));
+   auto context = AttributionSuitableContext::Create(main_rfh_impl());
+   ASSERT_FALSE(context.has_value());
+ 
+-  // Validates that it would create with a suitable context origin.
++  // A trustworthy origin still cannot create a context when attribution is
++  // removed from the product.
+   test_web_contents()->NavigateAndCommit(GURL("https://top.example"));
+-  auto context_ok = AttributionSuitableContext::Create(main_rfh_impl());
+-  ASSERT_TRUE(context_ok.has_value());
++  EXPECT_FALSE(AttributionSuitableContext::Create(main_rfh_impl()).has_value());
+ }
+ 
+ TEST_F(AttributionSuitableContextTest, InsecureSubframeOrigin_NonSuitable) {
+@@ -185,6 +163,9 @@ TEST_F(AttributionSuitableContextTest, I
+   // We cannot have a subframe within an insecure url within a secure context.
+   ASSERT_EQ(subframe->GetLastCommittedOrigin(),
+             url::Origin::Create(context_url));
++  EXPECT_FALSE(AttributionSuitableContext::Create(
++                   static_cast<RenderFrameHostImpl*>(subframe))
++                   .has_value());
+ }
+ 
+ }  // namespace
+--- a/content/browser/attribution_reporting/interop/interop_unittest.cc
++++ b/content/browser/attribution_reporting/interop/interop_unittest.cc
+@@ -2,56 +2,29 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-#include <stdint.h>
+-
+ #include <optional>
+ #include <string>
+-#include <string_view>
+ #include <utility>
+ #include <vector>
+ 
+-#include "base/base64.h"
+ #include "base/base_paths.h"
+ #include "base/check.h"
+-#include "base/check_op.h"
+ #include "base/files/file_enumerator.h"
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+ #include "base/json/json_reader.h"
+-#include "base/numerics/safe_conversions.h"
+ #include "base/path_service.h"
+-#include "base/strings/abseil_string_number_conversions.h"
+-#include "base/strings/string_number_conversions.h"
+ #include "base/test/gmock_expected_support.h"
+-#include "base/types/expected.h"
+ #include "base/values.h"
+-#include "components/attribution_reporting/parsing_utils.h"
+-#include "components/cbor/reader.h"
+-#include "components/cbor/values.h"
+-#include "content/browser/aggregation_service/aggregation_service_test_utils.h"
+ #include "content/browser/attribution_reporting/interop/parser.h"
+-#include "content/browser/attribution_reporting/interop/runner.h"
+-#include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+-#include "third_party/abseil-cpp/absl/numeric/int128.h"
+ 
+ namespace content {
+ 
+ namespace {
+ 
+-using ::testing::AllOf;
+-using ::testing::Field;
+-using ::testing::UnorderedElementsAreArray;
+-
+-struct AggregatableReportSharedInfo {
+-  std::string as_string;
+-  base::DictValue as_dict;
+-};
+-
+ constexpr char kDefaultConfigFileName[] = "default_config.json";
+ 
+-const aggregation_service::TestHpkeKey kHpkeKey;
+-
+ base::FilePath GetInputDir() {
+   base::FilePath input_dir;
+   base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &input_dir);
+@@ -60,22 +33,15 @@ base::FilePath GetInputDir() {
+ }
+ 
+ std::vector<base::FilePath> GetInputs() {
+-  base::FilePath input_dir = GetInputDir();
+-
+   std::vector<base::FilePath> input_paths;
+-
+-  base::FileEnumerator e(input_dir, /*recursive=*/false,
++  base::FileEnumerator e(GetInputDir(), /*recursive=*/false,
+                          base::FileEnumerator::FILES,
+                          FILE_PATH_LITERAL("*.json"));
+-
+   for (base::FilePath name = e.Next(); !name.empty(); name = e.Next()) {
+-    if (name.BaseName().MaybeAsASCII() == kDefaultConfigFileName) {
+-      continue;
++    if (name.BaseName().MaybeAsASCII() != kDefaultConfigFileName) {
++      input_paths.push_back(std::move(name));
+     }
+-
+-    input_paths.push_back(std::move(name));
+   }
+-
+   return input_paths;
+ }
+ 
+@@ -87,157 +53,10 @@ base::DictValue ParseDictFromFile(const
+       base::JSONReader::ReadAndReturnValueWithError(json,
+                                                     base::JSON_ALLOW_COMMENTS);
+   CHECK(result.has_value()) << path << ": " << result.error().ToString();
+-
+   CHECK(result->is_dict()) << path;
+   return std::move(*result).TakeDict();
+ }
+ 
+-base::ListValue GetDecryptedPayloads(std::optional<base::Value> payloads,
+-                                     const std::string& shared_info) {
+-  CHECK(payloads.has_value());
+-
+-  base::ListValue payloads_list = std::move(*payloads).TakeList();
+-  CHECK_EQ(payloads_list.size(), 1u);
+-
+-  base::DictValue& payload_dict = payloads_list.front().GetDict();
+-
+-  std::optional<base::Value> payload = payload_dict.Extract("payload");
+-  CHECK(payload.has_value());
+-
+-  std::optional<std::vector<uint8_t>> encrypted_payload =
+-      base::Base64Decode(payload->GetString());
+-  CHECK(encrypted_payload.has_value());
+-
+-  std::vector<uint8_t> decrypted_payload =
+-      aggregation_service::DecryptPayloadWithHpke(
+-          *encrypted_payload, kHpkeKey.full_hpke_key(), shared_info);
+-  std::optional<cbor::Value> deserialized_payload =
+-      cbor::Reader::Read(decrypted_payload);
+-  CHECK(deserialized_payload.has_value());
+-  const cbor::Value::MapValue& payload_map = deserialized_payload->GetMap();
+-  const auto it = payload_map.find(cbor::Value("data"));
+-  CHECK(it != payload_map.end());
+-
+-  base::ListValue list;
+-
+-  for (const cbor::Value& data : it->second.GetArray()) {
+-    const cbor::Value::MapValue& data_map = data.GetMap();
+-
+-    const cbor::Value::BinaryValue& bucket_byte_string =
+-        data_map.at(cbor::Value("bucket")).GetBytestring();
+-
+-    absl::uint128 bucket;
+-    CHECK(
+-        base::HexStringToUInt128(base::HexEncode(bucket_byte_string), &bucket));
+-
+-    const cbor::Value::BinaryValue& value_byte_string =
+-        data_map.at(cbor::Value("value")).GetBytestring();
+-
+-    uint32_t value;
+-    CHECK(base::HexStringToUInt(base::HexEncode(value_byte_string), &value));
+-
+-    // Null reports have null-contribution as well, only ignore the paddings.
+-    if (!list.empty() && bucket == 0 && value == 0) {
+-      continue;
+-    }
+-
+-    base::DictValue dict =
+-        base::DictValue()
+-            .Set("key", attribution_reporting::HexEncodeAggregationKey(bucket))
+-            .Set("value", base::checked_cast<int>(value));
+-
+-    if (data_map.contains(cbor::Value("id"))) {
+-      const cbor::Value::BinaryValue& id_byte_string =
+-          data_map.at(cbor::Value("id")).GetBytestring();
+-      uint64_t id;
+-      CHECK(base::HexStringToUInt64(base::HexEncode(id_byte_string), &id));
+-      dict.Set("id", base::NumberToString(id));
+-    }
+-
+-    list.Append(std::move(dict));
+-  }
+-  return list;
+-}
+-
+-void AdjustAggregatableReportBody(base::DictValue& report_body) {
+-  std::optional<base::Value> shared_info = report_body.Extract("shared_info");
+-  CHECK(shared_info.has_value());
+-  const std::string& shared_info_str = shared_info->GetString();
+-
+-  std::optional<base::DictValue> shared_info_dict =
+-      base::JSONReader::ReadDict(shared_info_str, base::JSON_PARSE_RFC);
+-  CHECK(shared_info_dict.has_value());
+-
+-  // Report IDs are a source of nondeterminism, so remove them.
+-  shared_info_dict->Remove("report_id");
+-
+-  // Set shared_info as a dictionary for easier comparison.
+-  report_body.Set("shared_info", *std::move(shared_info_dict));
+-
+-  report_body.Set(
+-      "histograms",
+-      GetDecryptedPayloads(report_body.Extract("aggregation_service_payloads"),
+-                           shared_info_str));
+-}
+-
+-class Adjuster : public ReportBodyAdjuster {
+- public:
+-  explicit Adjuster(bool actual) : actual_(actual) {}
+-
+-  ~Adjuster() override = default;
+-
+- private:
+-  void AdjustEventLevel(base::DictValue& report_body) override {
+-    if (actual_) {
+-      // Report IDs are a source of nondeterminism, so remove them.
+-      report_body.Remove("report_id");
+-    }
+-
+-    // Ensure that integral values for this field are replaced with the
+-    // equivalent double, since they are equivalent at the JSON level.
+-    if (base::Value* rate = report_body.Find("randomized_trigger_rate");
+-        rate && rate->is_int()) {
+-      // This coerces the integer to a double.
+-      *rate = base::Value(rate->GetDouble());
+-    }
+-  }
+-
+-  void AdjustVerboseDebug(std::string_view debug_data_type,
+-                          base::DictValue& body) override {
+-    ReportBodyAdjuster::AdjustVerboseDebug(debug_data_type, body);
+-
+-    if (actual_ && debug_data_type == "header-parsing-error") {
+-      // The header error details are implementation-specific.
+-      body.Remove("error");
+-    }
+-  }
+-
+-  void AdjustAggregatable(base::DictValue& report_body) override {
+-    if (!actual_) {
+-      return;
+-    }
+-
+-    AdjustAggregatableReportBody(report_body);
+-  }
+-
+-  void AdjustAggregatableDebug(base::DictValue& report_body) override {
+-    if (!actual_) {
+-      return;
+-    }
+-
+-    AdjustAggregatableReportBody(report_body);
+-  }
+-
+-  const bool actual_;
+-};
+-
+-void PreProcessOutput(AttributionInteropOutput& output, const bool actual) {
+-  Adjuster adjuster(actual);
+-  for (auto& report : output.reports) {
+-    MaybeAdjustReportBody(report.url, report.payload, adjuster);
+-  }
+-}
+-
+ class AttributionInteropTest : public ::testing::TestWithParam<base::FilePath> {
+  public:
+   static void SetUpTestSuite() {
+@@ -256,31 +75,25 @@ class AttributionInteropTest : public ::
+ // static
+ AttributionInteropConfig AttributionInteropTest::g_config_;
+ 
+-// See //content/test/data/attribution_reporting/interop/README.md for the
+-// JSON schema.
+-TEST_P(AttributionInteropTest, HasExpectedOutput) {
++// Keep the interop JSON schema covered without invoking the aggregation
++// service-backed simulation removed from this product.
++TEST_P(AttributionInteropTest, ParsesInputAndExpectedOutput) {
++  SCOPED_TRACE(testing::Message() << "interop input: " << GetParam());
+   base::DictValue dict = ParseDictFromFile(GetParam());
+-
+   std::optional<base::Value> output = dict.Extract("output");
+   ASSERT_TRUE(output && output->is_dict());
+ 
++  base::DictValue output_dict = std::move(*output).TakeDict();
++  const base::ListValue* expected_reports = output_dict.FindList("reports");
++  ASSERT_TRUE(expected_reports);
++  const size_t expected_report_count = expected_reports->size();
+   ASSERT_OK_AND_ASSIGN(
+-      auto expected_output,
+-      AttributionInteropOutput::Parse(std::move(*output).TakeDict()));
+-
+-  ASSERT_OK_AND_ASSIGN(
+-      auto run, AttributionInteropRun::Parse(std::move(dict), GetConfig()));
+-
+-  ASSERT_OK_AND_ASSIGN(
+-      AttributionInteropOutput actual_output,
+-      RunAttributionInteropSimulation(std::move(run), kHpkeKey));
+-
+-  PreProcessOutput(expected_output, /*actual=*/false);
+-  PreProcessOutput(actual_output, /*actual=*/true);
++      auto parsed_output,
++      AttributionInteropOutput::Parse(output_dict.Clone()));
++  EXPECT_EQ(parsed_output.reports.size(), expected_report_count);
++  EXPECT_EQ(parsed_output.ToJson(), output_dict);
+ 
+-  EXPECT_THAT(actual_output,
+-              Field(&AttributionInteropOutput::reports,
+-                    UnorderedElementsAreArray(expected_output.reports)));
++  ASSERT_OK(AttributionInteropRun::Parse(std::move(dict), GetConfig()));
+ }
+ 
+ INSTANTIATE_TEST_SUITE_P(
+--- a/content/browser/fenced_frame/fenced_frame_reporter_unittest.cc
++++ b/content/browser/fenced_frame/fenced_frame_reporter_unittest.cc
+@@ -172,13 +172,6 @@ class FencedFrameReporterTest : public R
+     return histogram_tester_;
+   }
+ 
+-  void ShutDownAttributionManager() {
+-    auto* partition = static_cast<StoragePartitionImpl*>(
+-        browser_context()->GetDefaultStoragePartition());
+-    partition->OverrideAttributionManagerForTesting(
+-        /*attribution_manager=*/nullptr);
+-  }
+-
+   network::TestURLLoaderFactory test_url_loader_factory_;
+ 
+   const GURL main_frame_url_{"https://main_frame.test/mypage.html"};
+@@ -560,7 +553,8 @@ TEST_F(FencedFrameReporterTest, SendRepo
+ // SendReport() calls, but no reports are sent because of errors (bad URL, no
+ // URL, missing event types). No error messages are generated in this case
+ // because there's nowhere to pass them
+-TEST_F(FencedFrameReporterTest, SendFledgeReportsBeforeMapsReceivedWithErrors) {
++TEST_F(FencedFrameReporterTest,
++       SendFledgeReportsBeforeMapsReceivedWithoutAttribution) {
+   auto attribution_data_host_manager =
+       std::make_unique<MockAttributionDataHostManager>();
+   auto* mock_attribution_data_host_manager =
+@@ -572,11 +566,11 @@ TEST_F(FencedFrameReporterTest, SendFled
+       browser_context()->GetDefaultStoragePartition())
+       ->OverrideAttributionManagerForTesting(std::move(mock_manager));
+ 
+-  // `AttributionDataHostManager` is notified for the errors.
++  // Attribution registration is unavailable in this product, while the
++  // ordinary report URL validation and request behavior remain testable.
+   EXPECT_CALL(*mock_attribution_data_host_manager,
+-              NotifyFencedFrameReportingBeaconData(_, _, /*headers=*/nullptr,
+-                                                   /*is_final_response=*/true))
+-      .Times(3);
++              NotifyFencedFrameReportingBeaconData)
++      .Times(0);
+ 
+   scoped_refptr<FencedFrameReporter> reporter =
+       FencedFrameReporter::CreateForFledge(
+@@ -1082,7 +1076,8 @@ TEST_F(FencedFrameReporterTest, CustomDe
+ }
+ 
+ // Test reports in the FLEDGE case, where reporting URL map is never received.
+-TEST_F(FencedFrameReporterTest, SendFledgeReportsNoMapReceived) {
++TEST_F(FencedFrameReporterTest,
++       SendFledgeReportsNoMapReceivedWithoutAttribution) {
+   auto attribution_data_host_manager =
+       std::make_unique<MockAttributionDataHostManager>();
+   auto* mock_attribution_data_host_manager =
+@@ -1094,10 +1089,10 @@ TEST_F(FencedFrameReporterTest, SendFled
+       browser_context()->GetDefaultStoragePartition())
+       ->OverrideAttributionManagerForTesting(std::move(mock_manager));
+ 
+-  // `AttributionDataHostManager` is notified for the pending events.
++  // No attribution service is installed to receive pending beacon data.
+   EXPECT_CALL(*mock_attribution_data_host_manager,
+-              NotifyFencedFrameReportingBeaconData(_, _, /*headers=*/nullptr,
+-                                                   /*is_final_response=*/true));
++              NotifyFencedFrameReportingBeaconData)
++      .Times(0);
+   {
+     scoped_refptr<FencedFrameReporter> reporter =
+         FencedFrameReporter::CreateForFledge(
+@@ -1313,8 +1308,8 @@ TEST_F(FencedFrameReporterTest, FledgeEv
+       private_aggregation_manager_.TakePrivateAggregationRequests().empty());
+ }
+ 
+-TEST_F(FencedFrameReporterTest, AttributionManagerShutDown_NoCrash) {
+-  EXPECT_TRUE(attribution_manager());
++TEST_F(FencedFrameReporterTest, AttributionManagerUnavailable_NoCrash) {
++  EXPECT_FALSE(attribution_manager());
+ 
+   scoped_refptr<FencedFrameReporter> reporter =
+       FencedFrameReporter::CreateForSharedStorage(
+@@ -1335,8 +1330,6 @@ TEST_F(FencedFrameReporterTest, Attribut
+   ValidateRequest((*test_url_loader_factory_.pending_requests())[0].request,
+                   report_destination_, "event_data");
+ 
+-  ShutDownAttributionManager();
+-
+   EXPECT_FALSE(attribution_manager());
+ 
+   EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+--- a/content/browser/loader/keep_alive_attribution_request_helper_unittest.cc
++++ b/content/browser/loader/keep_alive_attribution_request_helper_unittest.cc
+@@ -27,6 +27,7 @@
+ #include "content/browser/attribution_reporting/attribution_os_level_manager.h"
+ #include "content/browser/attribution_reporting/attribution_suitable_context.h"
+ #include "content/browser/attribution_reporting/attribution_test_utils.h"
++#include "content/browser/renderer_host/render_frame_host_impl.h"
+ #include "content/browser/attribution_reporting/test/mock_attribution_manager.h"
+ #include "content/browser/storage_partition_impl.h"
+ #include "content/public/browser/browser_context.h"
+@@ -122,17 +123,30 @@ class KeepAliveAttributionRequestHelperT
+       const GURL& context_url = GURL("https://secure_source.com")) {
+     test_web_contents()->NavigateAndCommit(context_url);
+ 
++    auto context = CreateTestingContext(context_url);
+     auto helper = KeepAliveAttributionRequestHelper::CreateIfNeeded(
+         eligibility, reporting_url, attribution_src_token,
+-        "devtools-request-id",
+-        *AttributionSuitableContext::Create(
+-            test_web_contents()->GetPrimaryMainFrame()));
++        "devtools-request-id", context);
+ 
+     CHECK(helper);
+ 
+     return helper;
+   }
+ 
++  AttributionSuitableContext CreateTestingContext(const GURL& context_url) {
++    auto suitable_origin = SuitableOrigin::Create(context_url);
++    CHECK(suitable_origin);
++    auto* rfh = static_cast<RenderFrameHostImpl*>(
++        test_web_contents()->GetPrimaryMainFrame());
++    return AttributionSuitableContext::CreateForTesting(
++        *suitable_origin, /*is_nested_within_fenced_frame=*/false,
++        rfh->GetGlobalId(), rfh->navigation_id(), AttributionInputEvent(),
++        ContentBrowserClient::AttributionReportingOsRegistrars{
++            ContentBrowserClient::AttributionReportingOsRegistrar::kWeb,
++            ContentBrowserClient::AttributionReportingOsRegistrar::kWeb},
++        mock_attribution_manager()->GetDataHostManager());
++  }
++
+  private:
+   void OverrideAttributionManager(std::unique_ptr<AttributionManager> manager) {
+     static_cast<StoragePartitionImpl*>(
+@@ -399,13 +413,11 @@ TEST_F(KeepAliveAttributionRequestHelper
+   {  // ineligible request - kEmpty
+     const GURL source_url("https://secure.test");
+     test_web_contents()->NavigateAndCommit(source_url);
+-    auto context = AttributionSuitableContext::Create(
+-        test_web_contents()->GetPrimaryMainFrame());
+-    ASSERT_TRUE(context.has_value());
++    auto context = CreateTestingContext(source_url);
+     auto helper = KeepAliveAttributionRequestHelper::CreateIfNeeded(
+         AttributionReportingEligibility::kEmpty, reporting_url,
+         /*attribution_src_token=*/std::nullopt, "devtools-request-id",
+-        context.value());
++        context);
+     EXPECT_EQ(helper, nullptr);
+   }
+ }
+@@ -594,7 +606,8 @@ TEST_F(KeepAliveAttributionRequestHelper
+   }
+ }
+ 
+-TEST_F(KeepAliveAttributionRequestHelperTest, CreateIfNeeded_MetricRecorded) {
++TEST_F(KeepAliveAttributionRequestHelperTest,
++       CreateIfNeededMetricReflectsUnavailableContext) {
+   const struct {
+     const char* desc;
+     GURL context_url;
+@@ -611,7 +624,7 @@ TEST_F(KeepAliveAttributionRequestHelper
+           "secure-navigation",
+           GURL("https://secure-source.com"),
+           network::mojom::AttributionReportingEligibility::kNavigationSource,
+-          attribution_reporting::AttributionSrcRequestStatus::kRequested,
++          attribution_reporting::AttributionSrcRequestStatus::kDropped,
+       },
+       {
+           "insecure-non-navigation",
+--- a/content/browser/loader/keep_alive_url_loader_service_unittest.cc
++++ b/content/browser/loader/keep_alive_url_loader_service_unittest.cc
+@@ -653,7 +653,7 @@ TEST_F(KeepAliveURLLoaderServiceTest, Fo
+ }
+ 
+ TEST_F(KeepAliveURLLoaderServiceTest,
+-       ForwardRedirectsAndResponseToAttributionRequestHelper) {
++       ForwardRedirectsAndResponseWithoutAttributionService) {
+   // The Attribution Manager uses the DataDecoder service, which, when an
+   // InProcessDataDecoer object exists, will route to an internal in-process
+   // instance.
+@@ -680,7 +680,7 @@ TEST_F(KeepAliveURLLoaderServiceTest,
+       std::move(request), renderer_loader_client.BindNewPipeAndPassRemote());
+ 
+   // Simluates receiving a redirect in the network service.
+-  EXPECT_CALL(*mock_attribution_manager, HandleTrigger).Times(1);
++  EXPECT_CALL(*mock_attribution_manager, HandleTrigger).Times(0);
+   constexpr char kRegisterTriggerJson[] = R"json({ })json";
+   GetLastPendingRequest()->client->OnReceiveRedirect(
+       CreateRedirectInfo(GURL(kTestRedirectRequestUrl)),
+@@ -688,7 +688,7 @@ TEST_F(KeepAliveURLLoaderServiceTest,
+                            kRegisterTriggerJson}}));
+ 
+   // Simluates receiving response in the network service.
+-  EXPECT_CALL(*mock_attribution_manager, HandleSource).Times(1);
++  EXPECT_CALL(*mock_attribution_manager, HandleSource).Times(0);
+   constexpr char kRegisterSourceJson[] =
+       R"json({"destination":"https://destination.example"})json";
+   GetLastPendingRequest()->client->OnReceiveResponse(
+@@ -699,7 +699,7 @@ TEST_F(KeepAliveURLLoaderServiceTest,
+   base::RunLoop().RunUntilIdle();
+ }
+ 
+-TEST_F(KeepAliveURLLoaderServiceTest, ForwardErrorToAttributionRequestHelper) {
++TEST_F(KeepAliveURLLoaderServiceTest, ForwardErrorWithoutAttributionService) {
+   // Set up the Attribution Manager.
+   auto mock_manager = std::make_unique<MockAttributionManager>();
+   auto mock_data_host_manager =
+@@ -725,7 +725,7 @@ TEST_F(KeepAliveURLLoaderServiceTest, Fo
+   // Simluates receiving error in the network service.
+   EXPECT_CALL(*mock_data_host_manager_ptr,
+               NotifyBackgroundRegistrationCompleted)
+-      .Times(1);
++      .Times(0);
+   GetLastPendingRequest()->client->OnComplete(
+       network::URLLoaderCompletionStatus(-1));
+   base::RunLoop().RunUntilIdle();
+@@ -733,7 +733,7 @@ TEST_F(KeepAliveURLLoaderServiceTest, Fo
+ 
+ TEST_F(
+     KeepAliveURLLoaderServiceTest,
+-    OnReceiveRedirectWithErrorRedirectMode_NotForwardedToAttributionRequestHelper) {
++    OnReceiveRedirectWithErrorRedirectMode_NoAttributionService) {
+   // Set up the Attribution Manager.
+   auto mock_manager = std::make_unique<MockAttributionManager>();
+   auto mock_data_host_manager =
+@@ -762,7 +762,7 @@ TEST_F(
+       .Times(0);
+   EXPECT_CALL(*mock_data_host_manager_ptr,
+               NotifyBackgroundRegistrationCompleted)
+-      .Times(1);
++      .Times(0);
+   GetLastPendingRequest()->client->OnReceiveRedirect(
+       CreateRedirectInfo(GURL(kTestRedirectRequestUrl)),
+       CreateResponseHead(
+@@ -1504,7 +1504,7 @@ TEST_F(FetchLaterKeepAliveURLLoaderServi
+ }
+ 
+ TEST_F(FetchLaterKeepAliveURLLoaderServiceTest,
+-       ForwardRedirectsAndResponseToAttributionRequestHelper) {
++       ForwardRedirectsAndResponseWithoutAttributionService) {
+   // The Attribution Manager uses the DataDecoder service, which, when an
+   // InProcessDataDecoer object exists, will route to an internal in-process
+   // instance.
+@@ -1539,33 +1539,23 @@ TEST_F(FetchLaterKeepAliveURLLoaderServi
+   // The network should now have created pending URLLoader.
+   EXPECT_EQ(network_url_loader_factory().NumPending(), 1);
+ 
+-  base::RunLoop run_loop_1;
+-
+-  // Simluates receiving a redirect in the network service.
+-  EXPECT_CALL(*mock_attribution_manager, HandleTrigger)
+-      .WillOnce([&](AttributionTrigger, GlobalRenderFrameHostId) {
+-        run_loop_1.Quit();
+-      });
++  // The request continues normally, but attribution registration is not
++  // attached to keepalive loads in this product.
++  EXPECT_CALL(*mock_attribution_manager, HandleTrigger).Times(0);
+   constexpr char kRegisterTriggerJson[] = R"json({ })json";
+   GetLastPendingRequest()->client->OnReceiveRedirect(
+       CreateRedirectInfo(GURL(kTestRedirectRequestUrl)),
+       CreateResponseHead({{kAttributionReportingRegisterTriggerHeader,
+                            kRegisterTriggerJson}}));
+-  run_loop_1.Run();
+-
+-  base::RunLoop run_loop_2;
+-
+   // Simluates receiving response in the network service.
+-  EXPECT_CALL(*mock_attribution_manager, HandleSource)
+-      .WillOnce(
+-          [&](StorableSource, GlobalRenderFrameHostId) { run_loop_2.Quit(); });
++  EXPECT_CALL(*mock_attribution_manager, HandleSource).Times(0);
+   constexpr char kRegisterSourceJson[] =
+       R"json({"destination":"https://destination.example"})json";
+   GetLastPendingRequest()->client->OnReceiveResponse(
+       CreateResponseHead(
+           {{kAttributionReportingRegisterSourceHeader, kRegisterSourceJson}}),
+       /*body=*/{}, /*cached_metadata=*/std::nullopt);
+-  run_loop_2.Run();
++  base::RunLoop().RunUntilIdle();
+ }
+ 
+ class KeepAliveURLLoaderServiceRetryTest
+--- a/content/browser/private_aggregation/private_aggregation_report_golden_unittest.cc
++++ b/content/browser/private_aggregation/private_aggregation_report_golden_unittest.cc
+@@ -2,69 +2,28 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-#include <stddef.h>
+-#include <stdint.h>
+-
+-#include <limits>
+-#include <optional>
+ #include <string>
+ #include <string_view>
+ #include <utility>
+ #include <vector>
+ 
+-#include "base/base64.h"
+ #include "base/base_paths.h"
+ #include "base/files/file_enumerator.h"
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+ #include "base/path_service.h"
+-#include "base/run_loop.h"
+ #include "base/strings/string_util.h"
+-#include "base/test/bind.h"
+-#include "base/test/gmock_expected_support.h"
+-#include "base/test/mock_callback.h"
+-#include "base/test/scoped_feature_list.h"
+ #include "base/test/values_test_util.h"
+-#include "base/time/time.h"
+-#include "base/timer/elapsed_timer.h"
+-#include "base/uuid.h"
+ #include "base/values.h"
+-#include "components/aggregation_service/aggregation_coordinator_utils.h"
+-#include "content/browser/aggregation_service/aggregatable_report.h"
+-#include "content/browser/aggregation_service/aggregation_service.h"
+-#include "content/browser/aggregation_service/aggregation_service_impl.h"
+-#include "content/browser/aggregation_service/aggregation_service_test_utils.h"
+-#include "content/browser/aggregation_service/public_key.h"
+-#include "content/browser/private_aggregation/private_aggregation_budget_key.h"
+-#include "content/browser/private_aggregation/private_aggregation_caller_api.h"
+-#include "content/browser/private_aggregation/private_aggregation_host.h"
+-#include "content/browser/storage_partition_impl.h"
+ #include "content/public/common/content_paths.h"
+-#include "content/public/test/browser_task_environment.h"
+-#include "content/public/test/test_browser_context.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+-#include "third_party/abseil-cpp/absl/numeric/int128.h"
+-#include "third_party/blink/public/common/features_generated.h"
+-#include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom.h"
+-#include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
+-#include "third_party/boringssl/src/include/openssl/curve25519.h"
+-#include "third_party/boringssl/src/include/openssl/hpke.h"
+-#include "url/gurl.h"
+-#include "url/origin.h"
+ 
+ namespace content {
+ namespace {
+ 
+-constexpr std::string_view kKeyAggregationServicePayloads =
+-    "aggregation_service_payloads";
+-
+-std::string ReadStringFromFile(const base::FilePath& file, bool trim = false) {
++std::string ReadStringFromFile(const base::FilePath& file) {
+   std::string str;
+   EXPECT_TRUE(base::ReadFileToString(file, &str));
+-  if (trim) {
+-    str = std::string(base::TrimString(str, base::kWhitespaceASCII,
+-                                       base::TrimPositions::TRIM_ALL));
+-  }
+   return str;
+ }
+ 
+@@ -73,530 +32,8 @@ base::Value ParseJsonFromFile(const base
+ }
+ }  // namespace
+ 
+-// See
+-// //content/test/data/private_aggregation/aggregatable_report_goldens/
+-// README.md.
+-class PrivateAggregationReportGoldenLatestVersionTest : public testing::Test {
+- public:
+-  void SetUp() override {
+-    base::PathService::Get(content::DIR_TEST_DATA, &input_dir_);
+-    input_dir_ = input_dir_.AppendASCII(
+-        "private_aggregation/aggregatable_report_goldens/latest/");
+-
+-    ASSERT_OK_AND_ASSIGN(
+-        PublicKeyset keyset,
+-        aggregation_service::ReadAndParsePublicKeys(
+-            input_dir_.AppendASCII("public_key.json"), base::Time::Now()));
+-    ASSERT_EQ(keyset.keys.size(), 1u);
+-
+-    aggregation_service().SetPublicKeysForTesting(
+-        GetAggregationServiceProcessingUrl(
+-            ::aggregation_service::GetDefaultAggregationCoordinatorOrigin()),
+-        std::move(keyset));
+-
+-    std::optional<std::vector<uint8_t>> private_key =
+-        base::Base64Decode(ReadStringFromFile(
+-            input_dir_.AppendASCII("private_key.txt"), /*trim=*/true));
+-    ASSERT_TRUE(private_key);
+-    ASSERT_EQ(static_cast<int>(private_key->size()), X25519_PRIVATE_KEY_LEN);
+-
+-    ASSERT_TRUE(EVP_HPKE_KEY_init(full_hpke_key_.get(),
+-                                  EVP_hpke_x25519_hkdf_sha256(),
+-                                  private_key->data(), private_key->size()));
+-  }
+-
+- protected:
+-  void AssembleAndVerifyReport(
+-      blink::mojom::DebugModeDetailsPtr debug_details,
+-      std::vector<blink::mojom::AggregatableReportHistogramContribution>
+-          contributions,
+-      PrivateAggregationCallerApi api_identifier,
+-      std::string_view report_file,
+-      std::string_view cleartext_payloads_file,
+-      size_t filtering_id_max_bytes,
+-      size_t max_num_contributions) {
+-    const url::Origin kExampleOrigin =
+-        url::Origin::Create(GURL("https://report.test"));
+-
+-    base::Value expected_report =
+-        ParseJsonFromFile(input_dir_.AppendASCII(report_file));
+-    ASSERT_TRUE(expected_report.is_dict());
+-
+-    base::Value expected_cleartext_payloads =
+-        ParseJsonFromFile(input_dir_.AppendASCII(cleartext_payloads_file));
+-    ASSERT_TRUE(expected_cleartext_payloads.is_list());
+-    ASSERT_EQ(expected_cleartext_payloads.GetList().size(), 1u);
+-
+-    const std::string* base64_encoded_expected_cleartext_payload =
+-        expected_cleartext_payloads.GetList().front().GetIfString();
+-    ASSERT_TRUE(base64_encoded_expected_cleartext_payload);
+-
+-    AggregatableReportRequest actual_report =
+-        PrivateAggregationHost::GenerateReportRequest(
+-            /*timeout_or_disconnect_timer=*/base::ElapsedTimer(),
+-            std::move(debug_details),
+-            /*scheduled_report_time=*/
+-            base::Time::FromMillisecondsSinceUnixEpoch(1234486400000),
+-            /*delay_type=*/AggregatableReportRequest::DelayType::Unscheduled,
+-            /*report_id=*/
+-            base::Uuid::ParseLowercase("21abd97f-73e8-4b88-9389-a9fee6abda5e"),
+-            /*reporting_origin=*/kExampleOrigin, api_identifier,
+-            /*context_id=*/std::nullopt,
+-            // TODO(alexmt): Generate golden reports for multiple coordinators.
+-            /*aggregation_coordinator_origin=*/std::nullopt,
+-            /*specified_filtering_id_max_bytes=*/filtering_id_max_bytes,
+-            max_num_contributions, std::move(contributions));
+-
+-    base::RunLoop run_loop;
+-
+-    aggregation_service().AssembleReport(
+-        std::move(actual_report),
+-        base::BindLambdaForTesting(
+-            [&](AggregatableReportRequest,
+-                std::optional<AggregatableReport> assembled_report,
+-                AggregationService::AssemblyStatus status) {
+-              EXPECT_EQ(status, AggregationService::AssemblyStatus::kOk);
+-              ASSERT_TRUE(assembled_report);
+-              EXPECT_TRUE(
+-                  VerifyReport(assembled_report->GetAsJson(),
+-                               std::move(expected_report).TakeDict(),
+-                               *base64_encoded_expected_cleartext_payload))
+-                  << "There was an error, consider bumping "
+-                     "api_version, actual output for "
+-                  << report_file << " is:\n"
+-                  << assembled_report->GetAsJson();
+-              run_loop.Quit();
+-            }));
+-
+-    run_loop.Run();
+-  }
+-
+-  base::MockRepeatingCallback<void(AggregatableReportRequest,
+-                                   PrivateAggregationBudgetKey)>
+-      mock_callback_;
+-
+- private:
+-  AggregationServiceImpl& aggregation_service() {
+-    return *static_cast<AggregationServiceImpl*>(
+-        static_cast<StoragePartitionImpl*>(
+-            browser_context_.GetDefaultStoragePartition())
+-            ->GetAggregationService());
+-  }
+-
+-  testing::AssertionResult VerifyReport(
+-      base::DictValue actual_report,
+-      base::DictValue expected_report,
+-      std::string_view base64_encoded_expected_cleartext_payload) {
+-    std::optional<base::Value> actual_payloads =
+-        actual_report.Extract(kKeyAggregationServicePayloads);
+-    if (!actual_payloads) {
+-      return testing::AssertionFailure() << kKeyAggregationServicePayloads
+-                                         << " not present in the actual report";
+-    }
+-
+-    std::optional<base::Value> expected_payloads =
+-        expected_report.Extract(kKeyAggregationServicePayloads);
+-    if (!expected_payloads) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not present in the expected report";
+-    }
+-
+-    // All other fields are deterministic.
+-    if (actual_report != expected_report) {
+-      return testing::AssertionFailure()
+-             << "The actual report and expected reports do not match, ignoring "
+-                "the aggregation service payloads";
+-    }
+-
+-    static constexpr std::string_view kKeySharedInfo = "shared_info";
+-    const std::string* shared_info = expected_report.FindString(kKeySharedInfo);
+-    if (!shared_info) {
+-      return testing::AssertionFailure()
+-             << kKeySharedInfo << " not present in the report";
+-    }
+-
+-    if (!actual_payloads->is_list()) {
+-      return testing::AssertionFailure() << kKeyAggregationServicePayloads
+-                                         << " not a list in the actual report";
+-    }
+-
+-    if (!expected_payloads->is_list()) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not a list in the expected report";
+-    }
+-
+-    return VerifyAggregationServicePayloads(
+-        std::move(*actual_payloads).TakeList(),
+-        std::move(*expected_payloads).TakeList(),
+-        base64_encoded_expected_cleartext_payload, *shared_info);
+-  }
+-
+-  testing::AssertionResult VerifyAggregationServicePayloads(
+-      base::ListValue actual_payloads,
+-      base::ListValue expected_payloads,
+-      std::string_view base64_encoded_expected_cleartext_payload,
+-      std::string_view shared_info) {
+-    if (actual_payloads.size() != 1u) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not a list of size 1 in the actual report";
+-    }
+-
+-    base::DictValue* actual_payload = actual_payloads.front().GetIfDict();
+-    if (!actual_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << "[0] not a dictionary in the actual report";
+-    }
+-
+-    if (expected_payloads.size() != 1u) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << " not a list of size 1 in the expected report";
+-    }
+-
+-    base::DictValue* expected_payload = expected_payloads.front().GetIfDict();
+-    if (!expected_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyAggregationServicePayloads
+-             << "[0] not a dictionary in the expected report";
+-    }
+-
+-    static constexpr std::string_view kKeyPayload = "payload";
+-
+-    std::optional<base::Value> actual_encrypted_payload =
+-        actual_payload->Extract(kKeyPayload);
+-    if (!actual_encrypted_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyPayload << " not present in the actual report";
+-    }
+-
+-    std::optional<base::Value> expected_encrypted_payload =
+-        expected_payload->Extract(kKeyPayload);
+-    if (!expected_encrypted_payload) {
+-      return testing::AssertionFailure()
+-             << kKeyPayload << " not present in the expected report";
+-    }
+-
+-    // All other fields are deterministic.
+-    if (*actual_payload != *expected_payload) {
+-      return testing::AssertionFailure()
+-             << "The actual and expected aggregation service payloads do not "
+-                "match, ignoring the encrypted payloads";
+-    }
+-
+-    std::vector<uint8_t> actual_decrypted_payload =
+-        DecryptPayload(actual_encrypted_payload->GetString(), shared_info);
+-    if (actual_decrypted_payload.empty()) {
+-      return testing::AssertionFailure()
+-             << "Failed to decrypt payload in the actual report";
+-    }
+-
+-    std::vector<uint8_t> expected_decrypted_payload =
+-        DecryptPayload(expected_encrypted_payload->GetString(), shared_info);
+-    if (expected_decrypted_payload.empty()) {
+-      return testing::AssertionFailure()
+-             << "Failed to decrypt payload in the expected payload";
+-    }
+-
+-    if (actual_decrypted_payload != expected_decrypted_payload) {
+-      return testing::AssertionFailure()
+-             << "The actual and expected decrypted payloads do not match";
+-    }
+-
+-    if (std::string base64_encoded_decrypted_payload =
+-            base::Base64Encode(actual_decrypted_payload);
+-        base64_encoded_decrypted_payload !=
+-        base64_encoded_expected_cleartext_payload) {
+-      return testing::AssertionFailure()
+-             << "The expected cleartext payload does not match actual "
+-                "decrypted payload, actual output is "
+-             << base64_encoded_decrypted_payload;
+-    }
+-
+-    return testing::AssertionSuccess();
+-  }
+-
+-  // Returns empty vector in case of an error.
+-  std::vector<uint8_t> DecryptPayload(
+-      std::string_view base64_encoded_encrypted_payload,
+-      std::string_view shared_info) {
+-    std::optional<std::vector<uint8_t>> encrypted_payload =
+-        base::Base64Decode(base64_encoded_encrypted_payload);
+-    if (!encrypted_payload) {
+-      return {};
+-    }
+-
+-    return aggregation_service::DecryptPayloadWithHpke(
+-        *encrypted_payload, *full_hpke_key_.get(), shared_info);
+-  }
+-
+-  BrowserTaskEnvironment task_environment_;
+-  TestBrowserContext browser_context_;
+-  base::FilePath input_dir_;
+-  bssl::ScopedEVP_HPKE_KEY full_hpke_key_;
+-};
+-
+ namespace {
+ 
+-TEST_F(PrivateAggregationReportGoldenLatestVersionTest, VerifyGoldenReport) {
+-  struct {
+-    blink::mojom::DebugModeDetailsPtr debug_details;
+-    std::vector<blink::mojom::AggregatableReportHistogramContribution>
+-        contributions;
+-    PrivateAggregationCallerApi api_identifier;
+-    std::string_view report_file;
+-    std::string_view cleartext_payloads_file;
+-    size_t filtering_id_max_bytes = 1;
+-    bool enable_per_context_sizing = false;
+-    std::optional<size_t> requested_max_contributions = std::nullopt;
+-  } test_cases[] = {
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions =
+-              {blink::mojom::AggregatableReportHistogramContribution(
+-                  /*bucket=*/1, /*value=*/2, /*filtering_id=*/std::nullopt)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_1.json",
+-          .cleartext_payloads_file = "report_1_cleartext_payloads.json",
+-          .enable_per_context_sizing = true,
+-          .requested_max_contributions = 20,
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(),
+-          .contributions =
+-              {blink::mojom::AggregatableReportHistogramContribution(
+-                  /*bucket=*/1, /*value=*/2, /*filtering_id=*/std::nullopt)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_2.json",
+-          .cleartext_payloads_file = "report_2_cleartext_payloads.json",
+-          .enable_per_context_sizing = true,
+-          .requested_max_contributions = 20,
+-      },
+-      {.debug_details = blink::mojom::DebugModeDetails::New(
+-           /*is_enabled=*/true,
+-           /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-       .contributions = {blink::mojom::AggregatableReportHistogramContribution(
+-                             /*bucket=*/1, /*value=*/2,
+-                             /*filtering_id=*/std::nullopt),
+-                         blink::mojom::AggregatableReportHistogramContribution(
+-                             /*bucket=*/3, /*value=*/4,
+-                             /*filtering_id=*/std::nullopt)},
+-       .api_identifier = PrivateAggregationCallerApi::kSharedStorage,
+-       .report_file = "report_3.json",
+-       .cleartext_payloads_file = "report_3_cleartext_payloads.json"},
+-      {.debug_details = blink::mojom::DebugModeDetails::New(),
+-       .contributions = {blink::mojom::AggregatableReportHistogramContribution(
+-                             /*bucket=*/1, /*value=*/2,
+-                             /*filtering_id=*/std::nullopt),
+-                         blink::mojom::AggregatableReportHistogramContribution(
+-                             /*bucket=*/3, /*value=*/4,
+-                             /*filtering_id=*/std::nullopt)},
+-       .api_identifier = PrivateAggregationCallerApi::kSharedStorage,
+-       .report_file = "report_4.json",
+-       .cleartext_payloads_file = "report_4_cleartext_payloads.json"},
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions =
+-              {blink::mojom::AggregatableReportHistogramContribution(
+-                  /*bucket=*/absl::Uint128Max(), /*value=*/2,
+-                  /*filtering_id=*/std::nullopt)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_5.json",
+-          .cleartext_payloads_file = "report_5_cleartext_payloads.json",
+-          .enable_per_context_sizing = true,
+-          .requested_max_contributions = 20,
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(),
+-          .contributions =
+-              {blink::mojom::AggregatableReportHistogramContribution(
+-                  /*bucket=*/absl::Uint128Max(), /*value=*/2,
+-                  /*filtering_id=*/std::nullopt)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_6.json",
+-          .cleartext_payloads_file = "report_6_cleartext_payloads.json",
+-          .enable_per_context_sizing = true,
+-          .requested_max_contributions = 20,
+-      },
+-      {.debug_details = blink::mojom::DebugModeDetails::New(),
+-       .contributions = {blink::mojom::AggregatableReportHistogramContribution(
+-           /*bucket=*/0, /*value=*/0, /*filtering_id=*/std::nullopt)},
+-       .api_identifier = PrivateAggregationCallerApi::kSharedStorage,
+-       .report_file = "report_7.json",
+-       .cleartext_payloads_file = "report_7_cleartext_payloads.json"},
+-      {.debug_details = blink::mojom::DebugModeDetails::New(
+-           /*is_enabled=*/true,
+-           /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-       .contributions = {blink::mojom::AggregatableReportHistogramContribution(
+-           /*bucket=*/1, /*value=*/2, /*filtering_id=*/3)},
+-       .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-       .report_file = "report_8.json",
+-       .cleartext_payloads_file = "report_8_cleartext_payloads.json",
+-       .enable_per_context_sizing = true,
+-       .requested_max_contributions = 20},
+-      {.debug_details = blink::mojom::DebugModeDetails::New(),
+-       .contributions = {blink::mojom::AggregatableReportHistogramContribution(
+-           /*bucket=*/1, /*value=*/2, /*filtering_id=*/3)},
+-       .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-       .report_file = "report_9.json",
+-       .cleartext_payloads_file = "report_9_cleartext_payloads.json",
+-       .enable_per_context_sizing = true,
+-       .requested_max_contributions = 20},
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions =
+-              {blink::mojom::AggregatableReportHistogramContribution(
+-                  /*bucket=*/1, /*value=*/2,
+-                  /*filtering_id=*/std::numeric_limits<uint64_t>::max())},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_10.json",
+-          .cleartext_payloads_file = "report_10_cleartext_payloads.json",
+-          .filtering_id_max_bytes = 8,
+-          .enable_per_context_sizing = true,
+-          .requested_max_contributions = 20,
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions =
+-              {
+-                  blink::mojom::AggregatableReportHistogramContribution(
+-                      /*bucket=*/1, /*value=*/2,
+-                      /*filtering_id=*/std::nullopt)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_11.json",
+-          .cleartext_payloads_file = "report_11_cleartext_payloads.json",
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(),
+-          .contributions =
+-              {
+-                  blink::mojom::AggregatableReportHistogramContribution(
+-                      /*bucket=*/1, /*value=*/2,
+-                      /*filtering_id=*/std::nullopt)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_12.json",
+-          .cleartext_payloads_file = "report_12_cleartext_payloads.json",
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions = std::vector<
+-              blink::mojom::AggregatableReportHistogramContribution>(
+-              99,
+-              blink::mojom::AggregatableReportHistogramContribution(
+-                  /*bucket=*/1, /*value=*/2, /*filtering_id=*/std::nullopt)),
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_13.json",
+-          .cleartext_payloads_file = "report_13_cleartext_payloads.json",
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions = std::vector<
+-              blink::mojom::AggregatableReportHistogramContribution>(
+-              100,
+-              blink::mojom::AggregatableReportHistogramContribution(
+-                  /*bucket=*/1, /*value=*/2, /*filtering_id=*/std::nullopt)),
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_14.json",
+-          .cleartext_payloads_file = "report_14_cleartext_payloads.json",
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions = std::vector<
+-              blink::mojom::AggregatableReportHistogramContribution>(
+-              100, blink::mojom::AggregatableReportHistogramContribution(
+-                       /*bucket=*/1, /*value=*/2, /*filtering_id=*/3)),
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_15.json",
+-          .cleartext_payloads_file = "report_15_cleartext_payloads.json",
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions = std::vector<
+-              blink::mojom::AggregatableReportHistogramContribution>(
+-              100, blink::mojom::AggregatableReportHistogramContribution(
+-                       /*bucket=*/1, /*value=*/2,
+-                       /*filtering_id=*/std::numeric_limits<uint64_t>::max())),
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_16.json",
+-          .cleartext_payloads_file = "report_16_cleartext_payloads.json",
+-          .filtering_id_max_bytes = 8,
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions =
+-              {
+-                  blink::mojom::AggregatableReportHistogramContribution(
+-                      /*bucket=*/1, /*value=*/2,
+-                      /*filtering_id=*/std::numeric_limits<uint64_t>::max())},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_17.json",
+-          .cleartext_payloads_file = "report_17_cleartext_payloads.json",
+-          .filtering_id_max_bytes = 8,
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(
+-              /*is_enabled=*/true,
+-              /*debug_key=*/blink::mojom::DebugKey::New(/*value=*/123u)),
+-          .contributions =
+-              {
+-                  blink::mojom::AggregatableReportHistogramContribution(
+-                      /*bucket=*/1, /*value=*/2, /*filtering_id=*/3)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_18.json",
+-          .cleartext_payloads_file = "report_18_cleartext_payloads.json",
+-          .enable_per_context_sizing = true,
+-          .requested_max_contributions = 1000,
+-      },
+-      {
+-          .debug_details = blink::mojom::DebugModeDetails::New(),
+-          .contributions =
+-              {
+-                  blink::mojom::AggregatableReportHistogramContribution(
+-                      /*bucket=*/1, /*value=*/2, /*filtering_id=*/3)},
+-          .api_identifier = PrivateAggregationCallerApi::kProtectedAudience,
+-          .report_file = "report_19.json",
+-          .cleartext_payloads_file = "report_19_cleartext_payloads.json",
+-          .enable_per_context_sizing = true,
+-          .requested_max_contributions = 1000,
+-      },
+-  };
+-
+-  for (auto& test_case : test_cases) {
+-    base::test::ScopedFeatureList scoped_feature_list;
+-    scoped_feature_list.InitWithFeatureState(
+-        blink::features::kPrivateAggregationApiMaxContributions,
+-        test_case.enable_per_context_sizing);
+-
+-    AssembleAndVerifyReport(
+-        std::move(test_case.debug_details), std::move(test_case.contributions),
+-        std::move(test_case.api_identifier), test_case.report_file,
+-        test_case.cleartext_payloads_file, test_case.filtering_id_max_bytes,
+-        PrivateAggregationHost::GetEffectiveMaxContributions(
+-            test_case.api_identifier, test_case.requested_max_contributions));
+-  }
+-}
+-
+ std::vector<base::FilePath> GetLegacyVersions() {
+   base::FilePath input_dir;
+   base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &input_dir);

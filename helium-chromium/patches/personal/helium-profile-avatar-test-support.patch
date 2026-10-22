@@ -1,0 +1,105 @@
+--- a/chrome/test/data/webui/cr_elements/cr_profile_avatar_selector_test.ts
++++ b/chrome/test/data/webui/cr_elements/cr_profile_avatar_selector_test.ts
+@@ -26,6 +26,8 @@ suite('cr-profile-avatar-selector', func
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'chrome://avatar2.png',
+@@ -33,6 +35,8 @@ suite('cr-profile-avatar-selector', func
+         index: 2,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'chrome://avatar3.png',
+@@ -40,6 +44,8 @@ suite('cr-profile-avatar-selector', func
+         index: 3,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ];
+     return avatarSelector;
+@@ -108,6 +114,8 @@ suite('cr-profile-avatar-selector', func
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'chrome://avatar2.png',
+@@ -115,6 +123,8 @@ suite('cr-profile-avatar-selector', func
+         index: 2,
+         selected: true,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ];
+     await microtasksFinished();
+--- a/chrome/test/data/webui/signin/test_manage_profiles_browser_proxy.ts
++++ b/chrome/test/data/webui/signin/test_manage_profiles_browser_proxy.ts
+@@ -139,6 +139,8 @@ export class TestManageProfilesBrowserPr
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-2.png',
+@@ -146,6 +148,8 @@ export class TestManageProfilesBrowserPr
+         index: 2,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-3.png',
+@@ -153,6 +157,8 @@ export class TestManageProfilesBrowserPr
+         index: 3,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ]);
+   }
+--- a/chrome/test/data/webui/signin/test_profile_customization_browser_proxy.ts
++++ b/chrome/test/data/webui/signin/test_profile_customization_browser_proxy.ts
+@@ -46,6 +46,8 @@ export class TestProfileCustomizationBro
+         index: 0,
+         selected: true,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-1.png',
+@@ -53,6 +55,8 @@ export class TestProfileCustomizationBro
+         index: 1,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'fake-icon-2.png',
+@@ -60,6 +64,8 @@ export class TestProfileCustomizationBro
+         index: 2,
+         selected: false,
+         isGaiaAvatar: false,
++        isCustomAvatar: false,
++        isPlaceholder: false,
+       },
+     ]);
+   }

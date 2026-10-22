@@ -1,0 +1,267 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -4202,6 +4202,7 @@
+       "views/fullscreen_control/fullscreen_control_host.h",
+       "views/global_error_bubble_view.cc",
+       "views/global_error_bubble_view.h",
++      "views/helium/arcium_tab_appearance.h",
+       "views/helium/frame_corner_radius.cc",
+       "views/helium/frame_corner_radius.h",
+       "views/helium/glass_surface.cc",
+--- a/chrome/browser/ui/tabs/tab_strip_prefs.cc
++++ b/chrome/browser/ui/tabs/tab_strip_prefs.cc
+@@ -14,6 +14,7 @@
+ #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/helium/arcium_tab_appearance.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+@@ -42,6 +43,8 @@
+   registry->RegisterBooleanPref(prefs::kVerticalTabsCollapsedState, false);
+   registry->RegisterIntegerPref(prefs::kVerticalTabsUncollapsedWidth,
+                                 kVerticalTabStripDefaultUncollapsedWidth);
++  registry->RegisterIntegerPref(arcium::kTabFontSizePref,
++                               arcium::kTabFontSizeDefault);
+ }
+ 
+ void MigrateHoverCardMemoryPref(PrefService* local_prefs) {
+--- /dev/null
++++ b/chrome/browser/ui/views/helium/arcium_tab_appearance.h
+@@ -0,0 +1,20 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_TAB_APPEARANCE_H_
++#define CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_TAB_APPEARANCE_H_
++
++namespace arcium {
++
++// Zero keeps the platform's native tab-title typography. Non-zero values are
++// explicit point sizes applied to tab titles across horizontal tabs, vertical
++// tabs, and durable Favorites/Pins rows.
++inline constexpr char kTabFontSizePref[] = "arcium.appearance.tab_font_size";
++inline constexpr int kTabFontSizeDefault = 0;
++inline constexpr int kTabFontSizeMin = 10;
++inline constexpr int kTabFontSizeMax = 20;
++
++}  // namespace arcium
++
++#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_ARCIUM_TAB_APPEARANCE_H_
+--- a/chrome/browser/ui/views/tabs/common/persistent_tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/persistent_tab_view.cc
+@@ -101,7 +101,7 @@
+       presentation_mode_(presentation_mode),
+       tab_style_(TabStyle::Get()),
+       icon_(AddChildView(std::make_unique<TabIcon>())),
+-      title_(AddChildView(std::make_unique<TabTitle>())),
++      title_(AddChildView(std::make_unique<TabTitle>(profile))),
+       close_button_(AddChildView(std::make_unique<TabCloseButton>(
+           base::BindRepeating(&PersistentTabView::CloseButtonPressed,
+                               base::Unretained(this)),
+--- src.orig/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ src/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -135,7 +135,8 @@
+       collection_node_(collection_node),
+       tab_style_(TabStyle::Get()),
+       icon_(AddChildView(std::make_unique<TabIcon>())),
+-      title_(AddChildView(std::make_unique<TabTitle>())),
++      title_(AddChildView(std::make_unique<TabTitle>(
++          collection_node ? GetTabInterface()->GetProfile() : nullptr))),
+       alert_indicator_(
+           AddChildView(std::make_unique<AlertIndicatorButton>(this))),
+       close_button_(AddChildView(std::make_unique<TabCloseButton>(
+--- a/chrome/browser/ui/views/tabs/tab/tab_title.cc
++++ b/chrome/browser/ui/views/tabs/tab/tab_title.cc
+@@ -4,10 +4,16 @@
+ 
+ #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
+ 
++#include <algorithm>
++
++#include "base/functional/bind.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
++#include "chrome/browser/ui/views/helium/arcium_tab_appearance.h"
++#include "components/prefs/pref_service.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ 
+-TabTitle::TabTitle() {
++TabTitle::TabTitle(Profile* profile) : base_font_list_(font_list()) {
+   SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
+   SetElideBehavior(gfx::FADE_TAIL);
+   SetHandlesTooltips(false);
+@@ -20,6 +26,53 @@
+   SetSkipSubpixelRenderingOpacityCheck(true);
+   SetCanProcessEventsWithinSubtree(false);
+   SetCollapseWhenHidden(true);
++
++  Profile* original_profile = profile ? profile->GetOriginalProfile() : nullptr;
++  if (!original_profile || !original_profile->GetPrefs()) {
++    return;
++  }
++
++  PrefService* prefs = original_profile->GetPrefs();
++  if (!prefs->FindPreference(arcium::kTabFontSizePref)) {
++    return;
++  }
++
++  profile_observation_.Observe(original_profile);
++  pref_change_registrar_.Init(prefs);
++  pref_change_registrar_.Add(
++      arcium::kTabFontSizePref,
++      base::BindRepeating(&TabTitle::UpdateFont, base::Unretained(this)));
++  UpdateFont();
++}
++
++TabTitle::~TabTitle() = default;
++
++void TabTitle::UpdateFont() {
++  PrefService* prefs = pref_change_registrar_.prefs();
++  if (!prefs || !prefs->FindPreference(arcium::kTabFontSizePref)) {
++    return;
++  }
++
++  const int configured_size = prefs->GetInteger(arcium::kTabFontSizePref);
++  if (configured_size == arcium::kTabFontSizeDefault) {
++    if (font_list().GetFontSize() != base_font_list_.GetFontSize()) {
++      SetFontList(base_font_list_);
++    }
++    return;
++  }
++
++  const int requested_size = std::clamp(
++      configured_size, arcium::kTabFontSizeMin, arcium::kTabFontSizeMax);
++  const int base_size = base_font_list_.GetFontSize();
++  if (font_list().GetFontSize() == requested_size) {
++    return;
++  }
++  SetFontList(base_font_list_.DeriveWithSizeDelta(requested_size - base_size));
++}
++
++void TabTitle::OnProfileWillBeDestroyed(Profile*) {
++  pref_change_registrar_.Reset();
++  profile_observation_.Reset();
+ }
+ 
+ BEGIN_METADATA(TabTitle)
+--- a/chrome/browser/ui/views/tabs/tab/tab_title.h
++++ b/chrome/browser/ui/views/tabs/tab/tab_title.h
+@@ -5,14 +5,31 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_TAB_TITLE_H_
+ #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_TAB_TITLE_H_
+ 
++#include "base/scoped_observation.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_observer.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "ui/gfx/font_list.h"
+ #include "ui/views/controls/label.h"
+ 
+ // The class that is the view for the tab title. This is shared
+ // across both horizontal and vertical tab strip.
+-class TabTitle : public views::Label {
++class TabTitle : public views::Label, public ProfileObserver {
+   METADATA_HEADER(TabTitle, views::Label)
++
+  public:
+-  TabTitle();
++  explicit TabTitle(Profile* profile = nullptr);
++  ~TabTitle() override;
++
++ private:
++  void UpdateFont();
++
++  // ProfileObserver:
++  void OnProfileWillBeDestroyed(Profile* profile) override;
++
++  const gfx::FontList base_font_list_;
++  PrefChangeRegistrar pref_change_registrar_;
++  base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_TAB_TITLE_H_
+--- src.orig/chrome/browser/ui/views/tabs/tab.cc
++++ src/chrome/browser/ui/views/tabs/tab.cc
+@@ -111,6 +111,16 @@
+ 
+ bool g_show_hover_card_on_mouse_hover = true;
+ 
++Profile* GetProfileForTabTitle(TabSlotController* controller) {
++  if (!controller) {
++    return nullptr;
++  }
++
++  BrowserWindowInterface* browser_window =
++      controller->GetBrowserWindowInterface();
++  return browser_window ? browser_window->GetProfile() : nullptr;
++}
++
+ // Helper functions ------------------------------------------------------------
+ 
+ // Returns the coordinate for an object of size `item_size` centered in a region
+@@ -216,7 +226,7 @@
+     : HoverCardAnchorTarget(this),
+       tab_handle_(handle),
+       controller_(controller),
+-      title_(new TabTitle()),
++      title_(new TabTitle(GetProfileForTabTitle(controller))),
+       title_animation_(this) {
+   DCHECK(controller);
+ 
+--- a/chrome/browser/ui/views/tabs/tab_unittest.cc
++++ b/chrome/browser/ui/views/tabs/tab_unittest.cc
+@@ -18,6 +18,7 @@
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/tabs/tab_types.h"
+ #include "chrome/browser/ui/ui_features.h"
++#include "chrome/browser/ui/views/helium/arcium_tab_appearance.h"
+ #include "chrome/browser/ui/views/tabs/fake_base_tab_strip_controller.h"
+ #include "chrome/browser/ui/views/tabs/fake_tab_slot_controller.h"
+ #include "chrome/browser/ui/views/tabs/hovercard/tab_hover_card_controller.h"
+@@ -32,6 +33,8 @@
+ #include "chrome/test/base/testing_profile.h"
+ #include "chrome/test/views/chrome_views_test_base.h"
+ #include "components/collaboration/public/messaging/message.h"
++#include "components/prefs/pref_service.h"
++#include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "components/tabs/public/mock_tab_interface.h"
+ #include "components/tabs/public/tab_alert.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+@@ -364,6 +367,34 @@
+   TestingProfile profile_;
+ };
+ 
++TEST_F(TabTest, TabTitleAppliesProfileFontSizeLive) {
++  if (!profile_.GetPrefs()->FindPreference(arcium::kTabFontSizePref)) {
++    profile_.GetTestingPrefService()->registry()->RegisterIntegerPref(
++        arcium::kTabFontSizePref, arcium::kTabFontSizeDefault);
++  }
++
++  auto title = std::make_unique<TabTitle>(&profile_);
++  const int native_font_size = title->font_list().GetFontSize();
++  EXPECT_EQ(arcium::kTabFontSizeDefault,
++            profile_.GetPrefs()->GetInteger(arcium::kTabFontSizePref));
++  EXPECT_GT(native_font_size, 0);
++
++  profile_.GetPrefs()->SetInteger(arcium::kTabFontSizePref, 16);
++  EXPECT_EQ(16, title->font_list().GetFontSize());
++
++  profile_.GetPrefs()->SetInteger(arcium::kTabFontSizePref,
++                                 arcium::kTabFontSizeMin - 1);
++  EXPECT_EQ(arcium::kTabFontSizeMin, title->font_list().GetFontSize());
++
++  profile_.GetPrefs()->SetInteger(arcium::kTabFontSizePref,
++                                 arcium::kTabFontSizeMax + 1);
++  EXPECT_EQ(arcium::kTabFontSizeMax, title->font_list().GetFontSize());
++
++  profile_.GetPrefs()->SetInteger(arcium::kTabFontSizePref,
++                                 arcium::kTabFontSizeDefault);
++  EXPECT_EQ(native_font_size, title->font_list().GetFontSize());
++}
++
+ TEST_F(TabTest, HitTest) {
+   auto tab_slot_controller = std::make_unique<FakeTabSlotController>();
+   std::unique_ptr<views::Widget> widget =

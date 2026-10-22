@@ -1,0 +1,10 @@
+.DS_Store
+
+.gcs_entries
+
+build/
+
+.pc
+
+resources/generated/
+__pycache__/

@@ -1,0 +1,37 @@
+--- a/content/browser/media/session/media_session_impl_unittest.cc
++++ b/content/browser/media/session/media_session_impl_unittest.cc
+@@ -1658,7 +1658,8 @@
+   mock_media_session_service().FlushForTesting();
+ }
+ 
+-TEST_F(MediaSessionImplTest, EnterAutoPictureInPictureWithReason) {
++TEST_F(MediaSessionImplTestWithDryRunOnly,
++       EnterAutoPictureInPictureWithReason) {
+   StartNewPlayer();
+   mock_media_session_service().EnableAction(
+       MediaSessionAction::kEnterPictureInPicture);
+@@ -1863,17 +1864,17 @@
+                   EnterPictureInPictureReasonEquals(
+                       blink::mojom::MediaSessionEnterPictureInPictureReason::
+                           kContentOccluded)))
+-      .Times(IsEnterPictureInPictureActionEnabled() ? 1 : 0);
++      .Times(IsEnterPictureInPictureActionEnabled() &&
++                     !IsBrowserInitiatedAutoPipEnabled()
++                 ? 1
++                 : 0);
+ 
+   GetMediaSession()->EnterAutoPictureInPicture();
+   mock_media_session_service().FlushForTesting();
+ 
+-  // Verify that the `BrowserInitiatedAutomaticPictureInPictureDryRun` flag does
+-  // not cause PiP to be entered.
+-  int expected_pip_calls = (!IsEnterPictureInPictureActionEnabled() &&
+-                            IsBrowserInitiatedAutoPipEnabled())
+-                               ? 1
+-                               : 0;
++  // The browser-initiated path owns automatic entry when its Blink feature is
++  // enabled. The dry-run feature alone never enters PiP.
++  int expected_pip_calls = IsBrowserInitiatedAutoPipEnabled() ? 1 : 0;
+   EXPECT_EQ(expected_pip_calls,
+             player_observer()->received_enter_picture_in_picture_calls());
+ }

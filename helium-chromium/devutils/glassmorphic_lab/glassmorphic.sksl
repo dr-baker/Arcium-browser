@@ -1,0 +1,157 @@
+/*
+ * Arcium glassmorphic glass effect prototype.
+ *
+ * This is intentionally a child-shader effect: Chromium/Skia can provide the
+ * live backdrop as `backdrop`, while the effect owns the glass response. The
+ * browser lab adapts the same equations to WebGL and supplies a deterministic
+ * procedural backdrop, so shader work can iterate without a Chromium build.
+ *
+ * The equations are independently written from general techniques described
+ * by the following permissively licensed references:
+ *   https://github.com/Abdullajon1881/LiquidGlass
+ *   https://github.com/OverShifted/LiquidGlass
+ * No source code is copied from either project.
+ */
+
+uniform shader backdrop;
+uniform float2 uResolution;
+uniform float2 uPanelOrigin;
+uniform float2 uPanelSize;
+uniform float uCornerRadius;
+uniform float uShapePower;
+uniform float uBlurRadius;
+uniform float uOpacity;
+uniform float uEdgeWidth;
+uniform float uRefraction;
+uniform float uBulge;
+uniform float uDispersion;
+uniform float uTintStrength;
+uniform float uSaturation;
+uniform float uSpecular;
+uniform float uGrain;
+uniform float4 uTint;
+uniform float2 uLightXY;
+uniform float uLightElevation;
+uniform float uLightIntensity;
+
+float roundedBoxDistance(float2 point, float2 half_size, float radius) {
+  float2 q = abs(point) - half_size + radius;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+float superellipseDistance(float2 point, float2 half_size, float power) {
+  float2 normalized = abs(point) / half_size;
+  float numerator = pow(normalized.x, power) + pow(normalized.y, power) - 1.0;
+  float2 gradient = float2(
+      power * pow(max(normalized.x, 0.0001), power - 1.0) / half_size.x,
+      power * pow(max(normalized.y, 0.0001), power - 1.0) / half_size.y);
+  return numerator / max(length(gradient), 0.0001);
+}
+
+float panelDistance(float2 point, float2 half_size, float radius) {
+  return uShapePower > 1.0
+             ? superellipseDistance(point, half_size, uShapePower)
+             : roundedBoxDistance(point, half_size, radius);
+}
+
+float2 roundedBoxNormal(float2 point, float2 half_size, float radius) {
+  const float epsilon = 1.0;
+  float2 x_step = float2(epsilon, 0.0);
+  float2 y_step = float2(0.0, epsilon);
+  float2 gradient = float2(
+      panelDistance(point + x_step, half_size, radius) -
+          panelDistance(point - x_step, half_size, radius),
+      panelDistance(point + y_step, half_size, radius) -
+          panelDistance(point - y_step, half_size, radius));
+  float gradient_length = max(length(gradient), 0.0001);
+  return gradient / gradient_length;
+}
+
+half4 childSample(float2 position) {
+  return backdrop.eval(position);
+}
+
+float3 blurBackdrop(float2 position, float2 refraction_offset) {
+  float radius = uBlurRadius;
+  float3 sum = float3(0.0);
+  sum += childSample(position + refraction_offset +
+                     float2(-radius, -radius)).rgb;
+  sum += childSample(position + refraction_offset +
+                     float2(0.0, -radius)).rgb;
+  sum += childSample(position + refraction_offset +
+                     float2(radius, -radius)).rgb;
+  sum += childSample(position + refraction_offset +
+                     float2(-radius, 0.0)).rgb;
+  sum += childSample(position + refraction_offset).rgb * 2.0;
+  sum += childSample(position + refraction_offset +
+                     float2(radius, 0.0)).rgb;
+  sum += childSample(position + refraction_offset +
+                     float2(-radius, radius)).rgb;
+  sum += childSample(position + refraction_offset +
+                     float2(0.0, radius)).rgb;
+  sum += childSample(position + refraction_offset +
+                     float2(radius, radius)).rgb;
+  return sum / 10.0;
+}
+
+float grain(float2 position) {
+  float2 cell = floor(position);
+  float value = dot(cell, float2(12.9898, 78.233));
+  return fract(sin(value) * 43758.5453);
+}
+
+half4 glassCore(float2 position) {
+  float2 panel_center = uPanelOrigin + uPanelSize * 0.5;
+  float2 local_position = position - panel_center;
+  float2 half_size = uPanelSize * 0.5;
+  float distance = panelDistance(local_position, half_size, uCornerRadius);
+  half4 source = childSample(position);
+  float coverage = 1.0 - smoothstep(-1.0, 1.0, distance);
+  if (coverage <= 0.0) {
+    return source;
+  }
+
+  float edge = smoothstep(-uEdgeWidth, 0.0, distance);
+  float2 normal = roundedBoxNormal(local_position, half_size, uCornerRadius);
+  float2 normalized_position = local_position / half_size;
+  float radial_distance = clamp(length(normalized_position), 0.0, 1.0);
+  float bulge_weight = pow(radial_distance, 2.2) * uBulge;
+  float2 bulged_position = panel_center +
+                           local_position * (1.0 - bulge_weight);
+  float2 bend = normal * uRefraction * edge;
+
+  float3 softened = blurBackdrop(bulged_position, bend);
+  float2 spectral_bend = bend * uDispersion;
+  half4 red_sample = childSample(bulged_position + bend + spectral_bend);
+  half4 green_sample = childSample(bulged_position + bend);
+  half4 blue_sample = childSample(bulged_position + bend - spectral_bend);
+  float3 spectral = float3(red_sample.r, green_sample.g, blue_sample.b);
+  float3 color = mix(softened, spectral, 0.42 + edge * 0.38);
+
+  float luminance = dot(color, float3(0.2126, 0.7152, 0.0722));
+  color = mix(float3(luminance), color, uSaturation);
+  color = mix(color, color * uTint.rgb + uTint.rgb * 0.22, uTintStrength);
+
+  float3 light_direction = normalize(float3(uLightXY, max(uLightElevation, 0.01)));
+  float specular = pow(max(dot(normal, light_direction.xy), 0.0), 4.0);
+  color += float3(0.82, 0.92, 1.0) * specular * uSpecular *
+           edge * 1.55 * uLightIntensity;
+  color += uTint.rgb * edge * uSpecular * 0.045;
+  color += (grain(position) - 0.5) * uGrain;
+
+  float3 result = clamp(color, 0.0, 1.0);
+  return half4(mix(source.rgb, result, coverage), source.a);
+}
+
+half4 applyGlass(float2 position) {
+  half4 source = childSample(position);
+  float opacity = clamp(uOpacity, 0.0, 1.0);
+  if (opacity <= 0.0) {
+    return source;
+  }
+  half4 complete = glassCore(position);
+  if (opacity >= 1.0) {
+    return complete;
+  }
+  return half4(mix(source.rgb, complete.rgb, opacity), source.a);
+}

@@ -1,0 +1,1752 @@
+--- a/chrome/browser/ui/helium/arcium_appearance_prefs.h
++++ b/chrome/browser/ui/helium/arcium_appearance_prefs.h
+@@ -7,6 +7,10 @@
+ 
+ namespace arcium {
+ inline constexpr char kShowToolbarPref[] = "arcium.appearance.show_toolbar";
++inline constexpr char kArcSidebarNavigationEnabledPref[] =
++    "arcium.appearance.sidebar_navigation";
++inline constexpr char kSidebarExtensionsDrawerEnabledPref[] =
++    "arcium.appearance.sidebar_extensions_drawer";
+ inline constexpr char kCollapsedSidebarStylePref[] =
+     "arcium.appearance.collapsed_sidebar_style";
+ inline constexpr int kCollapsedSidebarStyleIconRail = 0;
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -139,10 +139,13 @@ void RegisterBrowserUserPrefs(user_prefs
+ 
+   registry->RegisterIntegerPref(arcium::kChromeFrameBorderWidthPref,
+                                 arcium::kChromeFrameBorderWidthDefault);
+-  registry->RegisterIntegerPref(
+-      arcium::kCollapsedSidebarStylePref,
+-      arcium::kCollapsedSidebarStyleIconRail);
++  registry->RegisterIntegerPref(arcium::kCollapsedSidebarStylePref,
++                                arcium::kCollapsedSidebarStyleIconRail);
+   registry->RegisterBooleanPref(arcium::kShowToolbarPref, true);
++  registry->RegisterBooleanPref(arcium::kArcSidebarNavigationEnabledPref,
++                                false);
++  registry->RegisterBooleanPref(arcium::kSidebarExtensionsDrawerEnabledPref,
++                                false);
+ 
+ #if defined(TOOLKIT_VIEWS)
+   registry->RegisterDictionaryPref(
+--- a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
++++ b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
+@@ -12,6 +12,7 @@
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/no_destructor.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
+ #include "build/build_config.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+@@ -39,6 +40,7 @@
+ #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
+ #include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop_view_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/side_panel/extensions/extension_side_panel_coordinator.h"
+@@ -281,6 +283,12 @@ void ExtensionsToolbarDesktop::UpdateExt
+ 
+ void ExtensionsToolbarDesktop::UpdateRequestAccessButton(
+     content::WebContents& web_contents) {
++  if (sidebar_menu_only_) {
++    if (request_access_button_) {
++      request_access_button_->SetVisible(false);
++    }
++    return;
++  }
+   // Extensions request access button can only be updated when feature is
+   // enabled.
+   if (!base::FeatureList::IsEnabled(
+@@ -405,6 +413,12 @@ void ExtensionsToolbarDesktop::UpdateIco
+     return;
+   }
+ 
++  if (sidebar_menu_only_) {
++    action_view->SetVisible(false);
++    GetAnimatingLayoutManager()->ResetLayout();
++    return;
++  }
++
+   // Popped out action uses a flex rule that causes it to always be visible
+   // regardless of space; default for actions is to drop out when there is
+   // insufficient space. So if an action is being forced visible, it should have
+@@ -469,18 +483,20 @@ void ExtensionsToolbarDesktop::AnchorAnd
+   // * AnchorAndShowWidgetImmediately runs.
+   // Revisit how to handle that, likely the Widget should Close on removal which
+   // would remove the AnchoredWidget entry.
++  EnsureSidebarExtensionControlVisible();
+   views::View* const anchor_view = GetViewForId(iter->extension_id);
+   widget->widget_delegate()->AsBubbleDialogDelegate()->SetAnchorView(
+-      anchor_view && anchor_view->GetVisible() ? anchor_view
+-                                               : GetExtensionsButton());
++      !sidebar_menu_only_ && anchor_view && anchor_view->GetVisible()
++          ? anchor_view
++          : GetExtensionsButton());
+ 
+   // Fix the position of widgets. Without this fix, extension-installed-bubble
+   // and extension-uninstall-dialog may be out of the window border on Linux.
+   const bool hide_pref = !browser_->profile()->GetPrefs()->GetBoolean(
+-        prefs::kShowExtensionsButton);
+-  const bool hide_cmd = base::CommandLine::ForCurrentProcess()->HasSwitch(
+-        "hide-extensions-menu");
+-  if (hide_pref || hide_cmd) {
++      prefs::kShowExtensionsButton);
++  const bool hide_cmd =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("hide-extensions-menu");
++  if ((!sidebar_menu_only_ && hide_pref) || hide_cmd) {
+     views::View* anchor_view =
+         views::ElementTrackerViews::GetInstance()->GetFirstMatchingView(
+             kToolbarAppMenuButtonElementId,
+@@ -508,6 +524,7 @@ void ExtensionsToolbarDesktop::UndoPopOu
+   const extensions::ExtensionId popped_out_action = popped_out_action_.value();
+   popped_out_action_ = std::nullopt;
+   UpdateIconVisibility(popped_out_action);
++  MaybeRestoreSidebarExtensionControl();
+   UpdateContainerVisibilityAfterAnimation();
+ }
+ 
+@@ -517,6 +534,11 @@ void ExtensionsToolbarDesktop::SetPopupO
+   // never unsetting one when one wasn't set.
+   DCHECK((popup_owner_ != nullptr) ^ (popup_owner != nullptr));
+   popup_owner_ = popup_owner;
++  if (popup_owner_) {
++    EnsureSidebarExtensionControlVisible();
++  } else {
++    MaybeRestoreSidebarExtensionControl();
++  }
+ 
+   // Container should become visible if |popup_owner_| and may lose visibility
+   // if not |popup_owner_|. Visibility must be maintained during layout
+@@ -534,6 +556,7 @@ void ExtensionsToolbarDesktop::PopOutAct
+   // TODO(pbos): Highlight popout differently.
+   DCHECK(!popped_out_action_.has_value());
+   popped_out_action_ = action_id;
++  EnsureSidebarExtensionControlVisible();
+   UpdateIconVisibility(action_id);
+   GetAnimatingLayoutManager()->PostOrQueueAction(std::move(closure));
+   UpdateContainerVisibility();
+@@ -578,7 +601,8 @@ void ExtensionsToolbarDesktop::CreateAct
+   CHECK(icon);
+ 
+   // Set visibility before adding to prevent extraneous animation.
+-  icon->SetVisible(ToolbarActionsModel::CanShowActionsInToolbar(*browser_) &&
++  icon->SetVisible(!sidebar_menu_only_ &&
++                   ToolbarActionsModel::CanShowActionsInToolbar(*browser_) &&
+                    model_->IsActionPinned(action_id));
+   views::FocusRing::Get(icon.get())->SetOutsetFocusRingDisabled(true);
+   ObserveButton(icon.get());
+@@ -845,6 +869,7 @@ bool ExtensionsToolbarDesktop::CanShowTo
+ }
+ 
+ void ExtensionsToolbarDesktop::ToggleExtensionsMenu() {
++  EnsureSidebarExtensionControlVisible();
+   GetExtensionsButton()->ToggleExtensionsMenu();
+ }
+ 
+@@ -945,6 +970,8 @@ void ExtensionsToolbarDesktop::OnWidgetD
+   anchored_widgets_.erase(iter);
+   if (GetWidget() && !GetWidget()->IsClosed()) {
+     UpdateIconVisibility(extension_id);
++    MaybeRestoreSidebarExtensionControl();
++    UpdateContainerVisibility();
+   }
+ }
+ 
+@@ -1001,10 +1028,15 @@ void ExtensionsToolbarDesktop::UpdateCon
+ }
+ 
+ bool ExtensionsToolbarDesktop::ShouldContainerBeVisible() const {
++  if (sidebar_menu_only_) {
++    return sidebar_drawer_enabled_ || sidebar_extension_ui_requested_;
++  }
+   if (!browser_->profile()->GetPrefs()->GetBoolean(
+-      prefs::kShowExtensionsButton) ||
+-      base::CommandLine::ForCurrentProcess()->HasSwitch("hide-extensions-menu"))
++          prefs::kShowExtensionsButton) ||
++      base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "hide-extensions-menu")) {
+     return false;
++  }
+ 
+   // The container (and extensions-menu button) should not be visible if we have
+   // no extensions.
+@@ -1046,6 +1078,7 @@ void ExtensionsToolbarDesktop::UpdateCon
+ }
+ 
+ void ExtensionsToolbarDesktop::OnMenuOpening() {
++  EnsureSidebarExtensionControlVisible();
+   content::WebContents* web_contents = GetCurrentWebContents();
+   if (!web_contents) {
+     return;
+@@ -1070,10 +1103,22 @@ void ExtensionsToolbarDesktop::OnMenuOpe
+ 
+ void ExtensionsToolbarDesktop::OnMenuClosed() {
+   UpdateContainerVisibility();
++  // The menu's view tracker is cleared after WidgetObserver destruction
++  // callbacks. Restore the temporary drawer once that teardown has finished.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(
++                     [](base::WeakPtr<ExtensionsToolbarDesktop> toolbar) {
++                       if (toolbar) {
++                         toolbar->MaybeRestoreSidebarExtensionControl();
++                         toolbar->UpdateContainerVisibility();
++                       }
++                     },
++                     weak_ptr_factory_.GetWeakPtr()));
+ }
+ 
+ void ExtensionsToolbarDesktop::UpdateSidePanelState(bool is_active) {
+-  close_side_panel_button_->SetVisible(is_active);
++  side_panel_active_ = is_active;
++  close_side_panel_button_->SetVisible(is_active && !sidebar_menu_only_);
+   if (is_active) {
+     close_side_panel_button_anchor_highlight_ =
+         close_side_panel_button_->AddAnchorHighlight();
+@@ -1104,7 +1149,74 @@ void ExtensionsToolbarDesktop::DragDropC
+       weak_ptr_factory_.GetWeakPtr(), dragged_extension_id, true));
+ }
+ 
++void ExtensionsToolbarDesktop::EnsureSidebarExtensionControlVisible() {
++  if (!sidebar_menu_only_) {
++    return;
++  }
++  sidebar_extension_ui_requested_ = true;
++  extensions_button_->SetVisible(true);
++  SetVisible(true);
++  GetAnimatingLayoutManager()->ResetLayout();
++  if (!sidebar_extension_reveal_lock_) {
++    sidebar_extension_reveal_lock_ =
++        BrowserView::GetBrowserViewForBrowser(browser_)
++            ->AcquireSidebarNavigationRevealLock();
++  }
++  PreferredSizeChanged();
++  if (GetWidget()) {
++    GetWidget()->GetRootView()->DeprecatedLayoutImmediately();
++  }
++}
++
++void ExtensionsToolbarDesktop::MaybeRestoreSidebarExtensionControl() {
++  if (!sidebar_menu_only_ || IsExtensionsMenuShowing() || popup_owner_ ||
++      popped_out_action_ || !anchored_widgets_.empty()) {
++    return;
++  }
++  sidebar_extension_ui_requested_ = false;
++  sidebar_extension_reveal_lock_.reset();
++  UpdateControlsVisibility();
++  BrowserView::GetBrowserViewForBrowser(browser_)
++      ->UpdateSidebarNavigationReveal();
++  PreferredSizeChanged();
++}
++
++void ExtensionsToolbarDesktop::SetSidebarMenuOnly(bool enabled,
++                                                  bool drawer_enabled) {
++  if (sidebar_menu_only_ == enabled &&
++      sidebar_drawer_enabled_ == drawer_enabled) {
++    return;
++  }
++  if (enabled && !drawer_enabled && IsExtensionsMenuShowing()) {
++    HideExtensionsMenu();
++  }
++  sidebar_menu_only_ = enabled;
++  sidebar_drawer_enabled_ = drawer_enabled;
++  if (!enabled) {
++    sidebar_extension_ui_requested_ = false;
++    sidebar_extension_reveal_lock_.reset();
++    extensions_button_->SetVisible(true);
++    close_side_panel_button_->SetVisible(side_panel_active_);
++  }
++  for (const auto& [id, view] : icons_) {
++    UpdateIconVisibility(id);
++  }
++  UpdateControlsVisibility();
++  UpdateContainerVisibility();
++  GetAnimatingLayoutManager()->ResetLayout();
++  PreferredSizeChanged();
++}
++
+ void ExtensionsToolbarDesktop::UpdateControlsVisibility() {
++  if (sidebar_menu_only_) {
++    extensions_button_->SetVisible(sidebar_drawer_enabled_ ||
++                                   sidebar_extension_ui_requested_);
++    if (request_access_button_) {
++      request_access_button_->SetVisible(false);
++    }
++    close_side_panel_button_->SetVisible(false);
++    return;
++  }
+   if (!base::FeatureList::IsEnabled(
+           extensions_features::kExtensionsMenuAccessControl)) {
+     return;
+@@ -1154,6 +1266,7 @@ views::FocusManager* ExtensionsToolbarDe
+ 
+ views::BubbleAnchor ExtensionsToolbarDesktop::GetReferenceButtonForPopup(
+     const extensions::ExtensionId& action_id) {
++  EnsureSidebarExtensionControlVisible();
+   return GetViewForId(action_id)->GetReferenceButtonForPopup();
+ }
+ 
+--- a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h
++++ b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h
+@@ -31,6 +31,7 @@
+ #include "ui/views/widget/widget_observer.h"
+ 
+ class Browser;
++class ExpandOnHoverLock;
+ class ExtensionsToolbarButton;
+ class ToolbarActionViewModel;
+ class ExtensionsMenuCoordinator;
+@@ -112,10 +113,12 @@ class ExtensionsToolbarDesktop : public
+   // visibility, reordering views if necessary.
+   void UpdatePinnedActions();
+ 
+-
+   // Updates the container visibility and animation as needed.
+   void UpdateContainerVisibility();
+ 
++  // Sidebar presentation retains the extension model, pins and popup routes.
++  void SetSidebarMenuOnly(bool enabled, bool drawer_enabled);
++
+   // Updates the controls visibility.
+   void UpdateControlsVisibility();
+ 
+@@ -349,6 +352,13 @@ class ExtensionsToolbarDesktop : public
+   const raw_ptr<ToolbarActionsModel> model_;
+ 
+   DisplayMode display_mode_;
++  bool sidebar_menu_only_ = false;
++  bool sidebar_drawer_enabled_ = false;
++  bool side_panel_active_ = false;
++  bool sidebar_extension_ui_requested_ = false;
++  std::unique_ptr<ExpandOnHoverLock> sidebar_extension_reveal_lock_;
++  void EnsureSidebarExtensionControlVisible();
++  void MaybeRestoreSidebarExtensionControl();
+ 
+   // Controller for showing the toolbar action hover card.
+   std::unique_ptr<ToolbarActionHoverCardController>
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -447,6 +447,18 @@ using web_modal::WebContentsModalDialogH
+ 
+ namespace {
+ 
++// Release the expansion before updating chrome visibility and reveal state.
++class SidebarNavigationRevealLock final : public ExpandOnHoverLock {
++ public:
++  SidebarNavigationRevealLock(std::unique_ptr<ExpandOnHoverLock> expansion,
++                              base::OnceClosure cleanup)
++      : cleanup_(std::move(cleanup)), expansion_(std::move(expansion)) {}
++
++ private:
++  base::ScopedClosureRunner cleanup_;
++  std::unique_ptr<ExpandOnHoverLock> expansion_;
++};
++
+ // The visible height of the shadow above the tabs. Clicks in this area are
+ // treated as clicks to the frame, rather than clicks to the tab.
+ const int kTabShadowSize = 2;
+@@ -1437,6 +1449,14 @@ BrowserView::BrowserView(Browser* browse
+       base::BindRepeating(&BrowserView::OnCollapsedSidebarStylePrefChanged,
+                           base::Unretained(this)));
+   registrar_.Add(
++      arcium::kArcSidebarNavigationEnabledPref,
++      base::BindRepeating(&BrowserView::UpdateSidebarNavigationPlacement,
++                          base::Unretained(this)));
++  registrar_.Add(
++      arcium::kSidebarExtensionsDrawerEnabledPref,
++      base::BindRepeating(&BrowserView::UpdateSidebarNavigationPlacement,
++                          base::Unretained(this)));
++  registrar_.Add(
+       arcium::kShowToolbarPref,
+       base::BindRepeating(&BrowserView::OnToolbarVisibilityPrefChanged,
+                           base::Unretained(this)));
+@@ -1508,6 +1528,7 @@ BrowserView::BrowserView(Browser* browse
+ }
+ 
+ BrowserView::~BrowserView() {
++  sidebar_navigation_reveal_lock_.reset();
+   StopTabCycling();
+   mru_preview_cache_.reset();
+ 
+@@ -1849,8 +1870,13 @@ bool BrowserView::IsVerticalTabStripColl
+ }
+ 
+ bool BrowserView::IsCollapsedSidebarFullyHiddenForLayout() const {
+-  if (!GetIsNormalType() || IsFullscreen() ||
+-      !ShouldDrawVerticalTabStrip() || !IsVerticalTabStripCollapsed()) {
++  if (IsSidebarNavigationActive() && vertical_tab_strip_region_view_ &&
++      vertical_tab_strip_region_view_
++          ->IsSidebarNavigationTemporarilyExpanded()) {
++    return false;
++  }
++  if (!GetIsNormalType() || IsFullscreen() || !ShouldDrawVerticalTabStrip() ||
++      !IsVerticalTabStripCollapsed()) {
+     return false;
+   }
+ 
+@@ -1956,7 +1982,164 @@ bool BrowserView::IsZenModeEnabledForLay
+   return IsZenModeEnabled();
+ }
+ 
++bool BrowserView::IsSidebarNavigationAvailable() const {
++  auto* controller = tabs::VerticalTabStripStateController::From(browser_);
++  return GetIsNormalType() && !GetProfile()->IsOffTheRecord() &&
++         !GetProfile()->IsGuestSession() && !IsFullscreen() && toolbar_ &&
++         toolbar_->location_bar_view() && toolbar_->forward_button() &&
++         toolbar_->reload_button() && ShouldDrawVerticalTabStrip() &&
++         controller && !controller->IsTabStripRightAligned();
++}
++
++bool BrowserView::IsSidebarNavigationActive() const {
++  return IsSidebarNavigationAvailable() &&
++         GetProfile()->GetPrefs()->GetBoolean(
++             arcium::kArcSidebarNavigationEnabledPref);
++}
++
++float BrowserView::GetCaptionChromeRevealRatio() const {
++  if (!IsSidebarNavigationActive()) {
++    return GetTopChromeRevealRatio();
++  }
++  if (!IsToolbarVisible()) {
++    return 0.f;
++  }
++  auto* animation = BrowserAnimationController::From(browser_);
++  const auto motion =
++      animation->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip);
++  if (motion == TabStripAnimations::kCollapse ||
++      motion == TabStripAnimations::kExpand) {
++    return (zen_mode_enabled_ ? GetSideChromeRevealRatio() : 1.f) *
++           *animation->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
++                                       TabStripAnimations::kTabStripWidth);
++  }
++  if (IsVerticalTabStripCollapsed()) {
++    if (!vertical_tab_strip_region_view_
++             ->IsSidebarNavigationTemporarilyExpanded()) {
++      return 0.f;
++    }
++    return GetSideChromeRevealRatio() *
++           *animation->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
++                                       TabStripAnimations::kTabStripHoverWidth);
++  }
++  return GetSideChromeRevealRatio();
++}
++
++void BrowserView::UpdateSidebarNavigationPlacement() {
++  if (!toolbar_ || !vertical_tab_strip_region_view_ ||
++      !toolbar_->initialized()) {
++    return;
++  }
++  const bool sidebar = IsSidebarNavigationActive();
++  views::View* destination =
++      sidebar ? static_cast<views::View*>(vertical_tab_strip_region_view_.get())
++              : static_cast<views::View*>(top_container_.get());
++  const bool parent_changed = toolbar_->parent() != destination;
++  if (parent_changed) {
++    views::View* focused =
++        GetFocusManager() ? GetFocusManager()->GetFocusedView() : nullptr;
++    const bool restore_focus = focused && toolbar_->Contains(focused);
++    auto owned = toolbar_->parent()->RemoveChildViewT(toolbar_.get());
++    destination->AddChildViewAt(std::move(owned), 0);
++    toolbar_->SetProperty(
++        views::kFlexBehaviorKey,
++        views::FlexSpecification(views::LayoutOrientation::kVertical,
++                                 views::MinimumFlexSizeRule::kPreferred,
++                                 views::MaximumFlexSizeRule::kPreferred));
++    if (restore_focus) {
++      focused->RequestFocus();
++    }
++  }
++  toolbar_->SetSidebarNavigationMode(sidebar);
++  if (!sidebar) {
++    sidebar_navigation_pointer_reveal_ = false;
++    sidebar_navigation_reveal_lock_.reset();
++  }
++  if (parent_changed) {
++    if (auto* frame_view = GetFrameView()) {
++      frame_view->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
++    }
++    vertical_tab_strip_region_view_->UpdateInteriorMargin();
++    UpdateZenModeEventMonitor();
++    InvalidateLayout();
++  }
++}
++
++std::unique_ptr<ExpandOnHoverLock>
++BrowserView::AcquireSidebarNavigationRevealLock() {
++  if (!IsSidebarNavigationActive() || !vertical_tab_strip_region_view_) {
++    return nullptr;
++  }
++  ++sidebar_navigation_external_reveal_count_;
++  auto lock = vertical_tab_strip_region_view_->GetExpandOnHoverLock(
++      ExpandOnHoverLockType::kKeepExpanded);
++  if (IsVerticalTabStripCollapsed()) {
++    BrowserAnimationController::From(browser_)->Reset(
++        TabStripAnimations::kVerticalTabStrip,
++        TabStripAnimations::kExpandOnHover);
++  }
++  zen_side_chrome_animation_.Reset(1.f);
++  if (auto* frame = GetFrameView()) {
++    frame->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
++  }
++  InvalidateLayout();
++  if (GetWidget()) {
++    GetWidget()->GetRootView()->DeprecatedLayoutImmediately();
++  }
++  return std::make_unique<SidebarNavigationRevealLock>(
++      std::move(lock), base::BindOnce(
++                           [](base::WeakPtr<BrowserView> view) {
++                             if (!view) {
++                               return;
++                             }
++                             --view->sidebar_navigation_external_reveal_count_;
++                             view->UpdateSidebarNavigationReveal();
++                             view->InvalidateLayout();
++                             if (auto* frame = view->GetFrameView()) {
++                               frame->SetCaptionButtonsOpacity(
++                                   view->GetCaptionChromeRevealRatio());
++                             }
++                             if (view->IsChromeRevealModeEnabled()) {
++                               view->UpdateZenModeRevealFromCursor();
++                             }
++                           },
++                           weak_ptr_factory_.GetWeakPtr()));
++}
++
++void BrowserView::UpdateSidebarNavigationReveal() {
++  if (!IsSidebarNavigationActive() || !vertical_tab_strip_region_view_) {
++    sidebar_navigation_reveal_lock_.reset();
++    return;
++  }
++  views::View* focus =
++      GetFocusManager() ? GetFocusManager()->GetFocusedView() : nullptr;
++  const bool interaction_hold = (focus && toolbar_->Contains(focus)) ||
++                                HasOpenBubbleFromTopContainer() ||
++                                toolbar_->IsSidebarNavigationMenuShowing() ||
++                                sidebar_navigation_external_reveal_count_ > 0;
++  if (toolbar_temporarily_revealed_for_location_focus_ && !interaction_hold) {
++    toolbar_temporarily_revealed_for_location_focus_ = false;
++    InvalidateLayout();
++    if (auto* frame = GetFrameView()) {
++      frame->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
++    }
++  }
++  const bool hold = interaction_hold ||
++                    (sidebar_navigation_pointer_reveal_ &&
++                     (zen_mode_enabled_ || IsFullyHiddenSidebarStyleEnabled()));
++  if (hold && !sidebar_navigation_reveal_lock_) {
++    sidebar_navigation_reveal_lock_ =
++        vertical_tab_strip_region_view_->GetExpandOnHoverLock(
++            ExpandOnHoverLockType::kKeepExpanded);
++  } else if (!hold) {
++    sidebar_navigation_reveal_lock_.reset();
++  }
++}
++
+ float BrowserView::GetTopChromeRevealRatio() const {
++  if (IsSidebarNavigationActive()) {
++    return 0.f;
++  }
+   if (IsZenModeTopChromePinned()) {
+     return 1.f;
+   }
+@@ -2010,13 +2193,15 @@ bool BrowserView::IsZenModeSideChromePin
+ }
+ 
+ bool BrowserView::IsZenModeTopChromePinned() const {
+-  return (zen_mode_enabled_ || IsFullyHiddenSidebarStyleEnabled()) &&
++  return !IsSidebarNavigationActive() &&
++         (zen_mode_enabled_ || IsFullyHiddenSidebarStyleEnabled()) &&
+          browser_->profile()->GetPrefs()->GetBoolean(
+              prefs::kHeliumZenModeTopChromePinned);
+ }
+ 
+ bool BrowserView::IsChromeRevealModeEnabled() const {
+-  return IsZenModeEnabled() || IsCollapsedSidebarFullyHiddenForLayout() ||
++  return IsSidebarNavigationActive() || IsZenModeEnabled() ||
++         IsCollapsedSidebarFullyHiddenForLayout() ||
+          IsCollapsedSidebarRevealAnimationActive();
+ }
+ 
+@@ -2068,6 +2253,12 @@ void BrowserView::OnCollapsedSidebarAnim
+     return;
+   }
+ 
++  if (IsSidebarNavigationActive()) {
++    if (auto* frame_view = GetFrameView()) {
++      frame_view->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
++    }
++  }
++
+   if (!IsFullyHiddenSidebarStyleEnabled() ||
+       (motion != TabStripAnimations::kCollapse &&
+        motion != TabStripAnimations::kExpand)) {
+@@ -2096,7 +2287,7 @@ void BrowserView::OnCollapsedSidebarAnim
+     multi_contents_view_->MaybeUpdateBorderForZenReveal();
+   }
+   if (auto* frame_view = GetFrameView()) {
+-    frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
++    frame_view->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
+   }
+   UpdateZenModeEventMonitor();
+   InvalidateLayout();
+@@ -2108,6 +2299,10 @@ void BrowserView::OnCollapsedSidebarStyl
+ 
+ void BrowserView::OnToolbarVisibilityPrefChanged() {
+   toolbar_temporarily_revealed_for_location_focus_ = false;
++  UpdateSidebarNavigationPlacement();
++  if (auto* frame = GetFrameView()) {
++    frame->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
++  }
+   InvalidateLayout();
+   if (GetWidget()) {
+     GetWidget()->OnSizeConstraintsChanged();
+@@ -2139,7 +2334,7 @@ void BrowserView::UpdateCollapsedSidebar
+       }
+     }
+     if (auto* frame_view = GetFrameView()) {
+-      frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
++      frame_view->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
+     }
+   }
+ 
+@@ -2480,7 +2675,8 @@ void BrowserView::UpdateZenModeRevealFro
+ 
+   const bool in_top_trigger = IsPointInZenTopTrigger(cursor);
+   const bool in_top_chrome = IsPointInZenTopChromeBounds(cursor);
+-  const bool reveal_top = in_top_trigger || in_top_chrome;
++  const bool reveal_top =
++      !IsSidebarNavigationActive() && (in_top_trigger || in_top_chrome);
+ 
+   // Top bar takes precedence: don't reveal side chrome when the cursor
+   // is in the top trigger zone or over the revealed top chrome.
+@@ -2488,9 +2684,10 @@ void BrowserView::UpdateZenModeRevealFro
+   const bool in_side_chrome = IsPointInZenSideChromeBounds(cursor);
+   const bool moving_out_through_side_gap =
+       previous_cursor && IsLeavingZenSideGap(*previous_cursor, cursor);
+-  const bool reveal_side =
+-      zen_mode_enabled_ && !reveal_top && !moving_out_through_side_gap &&
+-      (in_side_trigger || in_side_chrome);
++  const bool reveal_side = (zen_mode_enabled_ || IsSidebarNavigationActive()) &&
++                           (!reveal_top || IsSidebarNavigationActive()) &&
++                           !moving_out_through_side_gap &&
++                           (in_side_trigger || in_side_chrome);
+ 
+   // Defer the collapse briefly so quick excursions don't cause the
+   // chrome to snap closed.
+@@ -2504,7 +2701,11 @@ void BrowserView::UpdateZenModeRevealFro
+ }
+ 
+ void BrowserView::UpdateZenModeReveal(bool reveal_top, bool reveal_side) {
+-  if (sidebar_chrome_transition_ && IsFullyHiddenSidebarStyleEnabled()) {
++  if (IsSidebarNavigationActive()) {
++    sidebar_navigation_pointer_reveal_ = reveal_side;
++  }
++  if (sidebar_chrome_transition_ && IsFullyHiddenSidebarStyleEnabled() &&
++      !IsSidebarNavigationActive()) {
+     return;
+   }
+   if (!IsChromeRevealModeEnabled()) {
+@@ -2513,7 +2714,7 @@ void BrowserView::UpdateZenModeReveal(bo
+ 
+   // Arc's fully hidden style has a zero-width sidebar. Its top edge remains
+   // the only transient reveal target; keep the collapse state untouched.
+-  if (!zen_mode_enabled_) {
++  if (!zen_mode_enabled_ && !IsSidebarNavigationActive()) {
+     reveal_side = false;
+   }
+ 
+@@ -2556,6 +2757,15 @@ void BrowserView::UpdateZenModeReveal(bo
+     }
+   }
+ 
++  if (IsSidebarNavigationActive()) {
++    UpdateSidebarNavigationReveal();
++    reveal_side = reveal_side || sidebar_navigation_reveal_lock_ ||
++                  sidebar_navigation_external_reveal_count_ > 0 ||
++                  omnibox_focused || HasOpenBubbleFromTopContainer() ||
++                  toolbar_->IsSidebarNavigationMenuShowing();
++    reveal_top = false;
++  }
++
+   if (reveal_top) {
+     if (!zen_top_chrome_animation_.IsShowing()) {
+       zen_top_chrome_animation_.Show();
+@@ -2677,7 +2887,9 @@ bool BrowserView::HasOpenBubbleFromTopCo
+   }
+   for (views::Widget* widget :
+        views::Widget::GetAllOwnedWidgets(GetWidget()->GetNativeView())) {
+-    if (IsOpenBubbleAnchoredInViewSubtree(widget, top_container_)) {
++    if (IsOpenBubbleAnchoredInViewSubtree(widget, top_container_) ||
++        (IsSidebarNavigationActive() &&
++         IsOpenBubbleAnchoredInViewSubtree(widget, toolbar_))) {
+       return true;
+     }
+   }
+@@ -3665,10 +3877,26 @@ void BrowserView::SetFocusToLocationBar(
+     return;
+   }
+ 
++  if (IsSidebarNavigationActive()) {
++    if (!sidebar_navigation_reveal_lock_) {
++      sidebar_navigation_reveal_lock_ =
++          vertical_tab_strip_region_view_->GetExpandOnHoverLock(
++              ExpandOnHoverLockType::kKeepExpanded);
++    }
++    if (IsVerticalTabStripCollapsed()) {
++      BrowserAnimationController::From(browser_)->Reset(
++          TabStripAnimations::kVerticalTabStrip,
++          TabStripAnimations::kExpandOnHover);
++    }
++    zen_side_chrome_animation_.Reset(1.f);
++    InvalidateLayout();
++    GetWidget()->GetRootView()->DeprecatedLayoutImmediately();
++  }
++
+   // Reveal hidden chrome before focusing the omnibox. A synchronous layout
+   // is required so the toolbar
+   // has non-zero height before FocusLocation runs.
+-  if (IsChromeRevealModeEnabled()) {
++  if (IsChromeRevealModeEnabled() && !IsSidebarNavigationActive()) {
+     RevealZenModeTopChromeImmediately();
+   }
+ 
+@@ -4343,6 +4571,10 @@ bool BrowserView::IsToolbarVisible() con
+ 
+   if (browser_->is_type_normal() && !IsFullscreen() &&
+       !toolbar_temporarily_revealed_for_location_focus_ &&
++      !(IsSidebarNavigationActive() &&
++        (sidebar_navigation_external_reveal_count_ > 0 ||
++         toolbar_->IsSidebarNavigationMenuShowing() ||
++         HasOpenBubbleFromTopContainer())) &&
+       !GetProfile()->GetPrefs()->GetBoolean(arcium::kShowToolbarPref)) {
+     return false;
+   }
+@@ -6164,6 +6396,8 @@ void BrowserView::Layout(PassKey) {
+     return;
+   }
+ 
++  UpdateSidebarNavigationPlacement();
++
+   // Allow only a single layout operation once top controls sliding begins.
+   if (top_controls_slide_controller_ &&
+       top_controls_slide_controller_->IsEnabled() &&
+@@ -6518,7 +6752,7 @@ void BrowserView::OnThemeChanged() {
+   // Reapply the current hidden-mode state.
+   if (IsChromeRevealModeEnabled()) {
+     if (auto* frame_view = GetFrameView()) {
+-      frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
++      frame_view->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
+     }
+   }
+ }
+@@ -7462,10 +7696,11 @@ void BrowserView::OnDidChangeFocus(View*
+       focused_now && toolbar_ && toolbar_->location_bar_view() &&
+       toolbar_->location_bar_view()->Contains(focused_now);
+   if (toolbar_temporarily_revealed_for_location_focus_ &&
+-      !focus_remains_in_location_bar) {
++      !IsSidebarNavigationActive() && !focus_remains_in_location_bar) {
+     toolbar_temporarily_revealed_for_location_focus_ = false;
+     InvalidateLayout();
+   }
++  UpdateSidebarNavigationReveal();
+   if (IsChromeRevealModeEnabled()) {
+     UpdateZenModeRevealFromCursor();
+   }
+@@ -7503,12 +7738,12 @@ void BrowserView::AnimationProgressed(co
+       multi_contents_view_->MaybeUpdateBorderForZenReveal();
+     }
+     InvalidateLayout();
+-    if (top_chrome_animation) {
++    if (top_chrome_animation || IsSidebarNavigationActive()) {
+       if (auto* frame_view = GetFrameView()) {
+         // Fade caption buttons with the toolbar.  The toolbar still reserves
+         // their space via exclusion areas since the buttons remain visible to
+         // the layout system (only their rendering opacity is changed).
+-        frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
++        frame_view->SetCaptionButtonsOpacity(GetCaptionChromeRevealRatio());
+       }
+       UpdateZenModeEventMonitor();
+     }
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -86,6 +86,7 @@ class BrowserViewLayout;
+ class ContentsContainerView;
+ class ContentsLayoutManager;
+ struct DropData;
++class ExpandOnHoverLock;
+ class ExclusiveAccessBubbleViews;
+ class ExclusiveAccessBubbleViewsContext;
+ class HeliumLayoutStateController;
+@@ -445,6 +446,13 @@ class BrowserView : public BrowserWindow
+   bool IsZenModeEnabledForLayout() const;
+   float GetTopChromeRevealRatio() const;
+   float GetSideChromeRevealRatio() const;
++  // Placement is independent of toolbar visibility and saved collapse state.
++  bool IsSidebarNavigationAvailable() const;
++  bool IsSidebarNavigationActive() const;
++  float GetCaptionChromeRevealRatio() const;
++  void UpdateSidebarNavigationReveal();
++  // Holds a transient expanded header without changing the saved collapse.
++  std::unique_ptr<ExpandOnHoverLock> AcquireSidebarNavigationRevealLock();
+   // Returns true while the fully hidden sidebar or its top reveal is moving.
+   bool IsFullyHiddenSidebarStyleEnabled() const;
+   bool IsCollapsedSidebarRevealAnimationActive() const;
+@@ -975,6 +983,7 @@ class BrowserView : public BrowserWindow
+   void OnZenModeTopChromePinnedPrefChanged();
+   void OnCollapsedSidebarStylePrefChanged();
+   void OnToolbarVisibilityPrefChanged();
++  void UpdateSidebarNavigationPlacement();
+   void UpdateCollapsedSidebarHiddenState(bool force_reveal_reset = false);
+   void FinishCollapsedSidebarAnimation();
+   void UpdateZenModeState();
+@@ -1480,6 +1489,9 @@ class BrowserView : public BrowserWindow
+   bool unframed_mode_enabled_ = false;
+   bool window_management_permission_granted_ = false;
+   bool toolbar_temporarily_revealed_for_location_focus_ = false;
++  std::unique_ptr<ExpandOnHoverLock> sidebar_navigation_reveal_lock_;
++  int sidebar_navigation_external_reveal_count_ = 0;
++  bool sidebar_navigation_pointer_reveal_ = false;
+ #if BUILDFLAG(IS_WIN)
+   class PipExclusionObserverImpl;
+   std::unique_ptr<PipExclusionObserverImpl> pip_exclusion_observer_;
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -25,6 +25,7 @@
+ #include "chrome/browser/ui/views/animations/side_panel_animations.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/custom_corners.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.h"
+@@ -42,6 +43,7 @@
+ #include "chrome/browser/ui/views/tabs/projects/layout_constants.h"
+ #include "chrome/browser/ui/views/tabs/projects/projects_panel_utils.h"
+ #include "chrome/browser/ui/views/tabs/projects/projects_panel_view.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "ui/base/ui_base_features.h"
+ #include "ui/gfx/geometry/insets.h"
+ #include "ui/gfx/geometry/outsets.h"
+@@ -58,6 +60,11 @@
+ 
+ namespace {
+ 
++bool IsSidebarNavigationMode(const BrowserViewLayoutViews& layout_views) {
++  return static_cast<ToolbarView*>(layout_views.toolbar.get())
++      ->IsSidebarNavigationMode();
++}
++
+ // Minimum area next to caption buttons to use as a grab handle.
+ constexpr int kVerticalTabsGrabHandleSize = 40;
+ 
+@@ -444,7 +451,10 @@ BrowserViewTabbedLayoutImpl::CalculateHo
+   layout.min_content_width = kContentsContainerMinimumWidth;
+ 
+   // Get information about the vertical tabstrip, if present.
+-  const int toolbar_minimum_width = views().toolbar->GetMinimumSize().width();
++  const int toolbar_minimum_width =
++      IsSidebarNavigationMode(views())
++          ? 0
++          : views().toolbar->GetMinimumSize().width();
+   int min_vertical_tab_strip_width = 0;
+   int preferred_vertical_tab_strip_width = 0;
+   if (layout_data_->tab_strip_type == TabStripType::kVertical) {
+@@ -491,7 +501,13 @@ BrowserViewTabbedLayoutImpl::CalculateHo
+           std::max(min_vertical_tab_strip_width,
+                    std::min(remainder, preferred_vertical_tab_strip_width));
+     }
+-    if (delegate().IsCollapsedSidebarFullyHiddenForLayout()) {
++    if (delegate().IsCollapsedSidebarFullyHiddenForLayout() ||
++        (IsSidebarNavigationMode(views()) &&
++         views()
++             .vertical_tab_strip_region_view
++             ->IsSidebarNavigationTemporarilyExpanded() &&
++         static_cast<BrowserView*>(views().browser_view.get())
++             ->IsFullyHiddenSidebarStyleEnabled())) {
+       min_vertical_tab_strip_width = 0;
+       preferred_vertical_tab_strip_width = 0;
+     }
+@@ -673,9 +689,12 @@ int BrowserViewTabbedLayoutImpl::GetMini
+ 
+ gfx::Size BrowserViewTabbedLayoutImpl::GetMinimumMainAreaSize(
+     const BrowserLayoutParams& params) const {
+-  gfx::Size toolbar_size = views().toolbar->GetMinimumSize();
++  gfx::Size toolbar_size = IsSidebarNavigationMode(views())
++                               ? gfx::Size()
++                               : views().toolbar->GetMinimumSize();
+   const auto tab_strip_type = GetTabStripType();
+-  if (tab_strip_type == TabStripType::kVertical) {
++  if (tab_strip_type == TabStripType::kVertical &&
++      !IsSidebarNavigationMode(views())) {
+     toolbar_size.Enlarge(GetExclusionWidth(params), 0);
+   }
+   const gfx::Size bookmark_bar_size =
+@@ -765,6 +784,9 @@ BrowserViewTabbedLayoutImpl::GetVertical
+ 
+ int BrowserViewTabbedLayoutImpl::GetCollapsedVerticalTabStripRelativeTop()
+     const {
++  if (IsSidebarNavigationMode(views())) {
++    return 0;
++  }
+   // When the top container isn't in the browser view, the exclusion won't apply
+   // and the tabstrip goes all the way to the top.
+   if (!IsParentedTo(views().top_container, views().browser_view)) {
+@@ -936,17 +958,31 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+       // Reveal a stable expanded layout from the window edge. Resizing the
+       // contents from zero makes Favorites change columns and tab labels pop
+       // between compact and expanded layouts during the same transition.
++      const bool sidebar_hover_reveal =
++          IsSidebarNavigationMode(views()) &&
++          views()
++              .vertical_tab_strip_region_view
++              ->IsSidebarNavigationTemporarilyExpanded() &&
++          vertical_tab_strip_animation.expand_on_hover > 0.0;
+       const int sidebar_layout_width =
+-          slide_full_sidebar
++          sidebar_hover_reveal
++              ? std::max(vertical_tab_strip_width,
++                         base::ClampRound(
++                             views()
++                                 .vertical_tab_strip_region_view
++                                 ->uncollapsed_width() *
++                             vertical_tab_strip_animation.expand_on_hover))
++          : slide_full_sidebar
+               ? horizontal_layout.vertical_tab_strip_layout_width
+               : vertical_tab_strip_width;
+       const int vertical_tab_strip_x =
+           vertical_right_aligned
+               ? params.visual_client_area.right() -
+                     zen.vertical_tab_strip_padding - vertical_tab_strip_width
+-              : params.visual_client_area.x() +
+-                    zen.vertical_tab_strip_padding -
+-                    (sidebar_layout_width - vertical_tab_strip_width);
++              : params.visual_client_area.x() + zen.vertical_tab_strip_padding -
++                    (sidebar_hover_reveal
++                         ? 0
++                         : sidebar_layout_width - vertical_tab_strip_width);
+ 
+       int top_offset = vertical_tab_strip_animation.top_offset;
+       if (zen.enabled) {
+@@ -976,7 +1012,7 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+ 
+       // Content follows the exposed width, not the off-window portion of the
+       // sliding sidebar.
+-      if (!slide_full_sidebar) {
++      if (!slide_full_sidebar && !sidebar_hover_reveal) {
+         vertical_tab_strip_width = vertical_tab_strip_bounds.width();
+       }
+       if (!zen.floating_vertical_tab_strip) {
+@@ -1509,6 +1545,15 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+           side_exclusion_width - side_distance_from_client_edge - 10 > 0;
+     }
+ 
++    if (IsSidebarNavigationMode(views())) {
++      const auto exclusion =
++          browser_params.leading_exclusion.ContentWithPadding();
++      views()
++          .vertical_tab_strip_region_view
++          ->SetSidebarNavigationExclusionForLayout(
++              base::ClampCeil(exclusion.width()),
++              base::ClampCeil(exclusion.height()));
++    }
+     views().vertical_tab_strip_region_view->SetHasLeadingExclusionForLayout(
+         has_leading_exclusion);
+     views().vertical_tab_strip_region_view->SetZenModeFloatingStyleForLayout(
+@@ -1597,7 +1642,8 @@ gfx::Rect BrowserViewTabbedLayoutImpl::C
+   }
+ 
+   // Lay out the bookmarks bar if one is present.
+-  const bool bookmarks_visible = delegate().IsBookmarkBarVisible();
++  const bool bookmarks_visible =
++      delegate().IsBookmarkBarVisible() && !IsSidebarNavigationMode(views());
+   if (IsParentedTo(views().bookmark_bar, views().top_container)) {
+     const gfx::Rect bookmarks_bounds(
+         params.visual_client_area.x(), params.visual_client_area.y(),
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -55,6 +55,7 @@
+ #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_new_tab_button.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/tabs/public/tab_group.h"
+@@ -409,6 +410,15 @@ void VerticalTabStripRegionView::OnWidge
+ }
+ 
+ void VerticalTabStripRegionView::Layout(PassKey) {
++  if (browser_view_->IsSidebarNavigationActive()) {
++    auto* toolbar = browser_view_->toolbar();
++    const bool expanded = !state_controller_->IsCollapsed() ||
++                          IsSidebarNavigationTemporarilyExpanded();
++    toolbar->SetVisible(expanded && browser_view_->IsToolbarVisible());
++    toolbar->SetSidebarNavigationExclusion(
++        sidebar_navigation_exclusion_width_,
++        sidebar_navigation_exclusion_height_);
++  }
+   LayoutSuperclass<views::AccessiblePaneView>(this);
+ 
+   // Manually position the resize area as it overlaps views handled by the flex
+@@ -436,6 +446,20 @@ views::View* VerticalTabStripRegionView:
+   return bottom_button_container_;
+ }
+ 
++bool VerticalTabStripRegionView::IsSidebarNavigationTemporarilyExpanded()
++    const {
++  const auto* controller =
++      BrowserAnimationController::From(browser_view_->browser());
++  const bool collapsing_hover =
++      controller->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip) ==
++          TabStripAnimations::kCollapseOnHover &&
++      *controller->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
++                                   TabStripAnimations::kTabStripHoverWidth) >
++          0.0;
++  return browser_view_->IsSidebarNavigationActive() &&
++         (is_expanded_on_hover_ || collapsing_hover);
++}
++
+ gfx::Size VerticalTabStripRegionView::GetMinimumSize() const {
+   auto min_size = BaseTabStripRegionView::GetMinimumSize();
+   const auto* controller =
+@@ -930,11 +954,24 @@ void VerticalTabStripRegionView::OnTheme
+   PreferredSizeChanged();
+ }
+ 
++void VerticalTabStripRegionView::SetSidebarNavigationExclusionForLayout(
++    int width,
++    int height) {
++  if (sidebar_navigation_exclusion_width_ == width &&
++      sidebar_navigation_exclusion_height_ == height) {
++    return;
++  }
++  sidebar_navigation_exclusion_width_ = width;
++  sidebar_navigation_exclusion_height_ = height;
++  InvalidateLayout();
++}
++
+ void VerticalTabStripRegionView::UpdateInteriorMargin() {
+   const int padding = arcium::GetChromeLayoutConstant(
+       this, LayoutConstant::kVerticalTabStripUncollapsedVerticalPadding);
+   int top_padding = 0;
+-  if (browser_view_ && browser_view_->IsZenModeEnabledForLayout()) {
++  if (browser_view_ && browser_view_->IsZenModeEnabledForLayout() &&
++      !browser_view_->IsSidebarNavigationActive()) {
+     const float top_chrome_ratio = browser_view_->GetTopChromeRevealRatio();
+     const bool top_chrome_visible_or_pinned =
+         top_chrome_ratio > 0.0f || browser_view_->IsZenModeTopChromePinned();
+@@ -1298,7 +1335,9 @@ void VerticalTabStripRegionView::OnOmnib
+   if (is_open) {
+     if (!omnibox_open_lock_) {
+       omnibox_open_lock_ =
+-          GetExpandOnHoverLock(ExpandOnHoverLockType::kForceCollapse);
++          GetExpandOnHoverLock(browser_view_->IsSidebarNavigationActive()
++                                   ? ExpandOnHoverLockType::kKeepExpanded
++                                   : ExpandOnHoverLockType::kForceCollapse);
+       UpdateExpandOnHoverState();
+     }
+   } else {
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -97,6 +97,7 @@ class VerticalTabStripRegionView final
+   void SetZenModeFloatingStyleForLayout(bool floating);
+ 
+   void UpdateInteriorMargin();
++  void SetSidebarNavigationExclusionForLayout(int width, int height);
+ 
+   // views::View:
+   void AddedToWidget() override;
+@@ -149,6 +150,7 @@ class VerticalTabStripRegionView final
+   }
+ 
+   bool is_expanded_on_hover() const { return is_expanded_on_hover_; }
++  bool IsSidebarNavigationTemporarilyExpanded() const;
+   ShadowFrameView* shadow_frame() { return shadow_frame_; }
+   int uncollapsed_width() const;
+ 
+@@ -246,6 +248,8 @@ class VerticalTabStripRegionView final
+ 
+   // Whether a leading exclusion exists due to window controls.
+   bool has_leading_exclusion_ = false;
++  int sidebar_navigation_exclusion_width_ = 0;
++  int sidebar_navigation_exclusion_height_ = 0;
+   bool zen_mode_floating_style_ = false;
+ 
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -868,6 +868,15 @@ gfx::Size LocationBarView::CalculatePref
+   return gfx::Size(preferred_width, height);
+ }
+ 
++void LocationBarView::SetSidebarNavigationMode(bool sidebar) {
++  if (auto* star =
++          page_action_container_->GetPageActionView(kActionBookmarkThisTab)) {
++    star->SetSuppressedForSidebarNavigation(sidebar);
++  }
++  Update(nullptr);
++  InvalidateLayout();
++}
++
+ void LocationBarView::Layout(PassKey) {
+   if (!IsInitialized()) {
+     return;
+@@ -1428,6 +1437,13 @@ bool LocationBarView::ShouldHidePageActi
+ 
+ bool LocationBarView::ShouldHidePageActionIcon(
+     const PageActionIconView* icon_view) const {
++  BrowserView* owner =
++      browser_ ? BrowserView::GetBrowserViewForBrowser(browser_) : nullptr;
++  if (owner && owner->IsSidebarNavigationActive() &&
++      icon_view->action_id().value_or(kChromeActionsEnd) ==
++          kActionBookmarkThisTab) {
++    return true;
++  }
+   if (ShouldHidePageActionIcons()) {
+     return true;
+   }
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -198,6 +198,8 @@ class LocationBarView
+   // in the toolbar in full keyboard accessibility mode.
+   virtual void SelectAll();
+ 
++  void SetSidebarNavigationMode(bool sidebar);
++
+   LocationIconView* location_icon_view() { return location_icon_view_; }
+ 
+   SelectedKeywordView* selected_keyword_view() {
+--- a/chrome/browser/ui/views/page_action/page_action_view.cc
++++ b/chrome/browser/ui/views/page_action/page_action_view.cc
+@@ -322,7 +322,13 @@ std::u16string PageActionView::GetAccess
+ }
+ 
+ void PageActionView::SetVisible(bool visible) {
+-  IconLabelBubbleView::SetVisible(visible);
++  requested_visibility_ = visible;
++  IconLabelBubbleView::SetVisible(visible && !sidebar_navigation_suppressed_);
++}
++
++void PageActionView::SetSuppressedForSidebarNavigation(bool suppressed) {
++  sidebar_navigation_suppressed_ = suppressed;
++  IconLabelBubbleView::SetVisible(requested_visibility_ && !suppressed);
+ }
+ 
+ IconLabelBubbleView* PageActionView::GetIconLabelBubbleViewNotMigrated() {
+--- a/chrome/browser/ui/views/page_action/page_action_view.h
++++ b/chrome/browser/ui/views/page_action/page_action_view.h
+@@ -59,6 +59,7 @@ class PageActionView : public IconLabelB
+   std::u16string GetTooltipText() const override;
+   std::u16string GetAccessibleName() const override;
+   void SetVisible(bool visible) override;
++  void SetSuppressedForSidebarNavigation(bool suppressed);
+   IconLabelBubbleView* GetIconLabelBubbleViewNotMigrated() override;
+ 
+   // Sets the controller for this view, and attaches this view in the
+@@ -157,6 +158,8 @@ class PageActionView : public IconLabelB
+   static PageActionPassKey PassKey() { return PageActionPassKey(); }
+ 
+  private:
++  bool sidebar_navigation_suppressed_ = false;
++  bool requested_visibility_ = false;
+   // The image associated with the `action_item_` size may be different from the
+   // size needed for the location bar page action icon. Therefore, we should to
+   // update the image size if needed.
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -55,6 +55,7 @@
+ #include "chrome/browser/ui/global_error/global_error_service.h"
+ #include "chrome/browser/ui/global_error/global_error_service_factory.h"
+ #include "chrome/browser/ui/global_media_controls/media_toolbar_button_controller.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+ #include "chrome/browser/ui/helium/helium_layout_state_controller.h"
+ #include "chrome/browser/ui/intent_picker_tab_helper.h"
+ #include "chrome/browser/ui/layout_constants.h"
+@@ -153,11 +154,13 @@
+ #include "ui/gfx/image/canvas_image_source.h"
+ #include "ui/gfx/paint_vector_icon.h"
+ #include "ui/gfx/scoped_canvas.h"
++#include "ui/menus/simple_menu_model.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/actions/action_view_controller.h"
+ #include "ui/views/background.h"
+ #include "ui/views/cascading_property.h"
+ #include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/button/menu_button_controller.h"
+ #include "ui/views/controls/separator.h"
+ #include "ui/views/layout/fill_layout.h"
+ #include "ui/views/layout/flex_layout.h"
+@@ -184,6 +187,77 @@ using content::WebContents;
+ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kActionItemUnderlineIndicatorKey, false)
+ 
+ namespace {
++// Uses the browser's commands for controls that cannot fit beside captions.
++class SidebarNavigationOverflowButton : public ToolbarButton,
++                                        public ui::SimpleMenuModel::Delegate {
++  METADATA_HEADER(SidebarNavigationOverflowButton, ToolbarButton)
++
++ public:
++  explicit SidebarNavigationOverflowButton(Browser* browser)
++      : ToolbarButton(base::BindRepeating(
++                          &SidebarNavigationOverflowButton::ShowNavigationMenu,
++                          base::Unretained(this)),
++                      std::make_unique<ui::SimpleMenuModel>(this),
++                      nullptr,
++                      /*trigger_menu_on_long_press=*/false),
++        browser_(browser) {
++    SetButtonController(std::make_unique<views::MenuButtonController>(
++        this,
++        base::BindRepeating(
++            &SidebarNavigationOverflowButton::ShowNavigationMenu,
++            base::Unretained(this)),
++        std::make_unique<views::Button::DefaultButtonControllerDelegate>(
++            this)));
++    SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_OVERFLOW_BUTTON));
++    SetVectorIcon(kMoreVertIcon);
++  }
++  void SetCommands(const std::vector<std::pair<int, int>>& commands) {
++    if (IsMenuShowing()) {
++      return;
++    }
++    NavigationModel().Clear();
++    for (const auto& [command, label] : commands) {
++      NavigationModel().AddItem(command, l10n_util::GetStringUTF16(label));
++    }
++  }
++  bool IsCommandIdEnabled(int command_id) const override {
++    return chrome::IsCommandEnabled(browser_, ResolveCommand(command_id));
++  }
++  void ExecuteCommand(int command_id, int event_flags) override {
++    chrome::ExecuteCommand(browser_, ResolveCommand(command_id));
++  }
++
++ private:
++  int ResolveCommand(int command) const {
++    if (command == IDC_RELOAD &&
++        BrowserView::GetBrowserViewForBrowser(browser_)
++                ->toolbar()
++                ->reload_button()
++                ->GetVisibleMode() == ReloadControl::Mode::kStop) {
++      return IDC_STOP;
++    }
++    return command;
++  }
++  void ShowNavigationMenu(const ui::Event& event) {
++    for (size_t index = 0; index < NavigationModel().GetItemCount(); ++index) {
++      if (NavigationModel().GetCommandIdAt(index) == IDC_RELOAD) {
++        NavigationModel().SetLabel(
++            index,
++            l10n_util::GetStringUTF16(ResolveCommand(IDC_RELOAD) == IDC_STOP
++                                          ? IDS_TOOLTIP_STOP
++                                          : IDS_ACCNAME_RELOAD));
++      }
++    }
++    ShowMenuForModel(ui::mojom::MenuSourceType::kMouse, &NavigationModel());
++  }
++  const raw_ptr<Browser> browser_;
++  ui::SimpleMenuModel& NavigationModel() {
++    return *static_cast<ui::SimpleMenuModel*>(menu_model());
++  }
++};
++
++BEGIN_METADATA(SidebarNavigationOverflowButton)
++END_METADATA
+ 
+ constexpr int kPreferredCompactWidth = 350;
+ constexpr int kToolbarFlexOrderOffset = 1000;
+@@ -705,6 +779,14 @@ void ToolbarView::Init() {
+     avatar_->SetVisible(show_avatar_toolbar_button);
+   }
+ 
++  sidebar_suppressed_controls_ = AddChildView(std::make_unique<views::View>());
++  sidebar_suppressed_controls_->SetVisible(false);
++  sidebar_suppressed_controls_->SetProperty(views::kViewIgnoredByLayoutKey,
++                                            true);
++  sidebar_navigation_overflow_ =
++      AddChildView(std::make_unique<SidebarNavigationOverflowButton>(browser_));
++  sidebar_navigation_overflow_->SetVisible(false);
++
+   overflow_button_ = AddChildView(std::make_unique<OverflowButton>());
+   overflow_button_->SetVisible(false);
+ 
+@@ -1608,6 +1690,9 @@ bool ToolbarView::GetAcceleratorForComma
+ 
+ gfx::Size ToolbarView::CalculatePreferredSize(
+     const views::SizeBounds& available_size) const {
++  if (sidebar_navigation_mode_) {
++    return GetSidebarNavigationSize();
++  }
+   gfx::Size size;
+   switch (display_mode_) {
+     case DisplayMode::kCustomTab:
+@@ -1636,6 +1721,10 @@ gfx::Size ToolbarView::CalculatePreferre
+ }
+ 
+ gfx::Size ToolbarView::GetMinimumSize() const {
++  if (sidebar_navigation_mode_) {
++    return {arcium::ScaleChromeDip(this, 160),
++            GetSidebarNavigationSize().height()};
++  }
+   gfx::Size size;
+   switch (display_mode_) {
+     case DisplayMode::kCustomTab:
+@@ -1677,6 +1766,11 @@ void ToolbarView::Layout(PassKey) {
+     return;
+   }
+ 
++  if (sidebar_navigation_mode_) {
++    LayoutSidebarNavigation();
++    return;
++  }
++
+   if (display_mode_ == DisplayMode::kCustomTab) {
+     custom_tab_bar_->SetBounds(0, 0, width(),
+                                custom_tab_bar_->GetPreferredSize().height());
+@@ -1855,6 +1949,215 @@ void ToolbarView::InitLayout() {
+   LayoutCommon();
+ }
+ 
++void ToolbarView::SetSidebarNavigationMode(bool sidebar) {
++  if (sidebar_navigation_mode_ != sidebar) {
++    sidebar_navigation_mode_ = sidebar;
++    if (sidebar) {
++      sidebar_navigation_owned_layer_ = !layer();
++      if (sidebar_navigation_owned_layer_) {
++        SetPaintToLayer();
++        layer()->SetFillsBoundsOpaquely(false);
++      }
++      sidebar_navigation_previous_clip_ = layer()->GetMasksToBounds();
++      layer()->SetMasksToBounds(true);
++      // A hidden parent suppresses rendering without changing model-owned
++      // visibility. Live media, download and profile state survives a move.
++      sidebar_saved_order_.clear();
++      const auto original_children = children();
++      for (size_t index = 0; index < original_children.size(); ++index) {
++        views::View* child = original_children[index];
++        if (child == sidebar_suppressed_controls_ || child == back_ ||
++            child == forward_ || child == reload_ || child == home_ ||
++            child == vertical_tabs_collapse_button_ ||
++            child == app_menu_button_ || child == location_bar_view_ ||
++            child == extensions_container_ ||
++            child == sidebar_navigation_overflow_) {
++          continue;
++        }
++        sidebar_saved_order_.emplace_back(child, index);
++        sidebar_suppressed_controls_->AddChildView(RemoveChildViewT(child));
++      }
++    } else {
++      if (sidebar_navigation_app_menu_open_ && app_menu_button_) {
++        app_menu_button_->CloseMenu();
++      }
++      sidebar_navigation_app_menu_open_ = false;
++      if (layer()) {
++        layer()->SetMasksToBounds(sidebar_navigation_previous_clip_);
++        if (sidebar_navigation_owned_layer_) {
++          DestroyLayer();
++        }
++      }
++      for (const auto& [child, index] : sidebar_saved_order_) {
++        AddChildViewAt(
++            sidebar_suppressed_controls_->RemoveChildViewT(child.get()),
++            std::min(index, children().size()));
++      }
++      sidebar_saved_order_.clear();
++      sidebar_navigation_overflow_->SetVisible(false);
++      OnShowBackButtonChanged();
++      OnShowForwardButtonChanged();
++      OnShowReloadButtonChanged();
++      OnShowHomeButtonChanged();
++      if (avatar_ && browser_->profile()->IsRegularProfile() &&
++          !base::CommandLine::ForCurrentProcess()->HasSwitch(
++              "show-avatar-button")) {
++        OnShowAvatarButtonChanged();
++      }
++      if (app_menu_button_) {
++        OnShowMenuButtonChanged();
++      }
++      UpdateToolbarLayout();
++    }
++    location_bar_view_->SetSidebarNavigationMode(sidebar);
++    PreferredSizeChanged();
++  }
++  if (extensions_container_) {
++    extensions_container_->SetSidebarMenuOnly(
++        sidebar, browser_->profile()->GetPrefs()->GetBoolean(
++                     arcium::kSidebarExtensionsDrawerEnabledPref));
++  }
++}
++
++bool ToolbarView::IsSidebarNavigationMenuShowing() const {
++  return (back_ && back_->IsMenuShowing()) ||
++         (forward_ && forward_->IsMenuShowing()) ||
++         (app_menu_button_ && app_menu_button_->IsMenuShowing()) ||
++         (sidebar_navigation_overflow_ &&
++          sidebar_navigation_overflow_->IsMenuShowing()) ||
++         (extensions_container_ &&
++          extensions_container_->IsExtensionsMenuShowing());
++}
++
++void ToolbarView::SetSidebarNavigationAppMenuOpen(bool open) {
++  if (sidebar_navigation_app_menu_open_ == open) {
++    return;
++  }
++  sidebar_navigation_app_menu_open_ = open;
++  InvalidateLayout();
++}
++
++void ToolbarView::SetSidebarNavigationExclusion(int width, int height) {
++  if (sidebar_navigation_exclusion_width_ == width &&
++      sidebar_navigation_exclusion_height_ == height) {
++    return;
++  }
++  sidebar_navigation_exclusion_width_ = width;
++  sidebar_navigation_exclusion_height_ = height;
++  PreferredSizeChanged();
++}
++
++gfx::Size ToolbarView::GetSidebarNavigationSize() const {
++  const int padding = arcium::ScaleChromeDip(this, 6);
++  const int gap = arcium::ScaleChromeDip(this, 4);
++  const int navigation_height = std::max(GetBackForwardButtonSize().height(),
++                                         sidebar_navigation_exclusion_height_);
++  return {arcium::ScaleChromeDip(this, 160),
++          padding * 2 + navigation_height + gap +
++              location_bar_->PreferredSize().height()};
++}
++
++void ToolbarView::LayoutSidebarNavigation() {
++  const int padding = arcium::ScaleChromeDip(this, 6);
++  const int gap = arcium::ScaleChromeDip(this, 4);
++  const int row_height = std::max(GetBackForwardButtonSize().height(),
++                                  sidebar_navigation_exclusion_height_);
++  for (views::View* child : children()) {
++    if (child != back_ && child != forward_ && child != reload_ &&
++        child != home_ && child != vertical_tabs_collapse_button_ &&
++        child != app_menu_button_ && child != location_bar_view_ &&
++        child != extensions_container_ &&
++        child != sidebar_navigation_overflow_) {
++      child->SetBoundsRect(gfx::Rect());
++    }
++  }
++  location_bar_view_->SetVisible(true);
++  UpdateVerticalTabsCollapseButton();
++  const int right = std::max(padding, width() - padding);
++  int x = std::min(right, padding + sidebar_navigation_exclusion_width_);
++  struct Control {
++    views::View* view;
++    bool shown;
++    int command;
++    int label;
++  };
++  std::vector<Control> controls = {
++      {back_, show_back_button_.GetValue(), IDC_BACK, IDS_ACCNAME_BACK},
++      {forward_, show_forward_button_.GetValue(), IDC_FORWARD,
++       IDS_ACCNAME_FORWARD},
++      {reload_, show_reload_button_.GetValue(), IDC_RELOAD, IDS_ACCNAME_RELOAD},
++      {home_, show_home_button_.GetValue(), IDC_HOME, IDS_TOOLTIP_HOME},
++      {vertical_tabs_collapse_button_,
++       show_vertical_tabs_collapse_button_.GetValue(),
++       IDC_TOGGLE_VERTICAL_TABS_COLLAPSE,
++       browser_view_->IsVerticalTabStripCollapsed()
++           ? IDS_EXPAND_VERTICAL_TABS
++           : IDS_COLLAPSE_VERTICAL_TABS},
++      {app_menu_button_, show_menu_button_.GetValue(), IDC_SHOW_APP_MENU,
++       IDS_APPMENU_TOOLTIP},
++  };
++  const int overflow_width =
++      sidebar_navigation_overflow_->GetPreferredSize().width();
++  int requested_width = 0;
++  for (const auto& control : controls) {
++    if (control.view && control.shown) {
++      requested_width += control.view->GetPreferredSize().width() + gap;
++    }
++  }
++  const bool overflow =
++      requested_width > right - x || sidebar_navigation_app_menu_open_;
++  const int controls_right =
++      overflow ? std::max(x, right - overflow_width - gap) : right;
++  std::vector<std::pair<int, int>> hidden_commands;
++  for (const auto& control : controls) {
++    if (!control.view) {
++      continue;
++    }
++    const auto preferred = control.view->GetPreferredSize();
++    const bool fits = control.shown && x + preferred.width() <= controls_right;
++    control.view->SetVisible(fits);
++    control.view->SetBoundsRect(
++        fits ? gfx::Rect(x, padding + (row_height - preferred.height()) / 2,
++                         preferred.width(), preferred.height())
++             : gfx::Rect());
++    if (fits) {
++      x += preferred.width() + gap;
++    } else if (control.shown) {
++      hidden_commands.emplace_back(control.command, control.label);
++    }
++  }
++  static_cast<SidebarNavigationOverflowButton*>(
++      sidebar_navigation_overflow_.get())
++      ->SetCommands(hidden_commands);
++  const bool show_overflow =
++      !hidden_commands.empty() || sidebar_navigation_app_menu_open_;
++  sidebar_navigation_overflow_->SetVisible(show_overflow);
++  sidebar_navigation_overflow_->SetBoundsRect(
++      !show_overflow
++          ? gfx::Rect()
++          : gfx::Rect(std::max(padding, right - overflow_width), padding,
++                      std::min(overflow_width, right - padding), row_height));
++  const int address_y = padding + row_height + gap;
++  int address_right = right;
++  if (extensions_container_ && extensions_container_->GetVisible()) {
++    const int extension_width = extensions_container_->GetExtensionsButton()
++                                    ->GetPreferredSize()
++                                    .width();
++    extensions_container_->SetBounds(std::max(padding, right - extension_width),
++                                     address_y, extension_width,
++                                     location_bar_->PreferredSize().height());
++    address_right = std::max(padding, right - extension_width - gap);
++  }
++  location_bar_view_->SetBounds(padding, address_y,
++                                std::max(0, address_right - padding),
++                                location_bar_->PreferredSize().height());
++  for (views::View* child : children()) {
++    if (child->GetVisible()) {
++      child->DeprecatedLayoutImmediately();
++    }
++  }
++}
++
+ void ToolbarView::LayoutCommon() {
+   DCHECK(display_mode_ == DisplayMode::kNormal);
+ 
+@@ -2082,7 +2385,7 @@ void ToolbarView::UpdateVerticalTabsColl
+                         !browser_view_->IsZenModeSideChromePinned();
+   const bool should_show = controller && IsVerticalLayout() &&
+                            show_vertical_tabs_collapse_button_.GetValue() &&
+-                           !zen_hide;
++                           (!zen_hide || sidebar_navigation_mode_);
+   vertical_tabs_collapse_button_->SetVisible(should_show);
+ 
+   if (!should_show) {
+@@ -2371,11 +2674,16 @@ void ToolbarView::OnShowReloadButtonChan
+ }
+ 
+ void ToolbarView::OnShowAvatarButtonChanged() {
+-  avatar_->SetVisible(show_avatar_button_.GetValue());
++  avatar_->SetVisible(!sidebar_navigation_mode_ &&
++                      show_avatar_button_.GetValue());
+ }
+ 
+ void ToolbarView::OnShowExtensionsButtonChanged() {
+-  extensions_container_->SetVisible(show_extensions_button_.GetValue());
++  if (sidebar_navigation_mode_) {
++    extensions_container_->UpdateContainerVisibility();
++  } else {
++    extensions_container_->SetVisible(show_extensions_button_.GetValue());
++  }
+ }
+ 
+ void ToolbarView::OnShowMenuButtonChanged() {
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -7,6 +7,7 @@
+ 
+ #include <memory>
+ #include <optional>
++#include <utility>
+ #include <vector>
+ 
+ #include "base/memory/raw_ptr.h"
+@@ -179,6 +180,16 @@ class ToolbarView : public views::Access
+   // while zen mode is revealing the toolbar.
+   void AbortToolbarContainerAnimationsForZenReveal();
+ 
++  bool initialized() const { return initialized_; }
++  void SetSidebarNavigationMode(bool sidebar);
++  bool IsSidebarNavigationMode() const { return sidebar_navigation_mode_; }
++  bool IsSidebarNavigationMenuShowing() const;
++  void SetSidebarNavigationAppMenuOpen(bool open);
++  ToolbarButton* sidebar_navigation_overflow_button() const {
++    return sidebar_navigation_overflow_;
++  }
++  void SetSidebarNavigationExclusion(int width, int height);
++
+   // Updates the vertical tabs collapse button visibility and icon.
+   void UpdateVerticalTabsCollapseButton();
+ 
+@@ -296,6 +307,8 @@ class ToolbarView : public views::Access
+ 
+   // Logic that must be done on initialization and then on layout.
+   void LayoutCommon();
++  void LayoutSidebarNavigation();
++  gfx::Size GetSidebarNavigationSize() const;
+ 
+   // Returns whether the Helium layout is Compact.
+   bool IsCompactLayout() const;
+@@ -518,6 +531,15 @@ class ToolbarView : public views::Access
+ 
+   // Whether this toolbar has been initialized.
+   bool initialized_ = false;
++  bool sidebar_navigation_mode_ = false;
++  bool sidebar_navigation_app_menu_open_ = false;
++  bool sidebar_navigation_owned_layer_ = false;
++  bool sidebar_navigation_previous_clip_ = false;
++  int sidebar_navigation_exclusion_width_ = 0;
++  int sidebar_navigation_exclusion_height_ = 0;
++  raw_ptr<ToolbarButton> sidebar_navigation_overflow_ = nullptr;
++  raw_ptr<views::View> sidebar_suppressed_controls_ = nullptr;
++  std::vector<std::pair<raw_ptr<views::View>, size_t>> sidebar_saved_order_;
+ 
+   // A chevron button that indicates some toolbar elements have overflowed
+   // due to small toolbar view width. Visibility controlled by
+--- a/chrome/browser/ui/views/frame/app_menu_button.cc
++++ b/chrome/browser/ui/views/frame/app_menu_button.cc
+@@ -94,7 +94,8 @@ void AppMenuButton::OnMenuClosed() {
+ 
+ void AppMenuButton::RunMenu(std::unique_ptr<AppMenuModel> menu_model,
+                             Browser* browser,
+-                            int run_flags) {
++                            int run_flags,
++                            views::MenuButtonController* anchor) {
+   // |menu_| must be reset before |menu_model_| is destroyed, as per the comment
+   // in the class declaration.
+   menu_.reset();
+@@ -106,20 +107,21 @@ void AppMenuButton::RunMenu(std::unique_
+       browser, menu_model_.get(), run_flags,
+       base::BindRepeating(&AppMenuButton::OnMenuClosed,
+                           weak_ptr_factory_.GetWeakPtr()));
+-  menu_->RunMenu(menu_button_controller_);
++  menu_->RunMenu(anchor ? anchor : menu_button_controller_.get());
+ 
+   observer_list_.Notify(&AppMenuButtonObserver::AppMenuShown);
+ }
+ 
+ void AppMenuButton::RunActionMenu(
+     BrowserWindowInterface* browser_window_interface,
+-    int run_flags) {
++    int run_flags,
++    views::MenuButtonController* anchor) {
+   action_menu_.reset();
+   action_menu_ = std::make_unique<ActionAppMenu>(
+       browser_window_interface,
+       base::BindRepeating(&AppMenuButton::OnMenuClosed,
+                           weak_ptr_factory_.GetWeakPtr()));
+-  action_menu_->RunMenu(menu_button_controller_);
++  action_menu_->RunMenu(anchor ? anchor : menu_button_controller_.get());
+ 
+   observer_list_.Notify(&AppMenuButtonObserver::AppMenuShown);
+ }
+--- a/chrome/browser/ui/views/frame/app_menu_button.h
++++ b/chrome/browser/ui/views/frame/app_menu_button.h
+@@ -72,11 +72,13 @@ class AppMenuButton : public ToolbarButt
+  protected:
+   void RunMenu(std::unique_ptr<AppMenuModel> menu_model,
+                Browser* browser,
+-               int run_flags);
++               int run_flags,
++               views::MenuButtonController* anchor = nullptr);
+   // Not using an AppMenuModel because the new Block Style menu hierarchy
+   // is managed by the Actions framework.
+   void RunActionMenu(BrowserWindowInterface* browser_window_interface,
+-                     int run_flags);
++                     int run_flags,
++                     views::MenuButtonController* anchor = nullptr);
+ 
+  private:
+   // App model and menu.
+--- a/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
++++ b/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
+@@ -15,6 +15,8 @@
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/toolbar/action_app_menu.h"
+ #include "chrome/browser/ui/views/toolbar/app_menu.h"
+@@ -41,6 +43,7 @@
+ #include "ui/views/animation/ink_drop_highlight.h"
+ #include "ui/views/animation/ink_drop_state.h"
+ #include "ui/views/controls/button/label_button_border.h"
++#include "ui/views/controls/button/menu_button_controller.h"
+ #include "ui/views/metrics.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
+@@ -96,9 +99,19 @@ void BrowserAppMenuButton::ShowMenu(int
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
+   Browser* browser = toolbar_view_->browser();
++  views::MenuButtonController* anchor = nullptr;
++  std::unique_ptr<ExpandOnHoverLock> sidebar_reveal_lock;
++  if (toolbar_view_->IsSidebarNavigationMode() && !GetVisible()) {
++    toolbar_view_->SetSidebarNavigationAppMenuOpen(true);
++    auto* view = BrowserView::GetBrowserViewForBrowser(browser);
++    sidebar_reveal_lock = view->AcquireSidebarNavigationRevealLock();
++    anchor = static_cast<views::MenuButtonController*>(
++        toolbar_view_->sidebar_navigation_overflow_button()
++            ->button_controller());
++  }
+ 
+   if (base::FeatureList::IsEnabled(features::kAppMenuGlowUp)) {
+-    RunActionMenu(browser, run_types);
++    RunActionMenu(browser, run_types, anchor);
+     return;
+   }
+ 
+@@ -110,10 +123,11 @@ void BrowserAppMenuButton::ShowMenu(int
+   RunMenu(std::make_unique<AppMenuModel>(
+               toolbar_view_, browser, toolbar_view_->app_menu_icon_controller(),
+               alert_item),
+-          browser, run_types);
++          browser, run_types, anchor);
+ }
+ 
+ void BrowserAppMenuButton::OnMenuClosed() {
++  toolbar_view_->SetSidebarNavigationAppMenuOpen(false);
+ #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+   if (features::IsToolbarGlowUpEnabled()) {
+     views::SingleAnimatedImageContainer::AnimationConfig config{
+--- a/chrome/browser/ui/views/toolbar/toolbar_button.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_button.cc
+@@ -25,8 +25,11 @@
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/chrome_typography.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "components/user_education/common/user_education_class_properties.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkRRect.h"
+@@ -61,6 +64,7 @@
+ #include "ui/views/style/typography.h"
+ #include "ui/views/style/typography_provider.h"
+ #include "ui/views/view_class_properties.h"
++#include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ 
+ namespace {
+@@ -663,6 +667,18 @@ void ToolbarButton::ShowMenuForModel(ui:
+     return;
+   }
+ 
++  // Navigation menus share the sidebar's transient expansion lifetime.
++  std::unique_ptr<ExpandOnHoverLock> sidebar_reveal_lock;
++  for (views::View* ancestor = parent(); ancestor;
++       ancestor = ancestor->parent()) {
++    if (auto* toolbar = views::AsViewClass<ToolbarView>(ancestor)) {
++      auto* browser_view =
++          BrowserView::GetBrowserViewForBrowser(toolbar->browser());
++      sidebar_reveal_lock = browser_view->AcquireSidebarNavigationRevealLock();
++      break;
++    }
++  }
++
+   // Create and run menu.
+   menu_model_adapter_ = std::make_unique<views::MenuModelAdapter>(
+       menu_model, base::BindRepeating(&ToolbarButton::OnMenuClosed,

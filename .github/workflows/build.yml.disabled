@@ -1,0 +1,85 @@
+name: Build macOS binaries of Arcium
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        required: false
+        description: "Runner image name"
+        default: "macos-latest"
+      do-release:
+        required: false
+        type: boolean
+        description: "Create a release after build is done"
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build macOS binaries of Arcium
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+      fail-fast: true
+      max-parallel: 2
+    uses: ./.github/workflows/building.yml
+    secrets: inherit
+    with:
+      arch: ${{ matrix.arch }}
+      os: ${{ inputs.runner }}
+
+  release:
+    needs: build
+    name: Release macOS binaries of Arcium
+    runs-on: ${{ inputs.runner }}
+    if: ${{ inputs.do-release }}
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Copy GitHub specific scripts to git-root folder
+        run: cp -va ./.github/scripts/ ./
+      - name: Disable Spotlight
+        run: sudo mdutil -a -i off
+      - name: Install coreutils
+        run: brew install coreutils
+      - name: Prepare release
+        id: bake
+        run: ./github_prepare_release.sh | tee -a github_actions_release.log
+      - name: Get built x86-64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.bake.outputs.x64_file_name }}
+      - name: Get built arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.bake.outputs.arm64_file_name }}
+      - name: List files
+        run: ls -la
+      - name: Generate release note
+        run: ./github_generate_release_note.sh | tee -a github_actions_release.log
+      - name: List deltas
+        id: list_deltas
+        run: |
+          {
+            echo 'deltas<<EOF'
+            find ./release_asset/ -name '*.delta'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Release Arcium binaries
+        uses: imputnet/action-gh-release@v2.5
+        with:
+          body_path: ./github_release_note.md
+          draft: false
+          prerelease: true
+          files: |
+            ./release_asset/${{ steps.bake.outputs.arm64_file_name }}
+            ./release_asset/${{ steps.bake.outputs.x64_file_name }}
+            ${{ steps.list_deltas.outputs.deltas }}
+          name: ${{ steps.bake.outputs.release_name }}
+          tag_name: ${{ steps.bake.outputs.release_tag_version }}
+          token: ${{ secrets.GITHUB_TOKEN }}

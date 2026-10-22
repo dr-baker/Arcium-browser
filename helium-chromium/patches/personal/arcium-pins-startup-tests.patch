@@ -1,0 +1,54 @@
+diff --git a/chrome/browser/ui/startup/startup_browser_creator_impl_unittest.cc b/chrome/browser/ui/startup/startup_browser_creator_impl_unittest.cc
+--- a/chrome/browser/ui/startup/startup_browser_creator_impl_unittest.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator_impl_unittest.cc
+@@ -305,8 +305,11 @@
+ }
+ 
+ // Preserve product-level Favorites and Pins after a crash while omitting
+-// ordinary startup tabs.
++// ordinary startup tabs, and fall back to the New Tab Page if that product
++// feature is disabled.
+ TEST_F(StartupBrowserCreatorImplTest, DetermineStartupTabs_Crash) {
++  base::test::ScopedFeatureList features;
++  features.InitAndEnableFeature(helium::kHeliumFavoritesAndPins);
+   FakeStartupTabProvider provider(kOnboardingTabs | kDistributionFirstRunTabs |
+                                   kResetTriggerTabs | kPinnedTabs |
+                                   kPreferencesTabs | kNewTabPageTabs |
+@@ -324,24 +327,20 @@
+ 
+   ASSERT_EQ(1U, output.tabs.size());
+   EXPECT_EQ("pinned", output.tabs[0].url.GetHost());
+-}
+-
+-TEST_F(StartupBrowserCreatorImplTest,
+-       DetermineStartupTabs_CrashWithoutFavoritesAndPins) {
+-  base::test::ScopedFeatureList features;
++  // With product-level Favorites and Pins disabled, crash recovery falls
++  // back to the New Tab Page.
++  features.Reset();
+   features.InitAndDisableFeature(helium::kHeliumFavoritesAndPins);
+-  FakeStartupTabProvider provider(kPinnedTabs | kPreferencesTabs);
+-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+-  Creator impl(base::FilePath(), command_line,
+-               chrome::startup::IsFirstRun::kYes);
+-
+-  auto output = impl.DetermineStartupTabs(
+-      provider, chrome::startup::IsProcessStartup::kYes,
+-      /*is_ephemeral_profile=*/false, /*is_post_crash_launch=*/true,
+-      /*promotional_tabs_enabled=*/true, /*whats_new_enabled=*/true);
+-
+-  ASSERT_EQ(1U, output.tabs.size());
+-  EXPECT_EQ(chrome::ChromeUINewTabURLAsGURL(), output.tabs[0].url);
++  {
++    FakeStartupTabProvider no_product_tabs(kPinnedTabs | kPreferencesTabs);
++    auto fallback = impl.DetermineStartupTabs(
++        no_product_tabs, chrome::startup::IsProcessStartup::kYes,
++        /*is_ephemeral_profile=*/false, /*is_post_crash_launch=*/true,
++        /*promotional_tabs_enabled=*/true, /*whats_new_enabled=*/true);
++
++    ASSERT_EQ(1U, fallback.tabs.size());
++    EXPECT_EQ(chrome::ChromeUINewTabURLAsGURL(), fallback.tabs[0].url);
++  }
+ }
+ 
+ // If initial preferences specify content, this should block all other

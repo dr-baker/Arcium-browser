@@ -1,0 +1,1232 @@
+[
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_MEMORY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium frees up memory from inactive tabs. This gives active tabs and other apps more computer resources and keeps Helium fast. Your inactive tabs automatically become active again when you go back to them.",
+    "message": "Helium ათავისუფლებს მეხსიერებას არააქტიური ჩანართებიდან. ეს აქტიურ ჩანართებსა და სხვა აპლიკაციებს მეტ კომპიუტერულ რესურსს აძლევს და Helium-ს სწრაფად ინარჩუნებს. თქვენი არააქტიური ჩანართები ავტომატურად ხდება ისევ აქტიური, როცა მათ უბრუნდებით."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_BATTERY_SAVER_MODE_SETTING_DESCRIPTION",
+    "source": "Helium conserves battery power by limiting background activity and visual effects, such as smooth scrolling and video frame rates.",
+    "message": "Helium ზოგავს ბატარეის ენერგიას ფონური აქტივობისა და ვიზუალური ეფექტების შეზღუდვით, როგორიცაა გლუვი გადახვევა და ვიდეოს კადრების სიხშირე."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_PRELOAD_TOGGLE_SUMMARY",
+    "source": "Helium preloads pages which makes browsing and searching faster.",
+    "message": "Helium წინასწარ ტვირთავს გვერდებს, რაც ინტერნეტის დათვალიერებასა და ძიებას აჩქარებს."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADD_DIALOG_HELP",
+    "source": "Sites you add will always stay active and memory won't be freed up from them.",
+    "message": "თქვენ მიერ დამატებული საიტები ყოველთვის დარჩება აქტიური და მათგან მეხსიერება არ გათავისუფლდება."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_DISCARD_RING_TREATMENT_ENABLED_DESCRIPTION_WITH_LEARN_LINK",
+    "source": "A dotted circle appears around site icons.",
+    "message": "საიტის ხატულების გარშემო წყვეტილი წრე ჩნდება."
+  },
+  {
+    "name": "IDS_SETTINGS_PERFORMANCE_INTERVENTION_NOTIFICATION_ENABLED_DESCRIPTION",
+    "source": "Get notifications that suggest ways to improve detected performance issues.",
+    "message": "მიიღეთ შეტყობინებები, რომლებიც აღმოჩენილი წარმადობის პრობლემების გაუმჯობესების გზებს გთავაზობთ."
+  },
+  {
+    "name": "IDS_IMPORTED_FROM_BOOKMARK_FOLDER",
+    "source": "Imported from <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>",
+    "message": "იმპორტირებულია <ph name=\"BROWSER_NAME\">$1<ex>Helium</ex></ph>-დან"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TITLE",
+    "source": "Import profile still in use",
+    "message": "იმპორტის პროფილი ჯერ კიდევ გამოიყენება"
+  },
+  {
+    "name": "IDS_EXTENSIONS_IMPORTER_LOCK_TEXT",
+    "source": "To continue importing data, first close the browser you're importing from.",
+    "message": "მონაცემების იმპორტის გასაგრძელებლად, ჯერ დახურეთ ბრაუზერი, საიდანაც იმპორტს ახორციელებთ."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES",
+    "source": "Helium services",
+    "message": "Helium სერვისები"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_DESCRIPTION",
+    "source": "Manage what Helium services are allowed in your browser",
+    "message": "მართეთ რომელი Helium სერვისებია დაშვებული თქვენს ბრაუზერში"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_TITLE",
+    "source": "Updates to Helium services:",
+    "message": "Helium სერვისების განახლებები:"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_NOTICE_DESCRIPTION",
+    "source": "These changes are not active until you dismiss this notice.",
+    "message": "ეს ცვლილებები არ ამოქმედდება, სანამ ამ შეტყობინებას არ დახურავთ."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SCHEMA_IGNORE",
+    "source": "Don't notify me again",
+    "message": "აღარ შემატყობინოთ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Helium სერვისებთან დაკავშირების ნებართვა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will be able to connect to anonymous web services to provide additional functionality. When disabled, additional features will not work.",
+    "message": "ჩართვის შემთხვევაში, Helium შეძლებს ანონიმურ ვებ-სერვისებთან დაკავშირებას დამატებითი ფუნქციონალის უზრუნველსაყოფად. გამორთვის შემთხვევაში, დამატებითი ფუნქციები არ იმუშავებს."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE",
+    "source": "Use your own instance of Helium services",
+    "message": "გამოიყენეთ Helium სერვისების საკუთარი ინსტანცია"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the default one. HTTPS only.",
+    "message": "შეგიძლიათ განათავსოთ Helium სერვისების საკუთარი ინსტანცია და გამოიყენოთ ის თქვენს ბრაუზერში ნაგულისხმევის ნაცვლად. მხოლოდ HTTPS."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_DESCRIPTION_WARNING",
+    "source": "Do not use this field unless you know exactly what you are doing. Never paste URLs from other people here, they are trying to steal your data. We are not responsible for any damages caused by using a custom server and will not be able to help you.",
+    "message": "არ გამოიყენოთ ეს ველი, თუ ზუსტად არ იცით რას აკეთებთ. არასოდეს ჩასვათ აქ სხვა ადამიანების URL-ები, ისინი თქვენი მონაცემების მოპარვას ცდილობენ. ჩვენ არ ვართ პასუხისმგებელი მორგებული სერვერის გამოყენებით გამოწვეულ ზიანზე და ვერ შეგვეძლება დაგეხმაროთ."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_ARIA_LABEL",
+    "source": "Custom origin URL for Helium services",
+    "message": "მორგებული წყაროს URL Helium სერვისებისთვის"
+  },
+  {
+    "name": "IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE",
+    "source": "Helium services have been updated. Please review the changes.",
+    "message": "Helium სერვისები განახლდა. გთხოვთ, გადახედოთ ცვლილებებს."
+  },
+  {
+    "name": "IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM",
+    "source": "Review Helium services updates",
+    "message": "Helium სერვისების განახლებების გადახედვა"
+  },
+  {
+    "name": "IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE",
+    "source": "Services updated",
+    "message": "სერვისები განახლდა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT",
+    "source": "Helium services are not available until setup is complete to ensure your privacy and consent.",
+    "message": "Helium სერვისები მიუწვდომელია, სანამ კონფიგურაცია არ დასრულდება, თქვენი კონფიდენციალურობისა და თანხმობის უზრუნველსაყოფად."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON",
+    "source": "Complete setup",
+    "message": "კონფიგურაციის დასრულება"
+  },
+  {
+    "name": "IDS_SEARCH_ENGINE_CHOICE_SETTINGS_SUBTITLE_HELIUM",
+    "source": "This list of search engines is shown in random order.",
+    "message": "საძიებო სისტემების ეს სია შემთხვევითი თანმიმდევრობით არის ნაჩვენები."
+  },
+  {
+    "name": "IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR",
+    "source": "Appearance and behavior",
+    "message": "გარეგნობა და ქცევა"
+  },
+  {
+    "name": "IDS_SETTINGS_BEHAVIOR",
+    "source": "Behavior",
+    "message": "ქცევა"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with ⌘+Shift+C",
+    "message": "გვერდის ბმულის სწრაფი კოპირების ჩართვა ⌘+Shift+C კლავიშებით"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_COPY_PAGE_URL_SHORTCUT",
+    "source": "Enable quick page link copying with Ctrl+Shift+C",
+    "message": "გვერდის ბმულის სწრაფი კოპირების ჩართვა Ctrl+Shift+C კლავიშებით"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "გაფართოებების ჩამოტვირთვებისა და განახლებების პროქსირება"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_EXT_PROXY_TOGGLE_DESCRIPTION",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "ჩართვის შემთხვევაში, Helium გაფართოებების ჩამოტვირთვებსა და განახლებებს პროქსირებით განახორციელებს თქვენი კონფიდენციალურობის დასაცავად. გამორთვის შემთხვევაში, გაფართოებების ჩამოტვირთვა და განახლება არ იმუშავებს."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "!bangs სიის ჩამოტვირთვის ნებართვა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_BANGS_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium ჩამოტვირთავს !bangs-ების სიას, რომლებიც ინტერნეტის უფრო სწრაფად დათვალიერებაში დაგეხმარებათ, მაგალითად !w ან !gh. გამორთვის შემთხვევაში, !bangs არ იმუშავებს."
+  },
+  {
+    "name": "IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM",
+    "source": "Please check that Helium services are enabled (including spell check downloads) and make sure that the firewall is not blocking downloads from Helium servers.",
+    "message": "გთხოვთ, შეამოწმოთ რომ Helium სერვისები ჩართულია (მათ შორის მართლწერის ლექსიკონების ჩამოტვირთვა) და დარწმუნდით, რომ ფაიერვოლი არ ბლოკავს ჩამოტვირთვებს Helium სერვერებიდან."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "მართლწერის შემოწმების ლექსიკონის ფაილების ჩამოტვირთვის ნებართვა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_SPELLCHECK_TOGGLE_DESCRIPTION",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium ჩამოტვირთავს მართლწერის შესამოწმებელ ლექსიკონის ფაილებს მოთხოვნისას. გამორთვის შემთხვევაში, მართლწერის შემოწმება არ იმუშავებს."
+  },
+  {
+    "name": "IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION",
+    "source": "Version <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>",
+    "message": "ვერსია <ph name=\"HELIUM_PRODUCT_VERSION\">$1<ex>0.0.0.0</ex></ph> (<ph name=\"PRODUCT_CHANNEL\">$4<ex>Developer Build</ex></ph>, <ph name=\"CHROMIUM_NAME\">$7</ph> <ph name=\"PRODUCT_VERSION\">$2<ex>15.0.865.0</ex></ph><ph name=\"PRODUCT_VERSION_SUFFIX\">$3<ex>-r123456</ex></ph>) <ph name=\"PRODUCT_MODIFIER\">$5</ph> <ph name=\"PRODUCT_VERSION_BITS\">$6</ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "uBlock Origin-ის ფილტრების სიების ჩამოტვირთვის ნებართვა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UBO_DESCRIPTION",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium ჩამოტვირთავს განახლებულ ფილტრების სიებს uBlock Origin-ისთვის. სიებზე ყველა მოთხოვნა პროქსირებულია თქვენი კონფიდენციალურობის დასაცავად. გამორთვის შემთხვევაში, ნაგულისხმევი ფილტრების სიები ადგილობრივი მეხსიერებიდან ჩაიტვირთება, რომლებიც მხოლოდ Helium-თან ერთად განახლდება. არჩევითი ფილტრების სიები მოითხოვება პროქსირების გარეშე."
+  },
+  {
+    "name": "IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON",
+    "source": "Open new tabs next to the active tab",
+    "message": "ახალი ჩანართების გახსნა აქტიური ჩანართის გვერდით"
+  },
+  {
+    "name": "IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER",
+    "source": "Cycle through tabs in most recently used order with Ctrl+Tab",
+    "message": "ჩანართებში გადართვა ბოლოს გამოყენების მიხედვით Ctrl+Tab კლავიშებით"
+  },
+  {
+    "name": "IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES",
+    "source": "Component updates are disabled. See Helium services in settings.",
+    "message": "კომპონენტების განახლებები გამორთულია. იხილეთ Helium სერვისები პარამეტრებში."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE",
+    "source": "Hibernate",
+    "message": "ჰიბერნაცია"
+  },
+  {
+    "name": "IDS_SETTINGS_PERMISSIONS_DESCRIPTION_NORMAL",
+    "source": "Manage site permissions and content settings (cookies, pop-ups, and more)",
+    "message": "საიტის ნებართვებისა და შიგთავსის პარამეტრების მართვა (ქუქი-ფაილები, ამომხტარი ფანჯრები და სხვა)"
+  },
+  {
+    "name": "IDS_SETTINGS_SECURITY_DESCRIPTION_NORMAL",
+    "source": "Connection security, DNS settings, certificate management, and other security settings",
+    "message": "კავშირის უსაფრთხოება, DNS პარამეტრები, სერტიფიკატების მართვა და უსაფრთხოების სხვა პარამეტრები"
+  },
+  {
+    "name": "IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_TEXT_HELIUM",
+    "source": "Enabling \"Do Not Track\" means that Helium will include a request not to be tracked with your browsing traffic. Whether this request is honored depends on whether a website responds to it and on how it is interpreted. For example, some websites may respond by showing you ads that aren't personalized using your previous browsing data. Many websites may still track you regardless of the request.",
+    "message": "„Do Not Track\"-ის ჩართვა ნიშნავს, რომ Helium თქვენს დათვალიერების ტრაფიკთან ერთად თვალთვალის აკრძალვის მოთხოვნას გაგზავნის. დაკმაყოფილდება თუ არა ეს მოთხოვნა, დამოკიდებულია იმაზე, პასუხობს თუ არა ვებსაიტი მას და როგორ ინტერპრეტირდება ის. მაგალითად, ზოგიერთმა ვებსაიტმა შეიძლება გიჩვენოთ რეკლამები, რომლებიც თქვენი წინა დათვალიერების მონაცემებით არ არის პერსონალიზებული. მრავალმა ვებსაიტმა შეიძლება მაინც გატარონ თვალთვალი მოთხოვნის მიუხედავად."
+  },
+  {
+    "name": "IDS_SETTINGS_ALLOWED_THIRD_PARTY_COOKIES_DESCRIPTION_HELIUM",
+    "source": "Affects the sites listed here. Inserting “[*.]” before a domain name creates an exception for the entire domain. For example, adding “[*.]example.com” means that third-party cookies can also be active for second.example.com, because it’s part of example.com.",
+    "message": "ვრცელდება აქ ჩამოთვლილ საიტებზე. დომენის სახელის წინ „[*.]\"-ის ჩასმა მთელი დომენისთვის გამონაკლისს ქმნის. მაგალითად, „[*.]example.com\"-ის დამატება ნიშნავს, რომ მესამე მხარის ქუქი-ფაილები ასევე აქტიური იქნება second.example.com-ისთვის, რადგან ის example.com-ის ნაწილია."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_DESC_HELIUM",
+    "source": "When you type in the address bar, Helium sends what you type to your default search engine to get suggestions. This is off in Incognito.",
+    "message": "როცა მისამართის ზოლში აკრეფთ, Helium აკრეფილ ტექსტს თქვენს ნაგულისხმევ საძიებო სისტემას უგზავნის შემოთავაზებების მისაღებად. ეს გამორთულია ინკოგნიტო რეჟიმში."
+  },
+  {
+    "name": "IDS_SETTINGS_SUGGEST_PREF_HELIUM",
+    "source": "Suggestions from the search engine",
+    "message": "საძიებო სისტემის შემოთავაზებები"
+  },
+  {
+    "name": "IDS_SETTINGS_AUTO_PIN_NEW_TAB_GROUPS_HELIUM",
+    "source": "Automatically pin new tab groups to the bookmarks bar",
+    "message": "ახალი ჩანართების ჯგუფების ავტომატურად მიმაგრება სანიშნეების ზოლზე"
+  },
+  {
+    "name": "IDS_SETTINGS_SEARCH_ENGINES_ADD_SEARCH_ENGINE",
+    "source": "Add search engine",
+    "message": "საძიებო სისტემის დამატება"
+  },
+  {
+    "name": "IDS_ADD_AS_DEFAULT",
+    "source": "Add as default",
+    "message": "ნაგულისხმევად დამატება"
+  },
+  {
+    "name": "IDS_POLICY_SOURCE_HOP",
+    "source": "Helium defaults",
+    "message": "Helium ნაგულისხმევი პარამეტრები"
+  },
+  {
+    "name": "IDS_ACCNAME_APP_MENU",
+    "source": "Main Menu",
+    "message": "მთავარი მენიუ"
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_HELIUM_SERVICES_DISABLED",
+    "source": "Extension downloads are disabled. Enable this feature in Helium services settings and try again.",
+    "message": "გაფართოებების ჩამოტვირთვა გამორთულია. ჩართეთ ეს ფუნქცია Helium სერვისების პარამეტრებში და სცადეთ ხელახლა."
+  },
+  {
+    "name": "IDS_DOWNLOAD_BUBBLE_INTERRUPTED_EXTENSION_DL_DISABLED",
+    "source": "Extension downloads are disabled",
+    "message": "გაფართოებების ჩამოტვირთვა გამორთულია"
+  },
+  {
+    "name": "IDS_NTP_CUSTOMIZE_CHROME_CHANGE_WALLPAPER_LABEL",
+    "source": "Change wallpaper",
+    "message": "ფონური სურათის შეცვლა"
+  },
+  {
+    "name": "IDS_NEW_TAB_OTR_SUBTITLE_HELIUM",
+    "source": "Helium will not save anything about your browsing in Incognito, but downloads and bookmarks will stick around. Your browsing won't leave any traces on this device, and other users won't be able to see your activity.",
+    "message": "Helium არაფერს შეინახავს თქვენი ინკოგნიტო დათვალიერების შესახებ, თუმცა ჩამოტვირთვები და სანიშნეები შენარჩუნდება. თქვენი დათვალიერება ამ მოწყობილობაზე კვალს არ დატოვებს და სხვა მომხმარებლები ვერ ნახავენ თქვენს აქტივობას."
+  },
+  {
+    "name": "IDS_EXTENSIONS_INSTALL_LOCATION_HELIUM",
+    "source": "Helium component",
+    "message": "Helium კომპონენტი"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT",
+    "source": "Browser layout",
+    "message": "ბრაუზერის განლაგება"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "კლასიკური"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "დინამიური"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "კომპაქტური"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "ვერტიკალური"
+  },
+  {
+    "name": "IDS_SETTINGS_TAB_STRIP_RIGHT_ALIGN",
+    "source": "Show vertical tabs on right side",
+    "message": "ვერტიკალური ჩანართების ჩვენება მარჯვენა მხარეს"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser Layout",
+    "message": "ბრაუზერის განლაგება"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_CLASSIC",
+    "source": "Classic",
+    "message": "კლასიკური"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_DYNAMIC",
+    "source": "Dynamic",
+    "message": "დინამიური"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_COMPACT",
+    "source": "Compact",
+    "message": "კომპაქტური"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL",
+    "source": "Vertical",
+    "message": "ვერტიკალური"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on Right Side",
+    "message": "ჩანართები მარჯვენა მხარეს"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_MENU",
+    "source": "Browser layout",
+    "message": "ბრაუზერის განლაგება"
+  },
+  {
+    "name": "IDS_BROWSER_LAYOUT_VERTICAL_RIGHT",
+    "source": "Tabs on right side",
+    "message": "ჩანართები მარჯვენა მხარეს"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use ⌘+S to toggle vertical tabs in Vertical layout",
+    "message": "⌘+S კლავიშებით ვერტიკალური ჩანართების გადართვა ვერტიკალურ განლაგებაში"
+  },
+  {
+    "name": "IDS_SETTINGS_VERTICAL_COLLAPSE_SHORTCUT",
+    "source": "Use Ctrl+S to toggle vertical tabs in Vertical layout",
+    "message": "Ctrl+S კლავიშებით ვერტიკალური ჩანართების გადართვა ვერტიკალურ განლაგებაში"
+  },
+  {
+    "name": "IDS_SETTINGS_CENTERED_LOCATION_BAR",
+    "source": "Center the address bar",
+    "message": "მისამართის ზოლის ცენტრირება"
+  },
+  {
+    "name": "IDS_SETTINGS_MINIMAL_LOCATION_BAR",
+    "source": "Minimal address bar",
+    "message": "მინიმალური მისამართის ზოლი"
+  },
+  {
+    "name": "IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY",
+    "source": "Helium cannot be set as default, because no <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.",
+    "message": "Helium ვერ დაყენდება ნაგულისხმევად, რადგან <ph name=\"DESKTOP_FILENAME\">$1<ex>helium.desktop</ex></ph> ფაილი ვერ მოიძებნა არცერთ ამ ადგილას: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications."
+  },
+  {
+    "name": "IDS_SETTINGS_CHOOSE_CUSTOM_AVATAR_FILE",
+    "source": "Choose file",
+    "message": "ფაილის არჩევა"
+  },
+  {
+    "name": "IDS_SETTINGS_CLEAR_CUSTOM_AVATAR_DIALOG_TITLE",
+    "source": "Clear custom avatar?",
+    "message": "წავშალო მორგებული ავატარი?"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_FILE_TOO_LARGE",
+    "source": "Selected file is too large. Please select a file smaller than 30MB.",
+    "message": "არჩეული ფაილი ძალიან დიდია. გთხოვთ, აირჩიოთ 30MB-ზე პატარა ფაილი."
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_ERROR",
+    "source": "Image could not be loaded",
+    "message": "სურათის ჩატვირთვა ვერ მოხერხდა"
+  },
+  {
+    "name": "IDS_SETTINGS_CUSTOM_AVATAR_LABEL",
+    "source": "Custom avatar",
+    "message": "მორგებული ავატარი"
+  },
+  {
+    "name": "IDS_SETTINGS_ROUNDED_FRAME",
+    "source": "Show a rounded frame around web contents",
+    "message": "ვებშიგთავსის გარშემო მომრგვალებული ჩარჩოს ჩვენება"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_SIDEBAR",
+    "source": "Always show the sidebar",
+    "message": "გვერდითი პანელი ყოველთვის გამოჩნდეს"
+  },
+  {
+    "name": "IDS_SETTINGS_ZEN_PIN_TOP_TOOLBAR",
+    "source": "Always show the top bar",
+    "message": "ზედა ზოლი ყოველთვის გამოჩნდეს"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close tabs above",
+    "message": "ზემოთ მდებარე ჩანართების დახურვა"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_CLOSETABSABOVE",
+    "source": "Close Tabs Above",
+    "message": "ზემოთ მდებარე ჩანართების დახურვა"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_TITLE",
+    "source": "Full Disk Access required",
+    "message": "საჭიროა დისკზე სრული წვდომა"
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE",
+    "source": "Helium needs Full Disk Access to import your Bookmarks from Safari.",
+    "message": "Safari-დან თქვენი სანიშნეების იმპორტისთვის Helium-ს დისკზე სრული წვდომა სჭირდება."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK",
+    "source": "Learn how to grant Full Disk Access from your System Preferences.",
+    "message": "გაიგეთ, როგორ მიანიჭოთ დისკზე სრული წვდომა სისტემის პარამეტრებიდან."
+  },
+  {
+    "name": "IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_OPEN_SETTINGS",
+    "source": "Open System Preferences",
+    "message": "სისტემის პარამეტრების გახსნა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_OVERRIDE_INVALID_ORIGIN",
+    "source": "Invalid origin",
+    "message": "არასწორი წყარო"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_NEXT_TAB",
+    "source": "Next tab",
+    "message": "შემდეგი ჩანართი"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_PREVIOUS_TAB",
+    "source": "Previous tab",
+    "message": "წინა ჩანართი"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_LOCATION",
+    "source": "Focus address bar",
+    "message": "მისამართების ზოლზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_NEXT",
+    "source": "Find next",
+    "message": "შემდეგის პოვნა"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FIND_PREVIOUS",
+    "source": "Find previous",
+    "message": "წინას პოვნა"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_BACK",
+    "source": "Back",
+    "message": "უკან"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FORWARD",
+    "source": "Forward",
+    "message": "წინ"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_HOME",
+    "source": "Home",
+    "message": "მთავარი"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_NEW_SPLIT_TAB",
+    "source": "New split tab",
+    "message": "ახალი გაყოფილი ჩანართი"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_LAST_TAB",
+    "source": "Last tab",
+    "message": "ბოლო ჩანართი"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SELECT_TAB",
+    "source": "Tab <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>",
+    "message": "ჩანართი <ph name=\"TAB_NUMBER\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_NEXT",
+    "source": "Move tab right",
+    "message": "ჩანართის მარჯვნივ გადატანა"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_MOVE_TAB_PREVIOUS",
+    "source": "Move tab left",
+    "message": "ჩანართის მარცხნივ გადატანა"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_TAB_GROUP",
+    "source": "Next tab group",
+    "message": "შემდეგი ჩანართების ჯგუფი"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_TAB_GROUP",
+    "source": "Previous tab group",
+    "message": "წინა ჩანართების ჯგუფი"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_TAB_GROUP",
+    "source": "Close tab group",
+    "message": "ჩანართების ჯგუფის დახურვა"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_BOOKMARKS",
+    "source": "Focus bookmarks bar",
+    "message": "სანიშნეების ზოლზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_VERTICAL_TABS",
+    "source": "Toggle vertical tabs",
+    "message": "ვერტიკალური ჩანართების გადართვა"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_CLOSE_FIND_OR_STOP",
+    "source": "Close find bar or stop loading",
+    "message": "ძიების ზოლის დახურვა ან ჩატვირთვის შეჩერება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_SEARCH",
+    "source": "Focus search",
+    "message": "ძიებაზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_NEXT_PANE",
+    "source": "Focus next pane",
+    "message": "შემდეგ პანელზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_PREVIOUS_PANE",
+    "source": "Focus previous pane",
+    "message": "წინა პანელზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_WEB_CONTENTS_PANE",
+    "source": "Focus page content",
+    "message": "გვერდის შიგთავსზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_MENU_BAR",
+    "source": "Focus menu bar",
+    "message": "მენიუს ზოლზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_TOOLBAR",
+    "source": "Focus toolbar",
+    "message": "ხელსაწყოთა ზოლზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_FOCUS_INACTIVE_POPUP",
+    "source": "Focus inactive popup",
+    "message": "არააქტიურ ამომხტარ ფანჯარაზე ფოკუსირება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_AVATAR_MENU",
+    "source": "Profile menu",
+    "message": "პროფილის მენიუ"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_SHOW_APP_MENU",
+    "source": "App menu",
+    "message": "აპის მენიუ"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_ZEN_MODE_TOP_CHROME_PIN",
+    "source": "Pin top toolbar",
+    "message": "ზედა ხელსაწყოთა ზოლის მიმაგრება"
+  },
+  {
+    "name": "IDS_SHORTCUT_COMMAND_TOGGLE_DEV_TOOLS",
+    "source": "Toggle developer tools",
+    "message": "დეველოპერის ხელსაწყოების გადართვა"
+  },
+  {
+    "name": "IDS_APP_PLUS_KEY",
+    "source": "Plus",
+    "message": "პლუსი"
+  },
+  {
+    "name": "IDS_APP_NUMPAD_KEY",
+    "source": "Numpad <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>",
+    "message": "ციფრული კლავიატურა <ph name=\"KEY_NAME\">$1<ex>1</ex></ph>"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_TITLE",
+    "source": "Keyboard shortcuts",
+    "message": "კლავიატურის მალსახმობები"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SEARCH_LABEL",
+    "source": "Search shortcuts",
+    "message": "მალსახმობების ძიება"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_REMOVE_A11Y_LABEL",
+    "source": "Remove <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> from <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>",
+    "message": "წაშალეთ <ph name=\"SHORTCUT\">$1<ex>Ctrl+T</ex></ph> <ph name=\"COMMAND\">$2<ex>New tab</ex></ph>-დან"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_ALL",
+    "source": "Reset all to defaults",
+    "message": "ყველას ნაგულისხმევზე დაბრუნება"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_ADD_DIALOG_TITLE",
+    "source": "Add shortcut",
+    "message": "მალსახმობის დამატება"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_RESET_DIALOG_DESCRIPTION",
+    "source": "All keyboard shortcuts will be reset to their default values. Any custom shortcuts you've set will be lost.",
+    "message": "კლავიატურის ყველა მალსახმობი ნაგულისხმევ მნიშვნელობებზე დაბრუნდება. თქვენ მიერ დაყენებული ნებისმიერი მორგებული მალსახმობი დაიკარგება."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_PRESS_SHORTCUT",
+    "source": "Press a combination of keys to create a new shortcut",
+    "message": "დააჭირეთ კლავიშების კომბინაციას ახალი მალსახმობის შესაქმნელად"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_NEED_KEY",
+    "source": "Include a key that is not a modifier.",
+    "message": "ჩართეთ კლავიში, რომელიც მოდიფიკატორი არ არის."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_WILL_OVERRIDE",
+    "source": "Saving will remove this shortcut from <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>.",
+    "message": "შენახვისას ეს მალსახმობი წაიშლება <ph name=\"COMMAND\">$1<ex>New tab</ex></ph>-დან."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_SYSTEM_CONFLICT",
+    "source": "This shortcut is managed by <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> and cannot be changed.",
+    "message": "ამ მალსახმობას მართავს <ph name=\"COMMAND\">$1<ex>Full screen</ex></ph> და მისი შეცვლა შეუძლებელია."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_INVALID",
+    "source": "This shortcut cannot be saved.",
+    "message": "ამ მალსახმობის შენახვა შეუძლებელია."
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_NOTICE",
+    "source": "Some keyboard shortcuts are protected and can't be changed here. To change them, go to:",
+    "message": "კლავიატურის ზოგიერთი მალსახმობი დაცულია და აქ ვერ შეიცვლება. მათ შესაცვლელად გადადით:"
+  },
+  {
+    "name": "IDS_SETTINGS_SHORTCUTS_MAC_SYSTEM_SETTINGS_LINK",
+    "source": "System Settings &gt; Keyboard &gt; Keyboard Shortcuts &gt; App Shortcuts",
+    "message": "სისტემის პარამეტრები &gt; კლავიატურა &gt; კლავიატურის მალსახმობები &gt; აპის მალსახმობები"
+  },
+  {
+    "name": "IDS_ZEN_MODE_NEW_TAB_CREATED_TOAST_BODY",
+    "source": "New tab opened",
+    "message": "ახალი ჩანართი გაიხსნა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic browser updates",
+    "message": "ბრაუზერის ავტომატური განახლებების ნებართვა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium ავტომატურად შეამოწმებს განახლებების არსებობას და დააინსტალირებს მათ. ეს მოიცავს ბრაუზერისა და კომპონენტების განახლებებს. გირჩევთ, ეს პარამეტრი ჩართული დატოვოთ, რათა მიიღოთ უახლესი ფუნქციები და უსაფრთხოების განახლებები."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE",
+    "source": "Allow automatic component updates",
+    "message": "კომპონენტების ავტომატური განახლებების ნებართვა"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium ავტომატურად შეამოწმებს კომპონენტების განახლებების არსებობას და დააინსტალირებს მათ. გირჩევთ, ეს პარამეტრი ჩართული დატოვოთ. Linux-ზე ბრაუზერის განახლებებს თქვენი დისტრიბუციის პაკეტების მმართველი ამუშავებს. გთხოვთ, Helium-ის პაკეტის განახლებები კვირაში ერთხელ მაინც შეამოწმოთ."
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate other tabs",
+    "message": "სხვა ჩანართების ჰიბერნაცია"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_HIBERNATE_OTHER_TABS",
+    "source": "Hibernate Other Tabs",
+    "message": "სხვა ჩანართების ჰიბერნაცია"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URL",
+    "source": "Copy URL",
+    "message": "URL-ის კოპირება"
+  },
+  {
+    "name": "IDS_TAB_CXMENU_COPY_URLS",
+    "source": "Copy URLs",
+    "message": "URL-ების კოპირება"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_TITLE",
+    "source": "Background action confirmation toasts",
+    "message": "ფონური მოქმედებების დადასტურების შეტყობინებები"
+  },
+  {
+    "name": "IDS_SETTINGS_ACCESSIBILITY_TOAST_TOGGLE_DESCRIPTION",
+    "source": "Shows a toast notification when you copy content, such as links and images, or open a new background tab in Frameless mode",
+    "message": "აჩვენებს შეტყობინებას, როდესაც აკოპირებთ შიგთავსს, მაგალითად ბმულებსა და სურათებს, ან Frameless რეჟიმში ხსნით ახალ ფონურ ჩანართს"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE",
+    "source": "Frameless mode",
+    "message": "Frameless რეჟიმი"
+  },
+  {
+    "name": "IDS_SETTINGS_BROWSER_ZEN_MODE_DESCRIPTION",
+    "source": "Automatically hide browser UI until you hover the window edge",
+    "message": "ავტომატურად დამალოს ბრაუზერის UI, სანამ მაჩვენებელს ფანჯრის კიდესთან არ მიიტანთ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_NEXT",
+    "source": "Next",
+    "message": "შემდეგი"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES",
+    "source": "Yes",
+    "message": "დიახ"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_HISTORY",
+    "source": "History",
+    "message": "ისტორია"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALLED",
+    "source": "Installed",
+    "message": "დაინსტალირებულია"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_INSTALL",
+    "source": "Install",
+    "message": "ინსტალაცია"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_BACK",
+    "source": "Back",
+    "message": "უკან"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO",
+    "source": "No",
+    "message": "არა"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_PRIVACY",
+    "source": "Privacy",
+    "message": "კონფიდენციალურობა"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_EXTENSIONS",
+    "source": "Extensions",
+    "message": "გაფართოებები"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_CONFIGURE",
+    "source": "Configure",
+    "message": "კონფიგურირება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_IMPORT_GUIDE",
+    "source": "Import",
+    "message": "იმპორტი"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_BOOKMARKS",
+    "source": "Bookmarks",
+    "message": "სანიშნეები"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SEARCHWEBWITH",
+    "source": "&amp;Search with <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>",
+    "message": "&amp;ძებნა <ph name=\"SEARCH_ENGINE\">$1<ex>DuckDuckGo</ex></ph>-ით"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force paste",
+    "message": "ძალით ჩასმა"
+  },
+  {
+    "name": "IDS_FORCE_PASTE",
+    "source": "Force Paste",
+    "message": "ძალით ჩასმა"
+  },
+  {
+    "name": "IDS_SETTINGS_SHIFT_RIGHT_CLICK_CONTEXT_MENU",
+    "source": "Force context menu with Shift+Right Click",
+    "message": "კონტექსტური მენიუს იძულება Shift+მარჯვენა დაწკაპუნებით"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_TITLE",
+    "source": "Crash reporting",
+    "message": "ავარიების ანგარიშგება"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DESCRIPTION",
+    "source": "Choose whether Helium can ask to send crash reports or send them automatically. Disabling reports will delete all pending reports.",
+    "message": "აირჩიეთ, შეუძლია თუ არა Helium-ს გკითხოთ ავარიების ანგარიშების გაგზავნის შესახებ ან გააგზავნოს ისინი ავტომატურად. ანგარიშების გამორთვა წაშლის ყველა მოლოდინში მყოფ ანგარიშს."
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED",
+    "source": "Disabled",
+    "message": "გამორთულია"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_ASK",
+    "source": "Ask after a crash",
+    "message": "კითხვა ავარიის შემდეგ"
+  },
+  {
+    "name": "IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC",
+    "source": "Send automatically",
+    "message": "ავტომატურად გაგზავნა"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_TITLE",
+    "source": "{COUNT, plural, =1 {Would you like to send a crash report?} other {Would you like to send # crash reports?}}",
+    "message": "{COUNT, plural, =1 {გსურთ ავარიის ანგარიშის გაგზავნა?} other {გსურთ # ავარიის ანგარიშის გაგზავნა?}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_DESCRIPTION",
+    "source": "Helium closed unexpectedly. A crash report could help us fix the issue you ran into and prevent it from happening again.",
+    "message": "Helium მოულოდნელად დაიხურა. ავარიის ანგარიში დაგვეხმარება იმ პრობლემის გამოსწორებაში, რომელსაც წააწყდით, და მის თავიდან აცილებაში."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_PRIVACY",
+    "source": "A crash report may incidentally include some sensitive data present in Helium's memory at the time of crash.",
+    "message": "ავარიის ანგარიშმა შესაძლოა შემთხვევით შეიცავდეს ზოგიერთ სენსიტიურ მონაცემს, რომელიც Helium-ის მეხსიერებაში იყო ავარიის მომენტში."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_OPTIONAL",
+    "source": "Nothing has been sent yet. Sending a crash report is optional.",
+    "message": "ჯერ არაფერი გაგზავნილა. ავარიის ანგარიშის გაგზავნა არასავალდებულოა."
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send Report} other {Send # Reports}}",
+    "message": "{COUNT, plural, =1 {ანგარიშის გაგზავნა} other {# ანგარიშის გაგზავნა}}"
+  },
+  {
+    "name": "IDS_HELIUM_CRASH_REPORTING_DIALOG_SEND_REPORT",
+    "source": "{COUNT, plural, =1 {Send report} other {Send # reports}}",
+    "message": "{COUNT, plural, =1 {ანგარიშის გაგზავნა} other {# ანგარიშის გაგზავნა}}"
+  },
+  {
+    "name": "IDS_CRASH_DISABLED_MESSAGE",
+    "source": "Crash reporting is disabled in Helium settings or by policy.",
+    "message": "ავარიების ანგარიშგება გამორთულია Helium-ის პარამეტრებში ან პოლიტიკით."
+  },
+  {
+    "name": "IDS_CRASH_BUG_LINK_LABEL",
+    "source": "Create an issue with details",
+    "message": "საკითხის შექმნა დეტალებით"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS",
+    "source": "Use native frame materials (experimental)",
+    "message": "ჩარჩოს მშობლიური მასალების გამოყენება (ექსპერიმენტული)"
+  },
+  {
+    "name": "IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION",
+    "source": "Applies native materials to the browser frame surfaces. May cause UI clarity issues.",
+    "message": "იყენებს მშობლიურ მასალებს ბრაუზერის ჩარჩოს ზედაპირებზე. შესაძლოა გამოიწვიოს ინტერფეისის სიცხადის პრობლემები."
+  },
+  {
+    "name": "IDS_SETTINGS_SHOW_ZOOM_INDICATOR",
+    "source": "Show the zoom indicator in the address bar",
+    "message": "მასშტაბის ინდიკატორის ჩვენება მისამართების ზოლში"
+  },
+  {
+    "name": "IDS_CONTENT_CONTEXT_SYSTEM_TRANSLATE",
+    "source": "Translate “<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>”",
+    "message": "თარგმნა „<ph name=\"SELECTION_TEXT\">$1<ex>Bonjour</ex></ph>“"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PAGE_TITLE",
+    "source": "Helium Setup",
+    "message": "Helium-ის დაყენება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_USE_DEFAULTS",
+    "source": "Use defaults",
+    "message": "ნაგულისხმევის გამოყენება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_BUTTON_LETS_GO",
+    "source": "Let's go!",
+    "message": "წავედით!"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TITLE",
+    "source": "Helium Partner",
+    "message": "Helium-ის პარტნიორი"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PARTNER_TOOLTIP",
+    "source": "Paying for this service will support the development of Helium.",
+    "message": "ამ სერვისისთვის გადახდა ხელს შეუწყობს Helium-ის განვითარებას."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_GREETING",
+    "source": "Meet Helium",
+    "message": "გაიცანით Helium"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_FINISH_TITLE",
+    "source": "Ready to browse?",
+    "message": "მზად ხართ დასათვალიერებლად?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_TITLE",
+    "source": "Helium services",
+    "message": "Helium-ის სერვისები"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SUBTITLE",
+    "source": "Services are not active until you consent to using them. Changes will be applied after you go to the next page.",
+    "message": "სერვისები აქტიური არ არის, სანამ არ დაეთანხმებით მათ გამოყენებას. ცვლილებები გამოყენებული იქნება შემდეგ გვერდზე გადასვლის შემდეგ."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_TITLE",
+    "source": "Allow connecting to Helium services",
+    "message": "Helium-ის სერვისებთან დაკავშირების დაშვება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_CONNECTION_DESC",
+    "source": "Helium services provide additional functionality, such as: extension downloads, native !bangs, filter list updates, and browser updates. When disabled, none of these features will work, but Helium will not make any web requests.",
+    "message": "Helium-ის სერვისები უზრუნველყოფს დამატებით ფუნქციონალს, როგორიცაა: გაფართოებების ჩამოტვირთვა, მშობლიური !bang-ები, ფილტრების სიების განახლებები და ბრაუზერის განახლებები. გამორთვისას ვერცერთი ეს ფუნქცია არ იმუშავებს, თუმცა Helium არ გააკეთებს არცერთ ვებ-მოთხოვნას."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_TITLE",
+    "source": "Allow downloading the !bangs list",
+    "message": "!bang-ების სიის ჩამოტვირთვის დაშვება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_BANGS_DESC",
+    "source": "Helium will fetch a list of bangs that help you browse the Internet faster, such as !w or !gh. When disabled, bangs will not work.",
+    "message": "Helium ჩამოტვირთავს bang-ების სიას, რომლებიც დაგეხმარებათ ინტერნეტის უფრო სწრაფად დათვალიერებაში, მაგალითად !w ან !gh. გამორთვისას bang-ები არ იმუშავებს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_TITLE",
+    "source": "Proxy extension downloads and updates",
+    "message": "გაფართოებების ჩამოტვირთვებისა და განახლებების პროქსირება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_EXTENSIONS_DESC",
+    "source": "When enabled, Helium will proxy extension downloads and updates to protect your privacy. When disabled, downloading and updating extensions will not work.",
+    "message": "ჩართვისას Helium დააპროქსირებს გაფართოებების ჩამოტვირთვებსა და განახლებებს თქვენი კონფიდენციალურობის დასაცავად. გამორთვისას გაფართოებების ჩამოტვირთვა და განახლება არ იმუშავებს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_TITLE",
+    "source": "Allow downloading filter lists for uBlock Origin",
+    "message": "uBlock Origin-ისთვის ფილტრების სიების ჩამოტვირთვის დაშვება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_UBLOCK_DESC",
+    "source": "Helium will fetch fresh filter lists for uBlock Origin. All requests to lists are proxied to protect your privacy. When disabled, default filter lists will be loaded from local storage, which are only updated along with Helium. Optional filter lists will be requested without proxying.",
+    "message": "Helium ჩამოტვირთავს ახალ ფილტრების სიებს uBlock Origin-ისთვის. სიების ყველა მოთხოვნა დაპროქსირებულია თქვენი კონფიდენციალურობის დასაცავად. გამორთვისას ნაგულისხმევი ფილტრების სიები ჩაიტვირთება ლოკალური საცავიდან, რომლებიც განახლდება მხოლოდ Helium-თან ერთად. არასავალდებულო ფილტრების სიები მოთხოვნილი იქნება პროქსირების გარეშე."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE",
+    "source": "Allow automatic browser updates",
+    "message": "ბრაუზერის ავტომატური განახლებების დაშვება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC",
+    "source": "Helium will automatically check for updates and install them. This includes browser and component updates. We recommend keeping this setting enabled to ensure you get the latest features and security updates.",
+    "message": "Helium ავტომატურად შეამოწმებს განახლებებს და დააინსტალირებს მათ. ეს მოიცავს ბრაუზერისა და კომპონენტების განახლებებს. გირჩევთ, ეს პარამეტრი ჩართული დატოვოთ, რათა მიიღოთ უახლესი ფუნქციები და უსაფრთხოების განახლებები."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_TITLE_LINUX",
+    "source": "Allow automatic component updates",
+    "message": "კომპონენტების ავტომატური განახლებების დაშვება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_AUTOUPDATES_DESC_LINUX",
+    "source": "Helium will automatically check for component updates and install them. We recommend keeping this setting enabled. On Linux, browser updates are handled by your distro's package manager. Please check for Helium package updates at least every week.",
+    "message": "Helium ავტომატურად შეამოწმებს კომპონენტების განახლებებს და დააინსტალირებს მათ. გირჩევთ, ეს პარამეტრი ჩართული დატოვოთ. Linux-ზე ბრაუზერის განახლებებს ამუშავებს თქვენი დისტრიბუტივის პაკეტების მენეჯერი. გთხოვთ, შეამოწმოთ Helium-ის პაკეტის განახლებები სულ მცირე ყოველ კვირას."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_TITLE",
+    "source": "Allow downloading dictionary files for spell checking",
+    "message": "მართლწერის შესამოწმებლად ლექსიკონის ფაილების ჩამოტვირთვის დაშვება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_SPELLCHECK_DESC",
+    "source": "Helium will fetch dictionary files used for spell checking when requested. When disabled, spell checking will not work.",
+    "message": "Helium ჩამოტვირთავს მართლწერის შესამოწმებლად გამოყენებულ ლექსიკონის ფაილებს მოთხოვნისას. გამორთვისას მართლწერის შემოწმება არ იმუშავებს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_TITLE",
+    "source": "Use your own instance of Helium services",
+    "message": "Helium-ის სერვისების საკუთარი ინსტანციის გამოყენება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SERVICES_INSTANCE_DESC",
+    "source": "You can host your own instance of Helium services and use it in your browser instead of the pre-hosted server. If you have one, you can set it in Helium settings.",
+    "message": "შეგიძლიათ განათავსოთ Helium-ის სერვისების საკუთარი ინსტანცია და გამოიყენოთ იგი თქვენს ბრაუზერში წინასწარ განთავსებული სერვერის ნაცვლად. თუ გაქვთ ასეთი, შეგიძლიათ დააყენოთ იგი Helium-ის პარამეტრებში."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_PRIVATE",
+    "source": "A privacy-first search engine which doesn't profile or track you.",
+    "message": "კონფიდენციალურობაზე ორიენტირებული საძიებო სისტემა, რომელიც არ გიკეთებთ პროფილს და არ გადევნებთ თვალს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_SMALL",
+    "source": "Transparent, but not privacy-focused. Offers better privacy than mainstream search engines.",
+    "message": "გამჭვირვალე, თუმცა არა კონფიდენციალურობაზე ორიენტირებული. გთავაზობთ უკეთეს კონფიდენციალურობას, ვიდრე ძირითადი საძიებო სისტემები."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_MAINSTREAM",
+    "source": "A mainstream search engine which collects extensive personal data.",
+    "message": "ძირითადი საძიებო სისტემა, რომელიც აგროვებს ვრცელ პერსონალურ მონაცემებს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_CATEGORIES_CUSTOM",
+    "source": "A custom search engine. Its privacy wasn't verified by Helium.",
+    "message": "მორგებული საძიებო სისტემა. მისი კონფიდენციალურობა Helium-ს არ დაუდასტურებია."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BING",
+    "source": "Collects extensive personal data. Privacy controls are buried and limited. Subjectively overwhelming UI.",
+    "message": "აგროვებს ვრცელ პერსონალურ მონაცემებს. კონფიდენციალურობის პარამეტრები დამალული და შეზღუდულია. სუბიექტურად გადატვირთული ინტერფეისი."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_GOOGLE",
+    "source": "It's Google. It dominates the search market, collects extensive personal data, and profiles you.",
+    "message": "ეს არის Google. ის დომინირებს საძიებო ბაზარზე, აგროვებს ვრცელ პერსონალურ მონაცემებს და გიკეთებთ პროფილს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_TITLE",
+    "source": "Ready to switch to Helium?",
+    "message": "მზად ხართ Helium-ზე გადასასვლელად?"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_YES_DESC",
+    "source": "Make Helium my default browser.",
+    "message": "Helium ჩემს ნაგულისხმევ ბრაუზერად დაყენება."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DEFAULT_BROWSER_NO_DESC",
+    "source": "Just trying Helium for now.",
+    "message": "ჯერ მხოლოდ Helium-ს ვცდი."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_TITLE",
+    "source": "Take your stuff with you",
+    "message": "წაიღეთ თქვენი მონაცემები თან"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_DATA_IMPORT_SUBTITLE",
+    "source": "Transfer your most important bookmarks, history, and extensions from other browsers.",
+    "message": "გადაიტანეთ თქვენი ყველაზე მნიშვნელოვანი სანიშნეები, ისტორია და გაფართოებები სხვა ბრაუზერებიდან."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_TITLE",
+    "source": "Password manager",
+    "message": "პაროლების მენეჯერი"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_SETUP_GUIDE",
+    "source": "Setup",
+    "message": "დაყენება"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_ERROR",
+    "source": "Error:",
+    "message": "შეცდომა:"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_PASSWORD_MANAGERS_DASHLANE",
+    "source": "Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.",
+    "message": "პოპულარული, ფასიანი და დახურული კოდის პაროლების მენეჯერი. ინახავს მონაცემებს ევროპაში. ცნობილია აგრესიული გაყიდვების ტაქტიკით."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE",
+    "source": "Fingerprinting protection",
+    "message": "ციფრული ანაბეჭდისგან დაცვა"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_LINK_DESCRIPTION",
+    "source": "Manage how Helium protects you against fingerprinting",
+    "message": "მართეთ, როგორ გიცავთ Helium ციფრული ანაბეჭდის აღებისგან"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_TOGGLE_DESCRIPTION",
+    "source": "Make it harder for sites to fingerprint your browser and device",
+    "message": "გაურთულეთ საიტებს თქვენი ბრაუზერისა და მოწყობილობის ციფრული ანაბეჭდის აღება"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you. Each site sees consistent randomized information during your browsing session to reduce the chances of detection.",
+    "message": "როდესაც ციფრული ანაბეჭდისგან დაცვა ჩართულია, Helium ხმაურს ამატებს ბრაუზერის გარკვეულ ფუნქციებს, რათა საიტებს გაურთულდეს თქვენი თვალთვალი და პროფილის შედგენა. თითოეული საიტი დათვალიერების სესიის განმავლობაში ერთსა და იმავე შემთხვევითობით შეცვლილ ინფორმაციას ხედავს, რაც ამცირებს აღმოჩენის ალბათობას."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_DISCLAIMER",
+    "source": "Fingerprinting cannot be fully prevented, but Helium's analysis defenses make it harder to recover the original fingerprint.",
+    "message": "ციფრული ანაბეჭდის აღების სრულად აღკვეთა შეუძლებელია, თუმცა Helium-ის ანალიზის დამცავი მექანიზმები ართულებს თავდაპირველი ანაბეჭდის აღდგენას."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION",
+    "source": "When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting \"[*.]\" before a domain name applies it to the entire domain.",
+    "message": "როდესაც ციფრული ანაბეჭდისგან დაცვის ზოგადი ფუნქცია ჩართულია, ქვემოთ ჩამოთვლილი საიტები მორგებულ პარამეტრს მიჰყვება. დომენის სახელის წინ „[*.]“-ის ჩასმა მას მთელ დომენზე გაავრცელებს."
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_EXCEPTIONS_TITLE",
+    "source": "Sites without fingerprinting protection",
+    "message": "საიტები ციფრული ანაბეჭდისგან დაცვის გარეშე"
+  },
+  {
+    "name": "IDS_SETTINGS_NOISE_ALLOW_OVERRIDES_TITLE",
+    "source": "Overrides to allow fingerprinting protection",
+    "message": "გამონაკლისები ციფრული ანაბეჭდისგან დაცვის დასაშვებად"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_HEADER",
+    "source": "Fingerprinting protection",
+    "message": "ციფრული ანაბეჭდისგან დაცვა"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP",
+    "source": "Manage fingerprinting protection for this site",
+    "message": "ამ საიტისთვის ციფრული ანაბეჭდისგან დაცვის მართვა"
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_DESCRIPTION",
+    "source": "When fingerprinting protection is enabled, Helium adds noise to certain browser features to make it harder for sites to track and profile you.",
+    "message": "როდესაც ციფრული ანაბეჭდისგან დაცვა ჩართულია, Helium ხმაურს ამატებს ბრაუზერის გარკვეულ ფუნქციებს, რათა საიტებს გაურთულდეს თქვენი თვალთვალი და პროფილის შედგენა."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_BREAKAGE",
+    "source": "Turning off the protection will reduce your privacy, but may fix site features that require fingerprinting.",
+    "message": "დაცვის გამორთვა შეამცირებს თქვენს კონფიდენციალურობას, თუმცა შესაძლოა გამოასწოროს საიტის ის ფუნქციები, რომლებიც ციფრული ანაბეჭდის აღებას საჭიროებს."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_GLOBALLY_DISABLED",
+    "source": "Fingerprinting protection is turned off in Helium settings.",
+    "message": "ციფრული ანაბეჭდისგან დაცვა გამორთულია Helium-ის პარამეტრებში."
+  },
+  {
+    "name": "IDS_PAGE_INFO_HELIUM_NOISE_SETTINGS_BUTTON",
+    "source": "Manage fingerprinting protection",
+    "message": "ციფრული ანაბეჭდისგან დაცვის მართვა"
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_WELCOME_TERMS",
+    "source": "By continuing, you agree to the <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>privacy policy<ph name=\"END_LINK_PRIVACY\">$2</ph> and <ph name=\"BEGIN_LINK_TERMS\">$3</ph>terms of use<ph name=\"END_LINK_TERMS\">$4</ph>.",
+    "message": "გაგრძელებით თქვენ ეთანხმებით <ph name=\"BEGIN_LINK_PRIVACY\">$1</ph>კონფიდენციალურობის პოლიტიკასა<ph name=\"END_LINK_PRIVACY\">$2</ph> და <ph name=\"BEGIN_LINK_TERMS\">$3</ph>გამოყენების პირობებს<ph name=\"END_LINK_TERMS\">$4</ph>."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_DUCKDUCKGO",
+    "source": "Privacy-focused. Relies on Bing for results. Promises not to track or profile you.",
+    "message": "ორიენტირებულია კონფიდენციალურობაზე. შედეგებისთვის ეყრდნობა Bing-ს. გპირდებათ, რომ არ გადევნებთ თვალს და არ შეგიდგენთ პროფილს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_KAGI",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Has custom ranking. Requires a paid account. No ads, tracking, or profiling.",
+    "message": "ორიენტირებულია კონფიდენციალურობაზე. არ იყენებს Google-სა და Bing-ს. აქვს საკუთარი რანჟირება. საჭიროებს ფასიან ანგარიშს. რეკლამის, თვალთვალისა და პროფილირების გარეშე."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_QWANT",
+    "source": "Based in Europe. Relies on Bing for results. Sends tracking data to Microsoft.",
+    "message": "დაფუძნებულია ევროპაში. შედეგებისთვის ეყრდნობა Bing-ს. თვალთვალის მონაცემებს უგზავნის Microsoft-ს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_ECOSIA",
+    "source": "May plant trees for clicking ads. Relies on Google and Bing for results. Sends tracking data to Google and Microsoft.",
+    "message": "შესაძლოა დარგოს ხეები რეკლამებზე დაწკაპუნების სანაცვლოდ. შედეგებისთვის ეყრდნობა Google-სა და Bing-ს. თვალთვალის მონაცემებს უგზავნის Google-სა და Microsoft-ს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_STARTPAGE",
+    "source": "Privacy-focused. Relies on Google and Bing for results. Promises not to track or profile you.",
+    "message": "ორიენტირებულია კონფიდენციალურობაზე. შედეგებისთვის ეყრდნობა Google-სა და Bing-ს. გპირდებათ, რომ არ გადევნებთ თვალს და არ შეგიდგენთ პროფილს."
+  },
+  {
+    "name": "IDS_HELIUM_ONBOARDING_SEARCH_ENGINES_BRAVE",
+    "source": "Privacy-focused. Doesn't use Google or Bing. Promises not to track or profile you. May show promotions related to Brave services.",
+    "message": "ორიენტირებულია კონფიდენციალურობაზე. არ იყენებს Google-სა და Bing-ს. გპირდებათ, რომ არ გადევნებთ თვალს და არ შეგიდგენთ პროფილს. შესაძლოა აჩვენოს Brave-ის სერვისებთან დაკავშირებული პრომოაქციები."
+  }
+]

@@ -1,0 +1,938 @@
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -12,6 +12,7 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/ui_features.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #if defined(TOOLKIT_VIEWS)
+ #include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
+ #endif
+@@ -133,6 +134,12 @@ void RegisterBrowserUserPrefs(user_prefs
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
+ 
++  registry->RegisterIntegerPref(arcium::kChromeFrameBorderWidthPref,
++                                arcium::kChromeFrameBorderWidthDefault);
++  registry->RegisterIntegerPref(
++      arcium::kCollapsedSidebarStylePref,
++      arcium::kCollapsedSidebarStyleIconRail);
++
+ #if defined(TOOLKIT_VIEWS)
+   registry->RegisterDictionaryPref(
+       helium::kArciumChromeAppearancePref,
+--- a/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
+@@ -213,6 +213,13 @@ bool BrowserFrameViewMac::CaptionButtons
+ 
+ BrowserLayoutParams BrowserFrameViewMac::GetBrowserLayoutParams() const {
+   auto params = BrowserFrameView::GetBrowserLayoutParams();
++  if (GetBrowserView()->IsCollapsedSidebarFullyHiddenForLayout() &&
++      GetBrowserView()->GetTopChromeRevealRatio() <= 0.0f) {
++    // The Arc fully hidden style also hides the native traffic lights. Let
++    // the webpage use the whole client area while the controls are absent.
++    params.leading_exclusion = {};
++    params.trailing_exclusion = {};
++  }
+   if (GetBrowserView()->IsFullscreen()) {
+     // No insets for caption buttons in fullscreen, since caption buttons are on
+     // a separate pane that slides in. However, preserve the height of the
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1437,6 +1437,10 @@ BrowserView::BrowserView(Browser* browse
+       arcium::kChromeUIScalePref,
+       base::BindRepeating(&arcium::RefreshChromeUI, base::Unretained(this)));
+   registrar_.Add(
++      arcium::kCollapsedSidebarStylePref,
++      base::BindRepeating(&BrowserView::OnCollapsedSidebarStylePrefChanged,
++                          base::Unretained(this)));
++  registrar_.Add(
+       prefs::kFullscreenAllowed,
+       base::BindRepeating(&BrowserView::UpdateFullscreenAllowedFromPolicy,
+                           base::Unretained(this), CanFullscreen()));
+@@ -1471,6 +1475,11 @@ BrowserView::BrowserView(Browser* browse
+         vertical_tab_strip_state_controller->RegisterOnModeChanged(
+             base::BindRepeating(&BrowserView::OnVerticalTabStripModeChanged,
+                                 base::Unretained(this)));
++    vertical_tab_collapse_subscription_ =
++        vertical_tab_strip_state_controller->RegisterOnCollapseChanged(
++            base::BindRepeating(
++                &BrowserView::OnVerticalTabStripCollapseChanged,
++                base::Unretained(this)));
+   }
+ 
+   GetViewAccessibility().SetRole(ax::mojom::Role::kClient);
+@@ -1842,6 +1851,18 @@ bool BrowserView::IsVerticalTabStripColl
+   return false;
+ }
+ 
++bool BrowserView::IsCollapsedSidebarFullyHiddenForLayout() const {
++  if (!GetIsNormalType() || IsFullscreen() ||
++      !ShouldDrawVerticalTabStrip() || !IsVerticalTabStripCollapsed()) {
++    return false;
++  }
++
++  const int style = std::clamp(
++      GetProfile()->GetPrefs()->GetInteger(arcium::kCollapsedSidebarStylePref),
++      arcium::kCollapsedSidebarStyleMin, arcium::kCollapsedSidebarStyleMax);
++  return style == arcium::kCollapsedSidebarStyleFullyHidden;
++}
++
+ bool BrowserView::GetIncognito() const {
+   return browser_->GetProfile()->IsIncognitoProfile();
+ }
+@@ -1939,7 +1960,7 @@ bool BrowserView::IsZenModeEnabledForLay
+ }
+ 
+ float BrowserView::GetTopChromeRevealRatio() const {
+-  if (!zen_mode_enabled_) {
++  if (!zen_mode_enabled_ && !IsCollapsedSidebarFullyHiddenForLayout()) {
+     return 1.f;
+   }
+   return zen_top_chrome_animation_.GetCurrentValue();
+@@ -1965,6 +1986,37 @@ bool BrowserView::IsZenModeTopChromePinn
+                                   prefs::kHeliumZenModeTopChromePinned);
+ }
+ 
++bool BrowserView::IsChromeRevealModeEnabled() const {
++  return IsZenModeEnabled() || IsCollapsedSidebarFullyHiddenForLayout();
++}
++
++void BrowserView::OnCollapsedSidebarStylePrefChanged() {
++  UpdateCollapsedSidebarHiddenState();
++}
++
++void BrowserView::UpdateCollapsedSidebarHiddenState(bool force_reveal_reset) {
++  const bool fully_hidden = IsCollapsedSidebarFullyHiddenForLayout();
++  const bool state_changed = fully_hidden != collapsed_sidebar_fully_hidden_;
++  collapsed_sidebar_fully_hidden_ = fully_hidden;
++
++  if (!zen_mode_enabled_ && (state_changed || force_reveal_reset)) {
++    const float reveal = fully_hidden ? 0.f : 1.f;
++    zen_top_chrome_animation_.Reset(reveal);
++    zen_side_chrome_animation_.Reset(reveal);
++    if (auto* frame_view = GetFrameView()) {
++      frame_view->SetCaptionButtonsOpacity(reveal);
++    }
++  }
++
++  UpdateZenModeEventMonitor();
++  if (state_changed) {
++    InvalidateLayout();
++    if (GetWidget()) {
++      GetWidget()->OnSizeConstraintsChanged();
++    }
++  }
++}
++
+ void BrowserView::ToggleZenModeSideChrome() {
+   if (!IsZenModeEnabled() || !ShouldDrawVerticalTabStrip()) {
+     return;
+@@ -2020,6 +2072,7 @@ void BrowserView::OnVerticalTabStripMode
+     // Mode is unchanged; just re-layout so alignment-dependent views update.
+     UpdateZenCollapseButtonVisibility();
+     vertical_tab_strip_region_view_->InvalidateLayout();
++    UpdateCollapsedSidebarHiddenState();
+     InvalidateLayout();
+     return;
+   }
+@@ -2036,6 +2089,13 @@ void BrowserView::OnVerticalTabStripMode
+   GetFrameView()->OnTabStripStateChanged();
+ 
+   UpdateTabSearchBubbleHost();
++  UpdateCollapsedSidebarHiddenState();
++  InvalidateLayout();
++}
++
++void BrowserView::OnVerticalTabStripCollapseChanged(
++    tabs::VerticalTabStripCollapseState /*state*/) {
++  UpdateCollapsedSidebarHiddenState();
+   InvalidateLayout();
+ }
+ 
+@@ -2118,6 +2178,7 @@ void BrowserView::MaybeExpandVerticalTab
+       vertical_tab_strip_region_view_ &&
+       vertical_tab_strip_region_view_->GetTabStripView() != nullptr;
+   if (!zen_mode_enabled_ || IsZenModeSideChromePinned() ||
++      IsCollapsedSidebarFullyHiddenForLayout() ||
+       !ShouldDrawVerticalTabStrip() || !vertical_initialized) {
+     return;
+   }
+@@ -2162,15 +2223,7 @@ void BrowserView::UpdateZenModeState() {
+   UpdateZenCollapseButtonVisibility();
+ 
+   if (!zen_mode_enabled_) {
+-    if (auto* frame_view = GetFrameView()) {
+-      frame_view->SetCaptionButtonsOpacity(1.0f);
+-    }
+-    if (!zen_top_chrome_animation_.IsShowing()) {
+-      zen_top_chrome_animation_.Show();
+-    }
+-    if (!zen_side_chrome_animation_.IsShowing()) {
+-      zen_side_chrome_animation_.Show();
+-    }
++    UpdateCollapsedSidebarHiddenState(/*force_reveal_reset=*/true);
+   }
+ 
+   if (multi_contents_view_) {
+@@ -2179,7 +2232,7 @@ void BrowserView::UpdateZenModeState() {
+ }
+ 
+ void BrowserView::UpdateZenModeEventMonitor() {
+-  if (!GetWidget() || !IsZenModeEnabled()) {
++  if (!GetWidget() || !IsChromeRevealModeEnabled()) {
+     zen_mode_event_monitor_.reset();
+     return;
+   }
+@@ -2221,7 +2274,7 @@ bool BrowserView::IsLeavingZenSideGap(co
+ }
+ 
+ void BrowserView::UpdateZenModeRevealFromCursor() {
+-  if (!zen_mode_enabled_) {
++  if (!IsChromeRevealModeEnabled()) {
+     return;
+   }
+ 
+@@ -2252,7 +2305,7 @@ void BrowserView::UpdateZenModeRevealFro
+   const bool moving_out_through_side_gap =
+       previous_cursor && IsLeavingZenSideGap(*previous_cursor, cursor);
+   const bool reveal_side =
+-      !reveal_top && !moving_out_through_side_gap &&
++      zen_mode_enabled_ && !reveal_top && !moving_out_through_side_gap &&
+       (in_side_trigger || in_side_chrome);
+ 
+   // Defer the collapse briefly so quick excursions don't cause the
+@@ -2267,10 +2320,16 @@ void BrowserView::UpdateZenModeRevealFro
+ }
+ 
+ void BrowserView::UpdateZenModeReveal(bool reveal_top, bool reveal_side) {
+-  if (!zen_mode_enabled_) {
++  if (!IsChromeRevealModeEnabled()) {
+     return;
+   }
+ 
++  // Arc's fully hidden style has a zero-width sidebar. Its top edge remains
++  // the only transient reveal target; keep the collapse state untouched.
++  if (!zen_mode_enabled_) {
++    reveal_side = false;
++  }
++
+   if (!ShouldDrawVerticalTabStrip()) {
+     reveal_side = false;
+   }
+@@ -2439,13 +2498,13 @@ bool BrowserView::HasOpenBubbleFromTopCo
+ }
+ 
+ void BrowserView::AppMenuShown() {
+-  if (zen_mode_enabled_) {
++  if (IsChromeRevealModeEnabled()) {
+     UpdateZenModeReveal(/*reveal_top=*/true, /*reveal_side=*/false);
+   }
+ }
+ 
+ void BrowserView::AppMenuClosed() {
+-  if (zen_mode_enabled_) {
++  if (IsChromeRevealModeEnabled()) {
+     UpdateZenModeRevealFromCursor();
+   }
+ }
+@@ -3195,6 +3254,7 @@ void BrowserView::FullscreenStateChanged
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+   browser_->WindowFullscreenStateChanged();
++  UpdateCollapsedSidebarHiddenState();
+   multi_contents_view_->OnFullscreenStateChanged();
+ 
+   if (base::FeatureList::IsEnabled(features::kAsyncFullscreenWindowState)) {
+@@ -3399,10 +3459,10 @@ void BrowserView::SetFocusToLocationBar(
+     return;
+   }
+ 
+-  // In zen mode, snap the toolbar to fully shown so the omnibox is visible
+-  // and can receive focus.  A synchronous layout is required so the toolbar
++  // Reveal hidden chrome before focusing the omnibox. A synchronous layout
++  // is required so the toolbar
+   // has non-zero height before FocusLocation runs.
+-  if (zen_mode_enabled_) {
++  if (IsChromeRevealModeEnabled()) {
+     RevealZenModeTopChromeImmediately();
+   }
+ 
+@@ -5198,8 +5258,8 @@ void BrowserView::OnWidgetActivationChan
+     }
+   }
+ 
+-  // Collapse zen mode chrome when the window is deactivated.
+-  if (!active && zen_mode_enabled_) {
++  // Collapse transient hidden-mode chrome when the window is deactivated.
++  if (!active && IsChromeRevealModeEnabled()) {
+     UpdateZenModeReveal(/*reveal_top=*/false, /*reveal_side=*/false);
+   }
+ 
+@@ -6189,6 +6249,8 @@ void BrowserView::AddedToWidget() {
+     }
+   }
+ 
++  UpdateCollapsedSidebarHiddenState();
++
+   dialog_anchor_ = std::make_unique<views::ViewSubregionAnchor>(
+       kBrowserDialogAnchorElementId, *this);
+ 
+@@ -6238,8 +6300,8 @@ void BrowserView::OnThemeChanged() {
+   FrameColorsChanged();
+ 
+   // Theme changes may recreate caption buttons, resetting their opacity.
+-  // Reapply zen mode state so buttons stay hidden during zen mode.
+-  if (zen_mode_enabled_) {
++  // Reapply the current hidden-mode state.
++  if (IsChromeRevealModeEnabled()) {
+     if (auto* frame_view = GetFrameView()) {
+       frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
+     }
+@@ -7179,13 +7241,13 @@ void BrowserView::OnWillChangeFocus(View
+ }
+ void BrowserView::OnDidChangeFocus(View* focused_before, View* focused_now) {
+   UpdateAccessibleNameForRootView();
+-  if (zen_mode_enabled_) {
++  if (IsChromeRevealModeEnabled()) {
+     UpdateZenModeRevealFromCursor();
+   }
+ }
+ 
+ void BrowserView::OnEvent(const ui::Event& event) {
+-  if (!zen_mode_enabled_ || !event.IsMouseEvent()) {
++  if (!IsChromeRevealModeEnabled() || !event.IsMouseEvent()) {
+     return;
+   }
+   // Mouse exit events can also come from internal view transitions. Only use
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -383,6 +383,10 @@ class BrowserView : public BrowserWindow
+   // Returns whether the vertical tabstrip is collapsed.
+   bool IsVerticalTabStripCollapsed() const;
+ 
++  // Returns true when a collapsed vertical tabstrip uses the Arc style that
++  // hides the sidebar and top browser chrome.
++  bool IsCollapsedSidebarFullyHiddenForLayout() const;
++
+   // Returns true if the profile associated with this Browser window is
+   // incognito.
+   bool GetIncognito() const;
+@@ -952,6 +956,8 @@ class BrowserView : public BrowserWindow
+ 
+   void OnVerticalTabStripModeChanged(
+       tabs::VerticalTabStripStateController* controller);
++  void OnVerticalTabStripCollapseChanged(
++      tabs::VerticalTabStripCollapseState state);
+ 
+   void OnToolbarTabStripStateChanged(HeliumLayoutStateController* controller);
+ 
+@@ -960,6 +966,8 @@ class BrowserView : public BrowserWindow
+   // Zen mode helpers.
+   void OnZenModeSideChromePinnedPrefChanged();
+   void OnZenModeTopChromePinnedPrefChanged();
++  void OnCollapsedSidebarStylePrefChanged();
++  void UpdateCollapsedSidebarHiddenState(bool force_reveal_reset = false);
+   void UpdateZenModeState();
+   void MaybeExpandVerticalTabStripForZenMode();
+   void UpdateZenCollapseButtonVisibility();
+@@ -970,6 +978,7 @@ class BrowserView : public BrowserWindow
+   void UpdateZenModeRevealFromCursor();
+   void UpdateZenModeReveal(bool reveal_top, bool reveal_side);
+   void RevealZenModeTopChromeImmediately();
++  bool IsChromeRevealModeEnabled() const;
+   bool IsZenModeEnabled() const;
+   bool IsPointInZenTopTrigger(const gfx::Point& point) const;
+   bool IsPointInZenSideTrigger(const gfx::Point& point) const;
+@@ -1477,6 +1486,7 @@ class BrowserView : public BrowserWindow
+   base::CallbackListSubscription helium_layout_subscription_;
+ 
+   base::CallbackListSubscription vertical_tab_subscription_;
++  base::CallbackListSubscription vertical_tab_collapse_subscription_;
+ 
+   std::unique_ptr<tabs::VerticalTabStripStateController::ScopedEnableStateLock>
+       vertical_tabs_enable_state_lock_;
+@@ -1507,6 +1517,7 @@ class BrowserView : public BrowserWindow
+   base::OneShotTimer zen_cursor_exit_timer_;
+   std::optional<gfx::Point> zen_last_cursor_;
+   bool zen_mode_enabled_ = false;
++  bool collapsed_sidebar_fully_hidden_ = false;
+ 
+   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
+ };
+--- a/chrome/browser/ui/views/frame/contents_container_view.cc
++++ b/chrome/browser/ui/views/frame/contents_container_view.cc
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/ui/views/frame/scrim_view.h"
+ #include "chrome/browser/ui/views/frame/tab_modal_dialog_host.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/helium/frame_corner_radius.h"
+ #include "chrome/browser/ui/views/helium/peek_controller.h"
+ #include "chrome/browser/ui/views/indigo/indigo_toolbar.h"
+@@ -363,7 +364,10 @@ void ContentsContainerView::UpdateBorder
+     return;
+   }
+ 
+-  const int frame_radius = GetPaddedFrameRadius();
++  const int frame_radius =
++      is_in_split_ ? GetPaddedFrameRadius()
++                   : GetFrameRadiusForContentInset(
++                         arcium::GetChromeFrameBorderWidth(browser_view_));
+   const int generic_radius = GetGenericFrameRadius();
+ 
+   const int lower_left_radius =
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h
+@@ -53,6 +53,9 @@ class BrowserViewLayoutDelegate {
+   virtual bool IsTopControlsSlideBehaviorEnabled() const = 0;
+   virtual float GetTopControlsSlideBehaviorShownRatio() const = 0;
+   virtual bool IsZenModeEnabledForLayout() const { return false; }
++  // Returns true when the collapsed vertical sidebar uses the Arc style that
++  // hides the sidebar and top browser chrome. This is independent of Zen mode.
++  virtual bool IsCollapsedSidebarFullyHiddenForLayout() const { return false; }
+   virtual float GetTopChromeRevealRatio() const { return 1.f; }
+   virtual float GetSideChromeRevealRatio() const { return 1.f; }
+   virtual bool IsZenModeSideChromePinned() const { return false; }
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc
+@@ -58,6 +58,11 @@ bool BrowserViewLayoutDelegateImpl::Shou
+   return browser_view_->ShouldDrawToolbarTabStrip();
+ }
+ 
++bool BrowserViewLayoutDelegateImpl::IsCollapsedSidebarFullyHiddenForLayout()
++    const {
++  return browser_view_->IsCollapsedSidebarFullyHiddenForLayout();
++}
++
+ bool BrowserViewLayoutDelegateImpl::IsVerticalTabStripCollapsed() const {
+   return browser_view_->IsVerticalTabStripCollapsed();
+ }
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.h
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.h
+@@ -39,6 +39,7 @@ class BrowserViewLayoutDelegateImpl : pu
+   bool IsContentsSeparatorEnabled() const override;
+   bool IsActiveTabSplit() const override;
+   bool IsActiveTabAtLeadingWindowEdge() const override;
++  bool IsCollapsedSidebarFullyHiddenForLayout() const override;
+   const ImmersiveModeController* GetImmersiveModeController() const override;
+   ExclusiveAccessBubbleViews* GetExclusiveAccessBubble() const override;
+   bool IsTopControlsSlideBehaviorEnabled() const override;
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -69,6 +69,7 @@ constexpr int kZenModeVTSPadding = 8;
+ 
+ struct ZenModeLayoutState {
+   bool enabled = false;
++  bool collapsed_sidebar_fully_hidden = false;
+   bool floating_vertical_tab_strip = false;
+   float top_chrome_ratio = 1.0f;
+   float side_chrome_ratio = 1.0f;
+@@ -122,12 +123,18 @@ ZenModeLayoutState GetZenModeLayoutState
+     bool vertical_tab_strip_active,
+     const views::View* scale_context) {
+   ZenModeLayoutState state;
+-  state.enabled = delegate.IsZenModeEnabledForLayout();
++  state.collapsed_sidebar_fully_hidden =
++      delegate.IsCollapsedSidebarFullyHiddenForLayout();
++  state.enabled = delegate.IsZenModeEnabledForLayout() ||
++                  state.collapsed_sidebar_fully_hidden;
+   state.floating_vertical_tab_strip = state.enabled &&
+                                       vertical_tab_strip_active &&
+-                                      !delegate.IsZenModeSideChromePinned();
++                                      !delegate.IsZenModeSideChromePinned() &&
++                                      !state.collapsed_sidebar_fully_hidden;
+   state.top_chrome_ratio = delegate.GetTopChromeRevealRatio();
+-  state.side_chrome_ratio = delegate.GetSideChromeRevealRatio();
++  state.side_chrome_ratio = state.collapsed_sidebar_fully_hidden
++                                ? 0.0f
++                                : delegate.GetSideChromeRevealRatio();
+ 
+   if (!state.floating_vertical_tab_strip) {
+     return state;
+@@ -469,6 +476,10 @@ BrowserViewTabbedLayoutImpl::CalculateHo
+           std::max(min_vertical_tab_strip_width,
+                    std::min(remainder, preferred_vertical_tab_strip_width));
+     }
++    if (delegate().IsCollapsedSidebarFullyHiddenForLayout()) {
++      min_vertical_tab_strip_width = 0;
++      preferred_vertical_tab_strip_width = 0;
++    }
+   }
+ 
+   // Get information about the toolbar-height side panel, if present.
+@@ -862,10 +873,16 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+                    views().browser_view)) {
+     if (layout_data_->tab_strip_type == TabStripType::kVertical) {
+       int vertical_tab_strip_width = horizontal_layout.vertical_tab_strip_width;
++      if (zen.collapsed_sidebar_fully_hidden) {
++        vertical_tab_strip_width = 0;
++      }
+ 
+-      // The overall width during an expand must change monotonically.
+-      if (vertical_tab_strip_animation.current_motion ==
+-          TabStripAnimations::kExpand) {
++      // The overall width during an expand must change monotonically. A fully
++      // hidden Arc sidebar has no transition rail to reserve while it is
++      // collapsed, even if a previous tab strip animation is still settling.
++      if (!zen.collapsed_sidebar_fully_hidden &&
++          vertical_tab_strip_animation.current_motion ==
++              TabStripAnimations::kExpand) {
+         const int target_width =
+             views().vertical_tab_strip_region_view->uncollapsed_width();
+         if (last_vertical_tab_strip_width_ > target_width) {
+@@ -877,8 +894,10 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+               std::clamp(vertical_tab_strip_width,
+                          last_vertical_tab_strip_width_, target_width);
+         }
+-      } else {
++      } else if (!zen.collapsed_sidebar_fully_hidden) {
+         last_vertical_tab_strip_width_ = vertical_tab_strip_width;
++      } else {
++        last_vertical_tab_strip_width_ = 0;
+       }
+ 
+       const int vertical_tab_strip_x =
+@@ -917,7 +936,7 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+       vertical_tab_strip_width = vertical_tab_strip_bounds.width();
+       if (!zen.floating_vertical_tab_strip) {
+         int inset_amount = vertical_tab_strip_width;
+-        if (adjust_for_cracking) {
++        if (adjust_for_cracking && inset_amount > 0) {
+           inset_amount -= 1;
+         }
+         params.InsetHorizontal(inset_amount,
+@@ -925,7 +944,8 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+       }
+ 
+       // Let the vertical tab strip animate out over the content.
+-      if (vertical_tab_strip_animation.current_motion) {
++      if (!zen.collapsed_sidebar_fully_hidden &&
++          vertical_tab_strip_animation.current_motion) {
+         const bool vertical_tab_strip_resize_animation =
+             vertical_tab_strip_animation.current_motion ==
+                 TabStripAnimations::kExpand ||
+@@ -947,7 +967,8 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+     layout.AddChild(views().vertical_tab_strip_region_view,
+                     vertical_tab_strip_bounds,
+                     layout_data_->tab_strip_type == TabStripType::kVertical &&
+-                        zen.ShouldLayoutVerticalTabStrip());
++                        zen.ShouldLayoutVerticalTabStrip() &&
++                        !zen.collapsed_sidebar_fully_hidden);
+   }
+ 
+   // TODO(crbug.com/469425263): Ensure correct layout calculations for the
+@@ -1229,7 +1250,8 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+   }
+ 
+   if (layout_data_->tab_strip_type == TabStripType::kVertical &&
+-      !zen.floating_vertical_tab_strip) {
++      !zen.floating_vertical_tab_strip &&
++      !zen.collapsed_sidebar_fully_hidden) {
+     if (delegate().IsVerticalTabStripRightAligned()) {
+       trailing_side_chrome_attached = true;
+       trailing_vertical_tab_strip_attached = true;
+@@ -1280,12 +1302,14 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+   // Updating the top, left and right insets for contents container view when
+   // in split view. This is dependent on a number of other browser states.
+   if (horizontal_layout.is_split_view) {
++    const int border_inset =
++        arcium::GetChromeFrameBorderWidth(views().browser_view);
+     const int top_inset =
+         layout_data_->window_state == WindowState::kFullscreen ||
+                 infobar_visible
+-            ? MultiContentsView::kSplitViewContentInset
++            ? border_inset
+             : zen.enabled
+-                  ? ScaleExtent(MultiContentsView::kSplitViewContentInset,
++                  ? ScaleExtent(border_inset,
+                                 std::clamp(1.0f - zen.top_chrome_ratio, 0.0f,
+                                            1.0f))
+                   : 0;
+@@ -1295,7 +1319,7 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+     const bool include_trailing_inset =
+         separator_info.shadow_box ||
+         !(horizontal_layout.has_side_panel() && !side_panel_leading);
+-    const int default_inset = MultiContentsView::kSplitViewContentInset;
++    const int default_inset = border_inset;
+     const int panel_side_inset =
+         base::ClampRound((1.0 - side_panel_reveal_amount) * default_inset);
+     const int leading_inset =
+@@ -1320,7 +1344,9 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+   // bounds. This is to make optimizations during animations e.g. avoid
+   // repositioning status bubble.
+   views().multi_contents_view->SetIsAnimatingContent(
+-      side_panel_is_animating || vertical_tab_strip_animation.current_motion);
++      side_panel_is_animating ||
++      (!zen.collapsed_sidebar_fully_hidden &&
++       vertical_tab_strip_animation.current_motion));
+ 
+   // Lay out contents container. The contents container contains the multi-
+   // contents view when multi-contents are enabled. The checks here are to
+@@ -1583,7 +1609,8 @@ void BrowserViewTabbedLayoutImpl::Config
+     CustomCornersBackground* background) {
+   CHECK(layout_data_);
+   const bool frame_has_top_border = views().browser_view->bounds().y() > 0;
+-  const bool zen_mode = delegate().IsZenModeEnabledForLayout();
++  const bool zen_mode = delegate().IsZenModeEnabledForLayout() ||
++                        delegate().IsCollapsedSidebarFullyHiddenForLayout();
+   const bool zen_hiding =
+       zen_mode && delegate().GetTopChromeRevealRatio() < 1.0f;
+ 
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -31,6 +31,7 @@
+ #include "chrome/browser/ui/views/frame/multi_contents_view_drop_target_controller.h"
+ #include "chrome/browser/ui/views/frame/scrim_view.h"
+ #include "chrome/browser/ui/views/frame/themed_background.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/new_tab_footer/footer_web_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/common/pref_names.h"
+@@ -61,7 +62,8 @@ constexpr float kZenTopChromeAttachedThr
+ bool IsTopChromeAttached(const BrowserView& browser_view,
+                          bool should_show_top_separator) {
+   return should_show_top_separator &&
+-         (!browser_view.IsZenModeEnabledForLayout() ||
++         (!(browser_view.IsZenModeEnabledForLayout() ||
++            browser_view.IsCollapsedSidebarFullyHiddenForLayout()) ||
+           browser_view.GetTopChromeRevealRatio() >=
+               kZenTopChromeAttachedThreshold);
+ }
+@@ -177,6 +179,11 @@ MultiContentsView::MultiContentsView(
+       prefs::kHeliumRoundedFrame,
+       base::BindRepeating(&MultiContentsView::OnRoundedFramePrefStateChange,
+                           base::Unretained(this)));
++  pref_change_registrar_.Add(
++      arcium::kChromeFrameBorderWidthPref,
++      base::BindRepeating(
++          &MultiContentsView::OnChromeFrameBorderWidthPrefStateChange,
++          base::Unretained(this)));
+ 
+   UpdateContentsBorderAndOverlay();
+ }
+@@ -465,8 +472,9 @@ void MultiContentsView::MaybeUpdateBorde
+   }
+ }
+ 
+-int MultiContentsView::AttachedChromeEdges::TopInset() const {
+-  return top ? 0 : MultiContentsView::kSplitViewContentInset;
++int MultiContentsView::AttachedChromeEdges::TopInset(
++    int unattached_inset) const {
++  return top ? 0 : unattached_inset;
+ }
+ 
+ MultiContentsView::AttachedChromeEdges
+@@ -562,14 +570,15 @@ views::ProposedLayout MultiContentsView:
+   if (IsInSplitView()) {
+     available_space.Inset(split_view_insets_);
+   } else if (should_use_rounded_frame) {
+-    gfx::Insets single_insets(kSplitViewContentInset);
+-    single_insets.set_top(attached_chrome.TopInset());
++    const int border_width = arcium::GetChromeFrameBorderWidth(this);
++    gfx::Insets single_insets(border_width);
++    single_insets.set_top(attached_chrome.TopInset(border_width));
+     single_insets.set_left(contents_separators_.leading_side_chrome_attached
+                                ? 0
+-                               : kSplitViewContentInset);
++                               : border_width);
+     single_insets.set_right(contents_separators_.trailing_side_chrome_attached
+                                 ? 0
+-                                : kSplitViewContentInset);
++                                : border_width);
+     available_space.Inset(single_insets);
+   }
+   ViewSizes sizes = GetViewSizes(available_space);
+@@ -720,7 +729,11 @@ gfx::Rect MultiContentsView::CalculateDr
+   if (!is_drop_target_on_bottom) {
+     int top_margin = 0;
+     if (IsInSplitView() || should_use_rounded_frame || zen_mode) {
+-      top_margin = attached_chrome.TopInset();
++      const int border_width =
++          should_use_rounded_frame && !IsInSplitView()
++              ? arcium::GetChromeFrameBorderWidth(this)
++              : kSplitViewContentInset;
++      top_margin = attached_chrome.TopInset(border_width);
+     } else if (contents_separators_.should_show_top) {
+       top_margin =
+           contents_separators_.top_separator->GetPreferredSize().height();
+@@ -970,6 +983,12 @@ void MultiContentsView::OnRoundedFramePr
+   UpdateContentsBorderAndOverlay();
+   InvalidateLayout();
+   browser_view_->InvalidateLayout();
++}
++
++void MultiContentsView::OnChromeFrameBorderWidthPrefStateChange() {
++  UpdateContentsBorderAndOverlay();
++  InvalidateLayout();
++  browser_view_->InvalidateLayout();
+ }
+ 
+ void MultiContentsView::SetShouldShowTopSeparator(bool should_show) {
+--- a/chrome/browser/ui/views/frame/multi_contents_view.h
++++ b/chrome/browser/ui/views/frame/multi_contents_view.h
+@@ -184,6 +184,7 @@ class MultiContentsView
+   bool ShouldUseRoundedFrame() const;
+   void OnDragAndDropPrefStateChange();
+   void OnRoundedFramePrefStateChange();
++  void OnChromeFrameBorderWidthPrefStateChange();
+ 
+   void SetShouldShowTopSeparator(bool should_show);
+   void SetTopChromeAttachmentState(bool top_edge_attached_to_infobar,
+@@ -245,7 +246,7 @@ class MultiContentsView
+     bool leading = false;
+     bool trailing = false;
+ 
+-    int TopInset() const;
++    int TopInset(int unattached_inset) const;
+   };
+ 
+   static constexpr int kMinWebContentsSize = 200;
+--- a/chrome/browser/ui/views/frame/multi_contents_view_browsertest.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view_browsertest.cc
+@@ -19,6 +19,8 @@
+ #include "chrome/browser/ui/views/frame/multi_contents_drop_target_view.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view_delegate.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view_drop_target_controller.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
++#include "chrome/browser/ui/views/helium/frame_corner_radius.h"
+ #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+ #include "chrome/browser/ui/views/test/split_view_browser_test_mixin.h"
+ #include "chrome/common/pref_names.h"
+@@ -93,6 +95,72 @@ class MultiContentsViewBrowserTest
+     : public SplitViewBrowserTestMixin<InProcessBrowserTest> {};
+ 
+ IN_PROC_BROWSER_TEST_F(MultiContentsViewBrowserTest,
++                       RoundedFrameBorderWidthLayout) {
++  MultiContentsView* view = multi_contents_view();
++  PrefService* prefs = browser()->profile()->GetPrefs();
++  prefs->SetBoolean(prefs::kHeliumRoundedFrame, true);
++
++  auto content_bounds_for_border = [&](int border_width) {
++    prefs->SetInteger(arcium::kChromeFrameBorderWidthPref, border_width);
++    view->GetWidget()->LayoutRootViewIfNecessary();
++    return view->GetActiveContentsContainerView()->bounds();
++  };
++
++  const gfx::Rect no_border = content_bounds_for_border(0);
++  const gfx::Rect maximum_border = content_bounds_for_border(24);
++  // BrowserView owns the live attachment state for the top and side edges.
++  // Measure the resulting deltas instead of overriding that state in this
++  // test; every unattached edge must gain the configured 24 DIP inset.
++  const int left_delta = maximum_border.x() - no_border.x();
++  const int top_delta = maximum_border.y() - no_border.y();
++  const int right_delta = no_border.right() - maximum_border.right();
++  const int bottom_delta = no_border.bottom() - maximum_border.bottom();
++  EXPECT_TRUE(left_delta == 0 || left_delta == 24);
++  EXPECT_TRUE(top_delta == 0 || top_delta == 24);
++  EXPECT_TRUE(right_delta == 0 || right_delta == 24);
++  EXPECT_EQ(bottom_delta, 24);
++  EXPECT_EQ(maximum_border.width(),
++            no_border.width() - left_delta - right_delta);
++  EXPECT_EQ(maximum_border.height(),
++            no_border.height() - top_delta - bottom_delta);
++  EXPECT_EQ(arcium::GetChromeFrameBorderWidth(browser()->profile()), 24);
++
++  prefs->SetInteger(arcium::kChromeFrameBorderWidthPref, -1);
++  EXPECT_EQ(arcium::GetChromeFrameBorderWidth(browser()->profile()), 0);
++  prefs->SetInteger(arcium::kChromeFrameBorderWidthPref, 100);
++  EXPECT_EQ(arcium::GetChromeFrameBorderWidth(browser()->profile()), 24);
++  EXPECT_EQ(GetFrameRadiusForContentInset(0), GetSystemWindowRadius());
++  EXPECT_EQ(GetFrameRadiusForContentInset(100), 0);
++
++  prefs->SetInteger(arcium::kChromeUIScalePref, 125);
++  prefs->SetInteger(arcium::kChromeFrameBorderWidthPref, 24);
++  EXPECT_EQ(arcium::GetChromeFrameBorderWidth(view), 30);
++
++  prefs->SetInteger(arcium::kChromeUIScalePref, 100);
++  auto* tab_strip_model = browser()->tab_strip_model();
++  const int active_index = tab_strip_model->active_index();
++  RunScheduledLayouts();
++  chrome::NewSplitTab(browser(), split_tabs::SplitTabLayout::kSideBySide,
++                      split_tabs::SplitTabCreatedSource::kToolbarButton);
++  ASSERT_TRUE(content::WaitForLoadStop(
++      tab_strip_model->GetWebContentsAt(active_index + 1)));
++  RunScheduledLayouts();
++  const gfx::Insets wide_split_insets = view->split_view_insets_for_testing();
++  EXPECT_EQ(wide_split_insets.left(), 24);
++  EXPECT_EQ(wide_split_insets.right(), 24);
++  EXPECT_EQ(wide_split_insets.bottom(), 24);
++  const int resize_area_width = view->resize_area_for_testing()->width();
++
++  prefs->SetInteger(arcium::kChromeFrameBorderWidthPref, 0);
++  RunScheduledLayouts();
++  const gfx::Insets zero_split_insets = view->split_view_insets_for_testing();
++  EXPECT_EQ(zero_split_insets.left(), 0);
++  EXPECT_EQ(zero_split_insets.right(), 0);
++  EXPECT_EQ(zero_split_insets.bottom(), 0);
++  EXPECT_EQ(view->resize_area_for_testing()->width(), resize_area_width);
++}
++
++IN_PROC_BROWSER_TEST_F(MultiContentsViewBrowserTest,
+                        HandleDropTargetViewLinkDrop_IsSupported) {
+   EXPECT_TRUE(multi_contents_view()->IsDragAndDropEnabled());
+ 
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view_browsertest.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/root_tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+@@ -156,6 +157,54 @@ IN_PROC_BROWSER_TEST_F(VerticalTabStripR
+   ui_test_utils::ViewVisibilityWaiter(tabs_separator, false).Wait();
+ }
+ 
++IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest,
++                       ArcCollapsedSidebarStyleHidesChromeAndRecovers) {
++  auto* browser_view = &browser()->GetBrowserView();
++  auto* prefs = browser()->profile()->GetPrefs();
++  auto* top_container = browser_view->top_container();
++
++  prefs->SetInteger(arcium::kCollapsedSidebarStylePref,
++                    arcium::kCollapsedSidebarStyleIconRail);
++  state_controller()->RequestCollapse(true);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return state_controller()->IsCollapsed(); }));
++  RunScheduledLayouts();
++
++  EXPECT_FALSE(browser_view->IsCollapsedSidebarFullyHiddenForLayout());
++  EXPECT_EQ(region_view()->bounds().width(),
++            VerticalTabStripRegionView::kCollapsedWidth);
++  EXPECT_GT(top_container->bounds().height(), 0);
++
++  prefs->SetInteger(arcium::kCollapsedSidebarStylePref,
++                    arcium::kCollapsedSidebarStyleFullyHidden);
++  RunScheduledLayouts();
++
++  EXPECT_TRUE(browser_view->IsCollapsedSidebarFullyHiddenForLayout());
++  EXPECT_EQ(region_view()->bounds().width(), 0);
++  EXPECT_EQ(top_container->bounds().height(), 0);
++  EXPECT_FLOAT_EQ(browser_view->GetTopChromeRevealRatio(), 0.0f);
++
++  // Entering Zen must preserve an explicitly hidden collapsed sidebar.
++  prefs->SetBoolean(prefs::kHeliumZenMode, true);
++  RunScheduledLayouts();
++  EXPECT_TRUE(state_controller()->IsCollapsed());
++  EXPECT_TRUE(browser_view->IsCollapsedSidebarFullyHiddenForLayout());
++  EXPECT_EQ(region_view()->bounds().width(), 0);
++  prefs->SetBoolean(prefs::kHeliumZenMode, false);
++  RunScheduledLayouts();
++
++  state_controller()->RequestCollapse(false);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return !state_controller()->IsCollapsed(); }));
++  RunScheduledLayouts();
++
++  EXPECT_FALSE(browser_view->IsCollapsedSidebarFullyHiddenForLayout());
++  EXPECT_EQ(region_view()->bounds().width(),
++            state_controller()->GetUncollapsedWidth());
++  EXPECT_GT(top_container->bounds().height(), 0);
++  EXPECT_FLOAT_EQ(browser_view->GetTopChromeRevealRatio(), 1.0f);
++}
++
+ IN_PROC_BROWSER_TEST_F(VerticalTabStripRegionViewTest, ResizeAreaBounds) {
+   region_view()->SetBounds(0, 0, 200, 600);
+   // Verify resize area is on the right side of the VerticalTabStripRegionView.
+--- a/chrome/browser/ui/views/helium/arcium_chrome_ui_scale.cc
++++ b/chrome/browser/ui/views/helium/arcium_chrome_ui_scale.cc
+@@ -50,6 +50,30 @@ void UpdateChromeUIScaleCache(views::Wid
+   }
+ }
+ 
++int GetChromeFrameBorderWidth(const Profile* profile) {
++  const PrefService* prefs =
++      profile ? profile->GetOriginalProfile()->GetPrefs() : nullptr;
++  if (!prefs || !prefs->FindPreference(kChromeFrameBorderWidthPref)) {
++    return kChromeFrameBorderWidthDefault;
++  }
++  return std::clamp(prefs->GetInteger(kChromeFrameBorderWidthPref),
++                    kChromeFrameBorderWidthMin,
++                    kChromeFrameBorderWidthMax);
++}
++
++int GetChromeFrameBorderWidth(const views::View* view) {
++  const views::Widget* widget = view ? view->GetWidget() : nullptr;
++  const BrowserView* browser_view =
++      widget ? BrowserView::GetBrowserViewForNativeWindow(
++                   widget->GetNativeWindow())
++             : nullptr;
++  const int border_width =
++      browser_view && browser_view->GetIsNormalType()
++          ? GetChromeFrameBorderWidth(browser_view->GetProfile())
++          : kChromeFrameBorderWidthDefault;
++  return ScaleChromeDip(view, border_width);
++}
++
+ int ScaleChromeDip(const views::View* view, int value) {
+   return base::ClampRound(value * GetChromeUIScale(view));
+ }
+--- a/chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h
++++ b/chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h
+@@ -20,12 +20,28 @@ inline constexpr int kChromeUIScaleDefau
+ inline constexpr int kChromeUIScaleMin = 80;
+ inline constexpr int kChromeUIScaleMax = 125;
+ 
++inline constexpr char kChromeFrameBorderWidthPref[] =
++    "arcium.appearance.chrome_frame_border_width";
++inline constexpr int kChromeFrameBorderWidthDefault = 3;
++inline constexpr int kChromeFrameBorderWidthMin = 0;
++inline constexpr int kChromeFrameBorderWidthMax = 24;
++
++inline constexpr char kCollapsedSidebarStylePref[] =
++    "arcium.appearance.collapsed_sidebar_style";
++inline constexpr int kCollapsedSidebarStyleIconRail = 0;
++inline constexpr int kCollapsedSidebarStyleFullyHidden = 1;
++inline constexpr int kCollapsedSidebarStyleMin = kCollapsedSidebarStyleIconRail;
++inline constexpr int kCollapsedSidebarStyleMax =
++    kCollapsedSidebarStyleFullyHidden;
++
+ // Original-profile preference; no display scale or WebContents zoom changes.
+ double GetChromeUIScale(const Profile* profile);
+ double GetChromeUIScale(const views::View* view);
+ // Publish before theme/layout notifications. A null profile clears the cache
+ // when BrowserView leaves its widget; child widgets inherit without copies.
+ void UpdateChromeUIScaleCache(views::Widget* widget, const Profile* profile);
++int GetChromeFrameBorderWidth(const Profile* profile);
++int GetChromeFrameBorderWidth(const views::View* view);
+ int ScaleChromeDip(const views::View* view, int value);
+ int GetChromeLayoutConstant(const views::View* view, LayoutConstant constant);
+ void RefreshChromeUI(BrowserView* browser_view);
+--- a/chrome/browser/ui/views/helium/frame_corner_radius.cc
++++ b/chrome/browser/ui/views/helium/frame_corner_radius.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/helium/frame_corner_radius.h"
+ 
++#include <algorithm>
++
+ #include "build/build_config.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ 
+@@ -17,7 +19,11 @@ int GetSystemWindowRadius() {
+ }
+ #endif
+ 
++int GetFrameRadiusForContentInset(int content_inset) {
++  return std::max(0, GetSystemWindowRadius() - std::max(0, content_inset));
++}
++
+ int GetPaddedFrameRadius() {
+-  return GetSystemWindowRadius() -
+-         GetLayoutConstant(LayoutConstant::kHeliumBasePadding);
++  return GetFrameRadiusForContentInset(
++      GetLayoutConstant(LayoutConstant::kHeliumBasePadding));
+ }
+--- a/chrome/browser/ui/views/helium/frame_corner_radius.h
++++ b/chrome/browser/ui/views/helium/frame_corner_radius.h
+@@ -7,6 +7,7 @@
+ 
+ int GetGenericFrameRadius();
+ int GetSystemWindowRadius();
++int GetFrameRadiusForContentInset(int content_inset);
+ int GetPaddedFrameRadius();
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_FRAME_CORNER_RADIUS_H_

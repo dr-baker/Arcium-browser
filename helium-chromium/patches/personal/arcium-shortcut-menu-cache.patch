@@ -1,0 +1,50 @@
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.mm
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac.mm
+@@ -155,7 +155,8 @@
+     NSMenuItem* item,
+     int command_id,
+     const std::optional<ui::Accelerator>& current_accelerator) {
+-  if (!IsManagedMenuCommand(item, command_id, current_accelerator)) {
++  if (!IsUnassignedCanonicalMenuCommand(command_id) ||
++      !IsManagedMenuCommand(item, command_id, current_accelerator)) {
+     return current_accelerator;
+   }
+ 
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_platform_mac_unittest.mm
+@@ -380,6 +380,35 @@
+ }
+ 
+ TEST(BrowserShortcutPlatformMacTest,
++     ManagedNonAliasItemsRefreshWithoutAliasBaselineLookup) {
++  ASSERT_NE(NSApp, nil);
++  ScopedMainMenu menu(MainMenuWithCommandShortcut(
++      IDC_NEW_TAB, @"New Tab", @"t", NSEventModifierFlagCommand,
++      @selector(commandDispatch:)));
++
++  const ui::Accelerator new_tab(ui::VKEY_T, ui::EF_COMMAND_DOWN);
++  UpdatePlatformMenuAccelerators({
++      {new_tab, IDC_NEW_TAB},
++  });
++
++  // A service label refresh can rebuild defaults repeatedly while the menu
++  // item remains managed. Nonalias commands have no original-alias cache.
++  for (int refresh = 0; refresh < 3; ++refresh) {
++    const std::vector<BrowserShortcutPlatformDefaultAccelerator> defaults =
++        GetPlatformDefaultAccelerators();
++    int new_tab_entries = 0;
++    for (const BrowserShortcutPlatformDefaultAccelerator& entry : defaults) {
++      if (entry.command_id != IDC_NEW_TAB) {
++        continue;
++      }
++      ++new_tab_entries;
++      EXPECT_EQ(entry.accelerator, new_tab);
++    }
++    EXPECT_EQ(new_tab_entries, 1);
++  }
++}
++
++TEST(BrowserShortcutPlatformMacTest,
+      ReassignableArcLegacyDefaultsAreLimitedToExactAccelerators) {
+   ASSERT_NE(NSApp, nil);
+   ScopedMainMenu menu([[NSMenu alloc] initWithTitle:@"Test Main Menu"]);

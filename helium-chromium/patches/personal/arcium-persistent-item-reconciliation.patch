@@ -1,0 +1,25 @@
+# Clear live presentation state before pruning removed persistent items.
+# Requires arcium-spaces and arcium-pins.
+Index: src/chrome/browser/ui/helium/helium_space_service.cc
+===================================================================
+--- src.orig/chrome/browser/ui/helium/helium_space_service.cc
++++ src/chrome/browser/ui/helium/helium_space_service.cc
+@@ -2342,7 +2342,17 @@
+     }
+   }
+   for (uint64_t token : stale_tokens) {
+-    EraseLiveAssociation(token);
++    const auto association = live_associations_.find(token);
++    if (association == live_associations_.end()) {
++      continue;
++    }
++    // Removing a durable record must also clear its live tab's anchored home
++    // and restore the ordinary collection before forgetting the association.
++    if (tabs::TabInterface* tab = association->second->tab.get()) {
++      DisassociateLiveTab(tab);
++    } else {
++      EraseLiveAssociation(token);
++    }
+   }
+   lifecycle_.RetainOnly(durable_keys);
+   for (const std::string& key : durable_keys) {

@@ -1,0 +1,18 @@
+--- a/chrome/browser/net/stub_resolver_config_reader_unittest.cc
++++ b/chrome/browser/net/stub_resolver_config_reader_unittest.cc
+@@ -18,7 +18,6 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/prefs/testing_pref_service.h"
+ #include "components/safe_browsing/core/common/features.h"
+-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "net/base/features.h"
+ #include "net/dns/public/dns_over_https_config.h"
+@@ -68,7 +67,6 @@
+   StubResolverConfigReaderTest() {
+     StubResolverConfigReader::RegisterPrefs(local_state_.registry());
+     DefaultDnsOverHttpsConfigSource::RegisterPrefs(local_state_.registry());
+-    safe_browsing::RegisterProfilePrefs(local_state_.registry());
+   }
+ 
+  protected:

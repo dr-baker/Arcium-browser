@@ -1,0 +1,31 @@
+--- a/chrome/browser/sync/test/integration/sync_app_helper.cc
++++ b/chrome/browser/sync/test/integration/sync_app_helper.cc
+@@ -104,7 +104,7 @@ AppStateMap GetAppStates(Profile* profil
+     }
+   }
+ 
+-  const extensions::PendingExtensionManager* pending_extension_manager =
++  extensions::PendingExtensionManager* pending_extension_manager =
+       extensions::PendingExtensionManager::Get(profile);
+ 
+   std::list<std::string> pending_crx_ids =
+--- a/chrome/browser/sync/test/integration/sync_extension_helper.cc
++++ b/chrome/browser/sync/test/integration/sync_extension_helper.cc
+@@ -166,7 +166,7 @@ void SyncExtensionHelper::InstallExtensi
+ 
+   // We make a copy here since InstallExtension() removes the
+   // extension from the extensions service's copy.
+-  const extensions::PendingExtensionManager* pending_extension_manager =
++  extensions::PendingExtensionManager* pending_extension_manager =
+       extensions::PendingExtensionManager::Get(profile);
+ 
+   std::list<std::string> pending_crx_ids =
+@@ -232,7 +232,7 @@ SyncExtensionHelper::ExtensionStateMap S
+                                                              : "disabled");
+   }
+ 
+-  const extensions::PendingExtensionManager* pending_extension_manager =
++  extensions::PendingExtensionManager* pending_extension_manager =
+       extensions::PendingExtensionManager::Get(profile);
+ 
+   std::list<std::string> pending_crx_ids =

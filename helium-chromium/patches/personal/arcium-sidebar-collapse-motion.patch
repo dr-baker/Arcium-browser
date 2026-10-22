@@ -1,0 +1,951 @@
+--- a/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
+@@ -213,12 +213,19 @@ bool BrowserFrameViewMac::CaptionButtons
+ 
+ BrowserLayoutParams BrowserFrameViewMac::GetBrowserLayoutParams() const {
+   auto params = BrowserFrameView::GetBrowserLayoutParams();
+-  if (GetBrowserView()->IsCollapsedSidebarFullyHiddenForLayout() &&
+-      GetBrowserView()->GetTopChromeRevealRatio() <= 0.0f) {
+-    // The Arc fully hidden style also hides the native traffic lights. Let
+-    // the webpage use the whole client area while the controls are absent.
+-    params.leading_exclusion = {};
+-    params.trailing_exclusion = {};
++  if (GetBrowserView()->IsCollapsedSidebarFullyHiddenForLayout() ||
++      GetBrowserView()->IsCollapsedSidebarRevealAnimationActive()) {
++    // Fade the native frame exclusion with the top chrome so the content area
++    // does not jump when the fully hidden sidebar reaches its target.
++    const float reveal = GetBrowserView()->GetTopChromeRevealRatio();
++    auto scale_exclusion = [reveal](BrowserLayoutExclusionArea& exclusion) {
++      exclusion.content.set_width(exclusion.content.width() * reveal);
++      exclusion.content.set_height(exclusion.content.height() * reveal);
++      exclusion.horizontal_padding *= reveal;
++      exclusion.vertical_padding *= reveal;
++    };
++    scale_exclusion(params.leading_exclusion);
++    scale_exclusion(params.trailing_exclusion);
+   }
+   if (GetBrowserView()->IsFullscreen()) {
+     // No insets for caption buttons in fullscreen, since caption buttons are on
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -79,6 +79,7 @@
+ #include "chrome/browser/ui/accelerator_table.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
++#include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
+ #include "chrome/browser/ui/autofill/payments/save_card_ui.h"
+ #include "chrome/browser/ui/bookmarks/bookmark_bar_controller.h"
+@@ -1960,19 +1961,50 @@ bool BrowserView::IsZenModeEnabledForLay
+ }
+ 
+ float BrowserView::GetTopChromeRevealRatio() const {
+-  if (!zen_mode_enabled_ && !IsCollapsedSidebarFullyHiddenForLayout()) {
++  if (IsZenModeTopChromePinned()) {
++    return 1.f;
++  }
++  if (sidebar_chrome_transition_ && IsFullyHiddenSidebarStyleEnabled()) {
++    const auto& transition = *sidebar_chrome_transition_;
++    const double width = *BrowserAnimationController::From(browser_)
++                              ->GetCurrentValue(
++                                  TabStripAnimations::kVerticalTabStrip,
++                                  TabStripAnimations::kTabStripWidth);
++    const double remaining = transition.target_top - transition.start_width;
++    const double progress =
++        std::abs(remaining) > 0.0001
++            ? std::clamp((width - transition.start_width) / remaining, 0.0, 1.0)
++            : 1.0;
++    return transition.start_top +
++           (transition.target_top - transition.start_top) * progress;
++  }
++  if (!zen_mode_enabled_ && !IsCollapsedSidebarFullyHiddenForLayout() &&
++      !IsCollapsedSidebarRevealAnimationActive() &&
++      !zen_top_chrome_animation_.is_animating()) {
+     return 1.f;
+   }
+   return zen_top_chrome_animation_.GetCurrentValue();
+ }
+ 
+ float BrowserView::GetSideChromeRevealRatio() const {
++  if (!ShouldDrawVerticalTabStrip() ||
++      IsCollapsedSidebarFullyHiddenForLayout()) {
++    return 0.f;
++  }
+   if (!zen_mode_enabled_) {
++    if (IsFullyHiddenSidebarStyleEnabled()) {
++      auto* controller = BrowserAnimationController::From(browser_);
++      const auto motion =
++          controller->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip);
++      if (motion == TabStripAnimations::kCollapse ||
++          motion == TabStripAnimations::kExpand) {
++        return *controller->GetCurrentValue(
++            TabStripAnimations::kVerticalTabStrip,
++            TabStripAnimations::kTabStripWidth);
++      }
++    }
+     return 1.f;
+   }
+-  if (!ShouldDrawVerticalTabStrip()) {
+-    return 0.f;
+-  }
+   return zen_side_chrome_animation_.GetCurrentValue();
+ }
+ 
+@@ -1982,12 +2014,96 @@ bool BrowserView::IsZenModeSideChromePin
+ }
+ 
+ bool BrowserView::IsZenModeTopChromePinned() const {
+-  return zen_mode_enabled_ && browser_->profile()->GetPrefs()->GetBoolean(
+-                                  prefs::kHeliumZenModeTopChromePinned);
++  return (zen_mode_enabled_ || IsFullyHiddenSidebarStyleEnabled()) &&
++         browser_->profile()->GetPrefs()->GetBoolean(
++             prefs::kHeliumZenModeTopChromePinned);
+ }
+ 
+ bool BrowserView::IsChromeRevealModeEnabled() const {
+-  return IsZenModeEnabled() || IsCollapsedSidebarFullyHiddenForLayout();
++  return IsZenModeEnabled() || IsCollapsedSidebarFullyHiddenForLayout() ||
++         IsCollapsedSidebarRevealAnimationActive();
++}
++
++bool BrowserView::IsFullyHiddenSidebarStyleEnabled() const {
++  return !zen_mode_enabled_ && GetIsNormalType() && !IsFullscreen() &&
++         ShouldDrawVerticalTabStrip() &&
++         std::clamp(GetProfile()->GetPrefs()->GetInteger(
++                        arcium::kCollapsedSidebarStylePref),
++                    arcium::kCollapsedSidebarStyleMin,
++                    arcium::kCollapsedSidebarStyleMax) ==
++             arcium::kCollapsedSidebarStyleFullyHidden;
++}
++
++bool BrowserView::IsCollapsedSidebarRevealAnimationActive() const {
++  if (!IsFullyHiddenSidebarStyleEnabled()) {
++    return false;
++  }
++
++  const auto motion =
++      BrowserAnimationController::From(browser_)->GetCurrentMotion(
++          TabStripAnimations::kVerticalTabStrip);
++
++  // IsShowing() remains true after a completed show animation. Restrict that
++  // branch to an intermediate value so a normal, fully shown toolbar does not
++  // enable the hidden-chrome event monitor.
++  return motion == TabStripAnimations::kCollapse ||
++         motion == TabStripAnimations::kExpand ||
++         zen_top_chrome_animation_.IsClosing() ||
++         (zen_top_chrome_animation_.IsShowing() &&
++          zen_top_chrome_animation_.GetCurrentValue() < 1.0);
++}
++
++void BrowserView::OnCollapsedSidebarAnimationUpdated(
++    BrowserAnimationUpdate status,
++    BrowserAnimationMotion motion) {
++  if (status == BrowserAnimationUpdate::kEnded ||
++      status == BrowserAnimationUpdate::kCanceled) {
++    // Hand the exact current reveal back to transient toolbar behavior before
++    // a possible reversal starts. Posted cleanup must not reset a new motion.
++    if (sidebar_chrome_transition_) {
++      const float reveal = GetTopChromeRevealRatio();
++      sidebar_chrome_transition_.reset();
++      zen_top_chrome_animation_.Reset(reveal);
++    }
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&BrowserView::FinishCollapsedSidebarAnimation,
++                       weak_ptr_factory_.GetWeakPtr()));
++    return;
++  }
++
++  if (!IsFullyHiddenSidebarStyleEnabled() ||
++      (motion != TabStripAnimations::kCollapse &&
++       motion != TabStripAnimations::kExpand)) {
++    return;
++  }
++
++  if (status == BrowserAnimationUpdate::kStarted) {
++    const double start_top = GetTopChromeRevealRatio();
++    const double start_width = *BrowserAnimationController::From(browser_)
++                                    ->GetCurrentValue(
++                                        TabStripAnimations::kVerticalTabStrip,
++                                        TabStripAnimations::kTabStripWidth);
++    zen_cursor_exit_timer_.Stop();
++    zen_top_chrome_animation_.Reset(start_top);
++    sidebar_chrome_transition_ = SidebarChromeTransition{
++        start_width, start_top,
++        motion == TabStripAnimations::kExpand ? 1.0 : 0.0};
++  }
++
++  // The sidebar's width animation now drives the search bar, frame controls,
++  // and page inset together. There is no second animation clock to drift.
++  if (vertical_tab_strip_region_view_) {
++    vertical_tab_strip_region_view_->UpdateInteriorMargin();
++  }
++  if (multi_contents_view_) {
++    multi_contents_view_->MaybeUpdateBorderForZenReveal();
++  }
++  if (auto* frame_view = GetFrameView()) {
++    frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
++  }
++  UpdateZenModeEventMonitor();
++  InvalidateLayout();
+ }
+ 
+ void BrowserView::OnCollapsedSidebarStylePrefChanged() {
+@@ -2000,11 +2116,26 @@ void BrowserView::UpdateCollapsedSidebar
+   collapsed_sidebar_fully_hidden_ = fully_hidden;
+ 
+   if (!zen_mode_enabled_ && (state_changed || force_reveal_reset)) {
+-    const float reveal = fully_hidden ? 0.f : 1.f;
+-    zen_top_chrome_animation_.Reset(reveal);
+-    zen_side_chrome_animation_.Reset(reveal);
++    const bool reveal_top = !fully_hidden || IsZenModeTopChromePinned();
++    if (force_reveal_reset) {
++      zen_top_chrome_animation_.Reset(reveal_top ? 1.f : 0.f);
++      zen_side_chrome_animation_.Reset(fully_hidden ? 0.f : 1.f);
++    } else if (!IsCollapsedSidebarRevealAnimationActive()) {
++      // Preserve a captured Zen reveal when the collapsed state changes at
++      // the same time. Only an explicit reset discards the current position.
++      if (reveal_top) {
++        zen_top_chrome_animation_.Show();
++      } else {
++        zen_top_chrome_animation_.Hide();
++      }
++      if (fully_hidden) {
++        zen_side_chrome_animation_.Hide();
++      } else {
++        zen_side_chrome_animation_.Show();
++      }
++    }
+     if (auto* frame_view = GetFrameView()) {
+-      frame_view->SetCaptionButtonsOpacity(reveal);
++      frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
+     }
+   }
+ 
+@@ -2014,9 +2145,24 @@ void BrowserView::UpdateCollapsedSidebar
+     if (GetWidget()) {
+       GetWidget()->OnSizeConstraintsChanged();
+     }
++    if (GetWidget() && IsChromeRevealModeEnabled()) {
++      // A pointer can already be parked in the six-pixel trigger when the
++      // sidebar enters fully hidden mode. Re-evaluate it immediately instead
++      // of waiting for a future mouse-move event.
++      UpdateZenModeRevealFromCursor();
++    }
+   }
+ }
+ 
++void BrowserView::FinishCollapsedSidebarAnimation() {
++  // A canceled animation can already have been replaced by a reverse motion.
++  if (sidebar_chrome_transition_) {
++    return;
++  }
++  UpdateCollapsedSidebarHiddenState();
++  InvalidateLayout();
++}
++
+ void BrowserView::ToggleZenModeSideChrome() {
+   if (!IsZenModeEnabled() || !ShouldDrawVerticalTabStrip()) {
+     return;
+@@ -2149,7 +2295,7 @@ void BrowserView::OnZenModeSideChromePin
+ }
+ 
+ void BrowserView::OnZenModeTopChromePinnedPrefChanged() {
+-  if (!zen_mode_enabled_) {
++  if (!zen_mode_enabled_ && !IsFullyHiddenSidebarStyleEnabled()) {
+     return;
+   }
+ 
+@@ -2157,6 +2303,16 @@ void BrowserView::OnZenModeTopChromePinn
+   if (top_chrome_pinned) {
+     RevealZenModeTopChromeImmediately();
+   } else {
++    if (sidebar_chrome_transition_) {
++      // Unpin from the visible position while retaining the sidebar's width
++      // endpoint. target_top also denotes that normalized width endpoint.
++      sidebar_chrome_transition_->start_top =
++          zen_top_chrome_animation_.GetCurrentValue();
++      sidebar_chrome_transition_->start_width =
++          *BrowserAnimationController::From(browser_)->GetCurrentValue(
++              TabStripAnimations::kVerticalTabStrip,
++              TabStripAnimations::kTabStripWidth);
++    }
+     UpdateZenModeRevealFromCursor();
+   }
+ 
+@@ -2201,6 +2357,14 @@ void BrowserView::UpdateZenModeState() {
+     return;
+   }
+ 
++  // Capture the presented ratios before changing the mode that selects their
++  // source. In particular, the sidebar may currently own the top reveal.
++  const float top_reveal = GetTopChromeRevealRatio();
++  const float side_reveal = GetSideChromeRevealRatio();
++  sidebar_chrome_transition_.reset();
++  zen_cursor_exit_timer_.Stop();
++  zen_top_chrome_animation_.Reset(top_reveal);
++  zen_side_chrome_animation_.Reset(side_reveal);
+   zen_mode_enabled_ = zen_mode_enabled;
+   browser_->command_controller()->UpdateCommandEnabled(
+       IDC_TOGGLE_ZEN_MODE_TOP_CHROME_PIN, zen_mode_enabled);
+@@ -2223,9 +2387,24 @@ void BrowserView::UpdateZenModeState() {
+   UpdateZenCollapseButtonVisibility();
+ 
+   if (!zen_mode_enabled_) {
+-    UpdateCollapsedSidebarHiddenState(/*force_reveal_reset=*/true);
++    UpdateCollapsedSidebarHiddenState();
++    const auto motion = BrowserAnimationController::From(browser_)
++                            ->GetCurrentMotion(
++                                TabStripAnimations::kVerticalTabStrip);
++    if (IsFullyHiddenSidebarStyleEnabled() &&
++        (motion == TabStripAnimations::kCollapse ||
++         motion == TabStripAnimations::kExpand)) {
++      OnCollapsedSidebarAnimationUpdated(BrowserAnimationUpdate::kStarted,
++                                         motion);
++    } else if (IsChromeRevealModeEnabled()) {
++      UpdateZenModeRevealFromCursor();
++    } else {
++      zen_top_chrome_animation_.Show();
++      zen_side_chrome_animation_.Show();
++    }
+   }
+ 
++  UpdateZenModeEventMonitor();
+   if (multi_contents_view_) {
+     multi_contents_view_->MaybeUpdateContentsBorderAndOverlay();
+   }
+@@ -2240,7 +2419,8 @@ void BrowserView::UpdateZenModeEventMoni
+   if (!zen_mode_event_monitor_) {
+     zen_mode_event_monitor_ = views::EventMonitor::CreateWindowMonitor(
+         this, GetWidget()->GetNativeWindow(),
+-        {ui::EventType::kMouseMoved, ui::EventType::kMouseExited});
++        {ui::EventType::kMouseMoved, ui::EventType::kMouseExited,
++         ui::EventType::kMousePressed});
+   }
+ }
+ 
+@@ -2320,6 +2500,9 @@ void BrowserView::UpdateZenModeRevealFro
+ }
+ 
+ void BrowserView::UpdateZenModeReveal(bool reveal_top, bool reveal_side) {
++  if (sidebar_chrome_transition_ && IsFullyHiddenSidebarStyleEnabled()) {
++    return;
++  }
+   if (!IsChromeRevealModeEnabled()) {
+     return;
+   }
+@@ -2376,7 +2559,7 @@ void BrowserView::UpdateZenModeReveal(bo
+         toolbar_->AbortToolbarContainerAnimationsForZenReveal();
+       }
+     }
+-  } else if (zen_top_chrome_animation_.IsShowing()) {
++  } else if (zen_top_chrome_animation_.GetCurrentValue() > 0.f) {
+     zen_top_chrome_animation_.Hide();
+   }
+ 
+@@ -2384,7 +2567,7 @@ void BrowserView::UpdateZenModeReveal(bo
+     if (!zen_side_chrome_animation_.IsShowing()) {
+       zen_side_chrome_animation_.Show();
+     }
+-  } else if (zen_side_chrome_animation_.IsShowing()) {
++  } else if (zen_side_chrome_animation_.GetCurrentValue() > 0.f) {
+     zen_side_chrome_animation_.Hide();
+   }
+ }
+@@ -7282,6 +7465,7 @@ void BrowserView::AnimationProgressed(co
+         // the layout system (only their rendering opacity is changed).
+         frame_view->SetCaptionButtonsOpacity(GetTopChromeRevealRatio());
+       }
++      UpdateZenModeEventMonitor();
+     }
+   }
+ }
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -20,6 +20,7 @@
+ #include "base/time/time.h"
+ #include "base/timer/timer.h"
+ #include "build/build_config.h"
++#include "chrome/browser/ui/animation/browser_animation_types.h"
+ #include "chrome/browser/ui/bookmarks/bookmark_bar_controller.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h"
+@@ -444,6 +445,12 @@ class BrowserView : public BrowserWindow
+   bool IsZenModeEnabledForLayout() const;
+   float GetTopChromeRevealRatio() const;
+   float GetSideChromeRevealRatio() const;
++  // Returns true while the fully hidden sidebar or its top reveal is moving.
++  bool IsFullyHiddenSidebarStyleEnabled() const;
++  bool IsCollapsedSidebarRevealAnimationActive() const;
++  // Synchronizes top chrome with the vertical sidebar's size animation.
++  void OnCollapsedSidebarAnimationUpdated(BrowserAnimationUpdate status,
++                                           BrowserAnimationMotion motion);
+   bool IsZenModeSideChromePinned() const;
+   bool IsZenModeTopChromePinned() const;
+ 
+@@ -968,6 +975,7 @@ class BrowserView : public BrowserWindow
+   void OnZenModeTopChromePinnedPrefChanged();
+   void OnCollapsedSidebarStylePrefChanged();
+   void UpdateCollapsedSidebarHiddenState(bool force_reveal_reset = false);
++  void FinishCollapsedSidebarAnimation();
+   void UpdateZenModeState();
+   void MaybeExpandVerticalTabStripForZenMode();
+   void UpdateZenCollapseButtonVisibility();
+@@ -1518,6 +1526,12 @@ class BrowserView : public BrowserWindow
+   std::optional<gfx::Point> zen_last_cursor_;
+   bool zen_mode_enabled_ = false;
+   bool collapsed_sidebar_fully_hidden_ = false;
++  struct SidebarChromeTransition {
++    double start_width;
++    double start_top;
++    double target_top;
++  };
++  std::optional<SidebarChromeTransition> sidebar_chrome_transition_;
+ 
+   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
+ };
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h
+@@ -56,6 +56,10 @@ class BrowserViewLayoutDelegate {
+   // Returns true when the collapsed vertical sidebar uses the Arc style that
+   // hides the sidebar and top browser chrome. This is independent of Zen mode.
+   virtual bool IsCollapsedSidebarFullyHiddenForLayout() const { return false; }
++  // Returns true while that fully hidden sidebar or its top reveal is moving.
++  virtual bool IsCollapsedSidebarRevealAnimationActive() const {
++    return false;
++  }
+   virtual float GetTopChromeRevealRatio() const { return 1.f; }
+   virtual float GetSideChromeRevealRatio() const { return 1.f; }
+   virtual bool IsZenModeSideChromePinned() const { return false; }
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc
+@@ -63,6 +63,11 @@ bool BrowserViewLayoutDelegateImpl::IsCo
+   return browser_view_->IsCollapsedSidebarFullyHiddenForLayout();
+ }
+ 
++bool BrowserViewLayoutDelegateImpl::IsCollapsedSidebarRevealAnimationActive()
++    const {
++  return browser_view_->IsCollapsedSidebarRevealAnimationActive();
++}
++
+ bool BrowserViewLayoutDelegateImpl::IsVerticalTabStripCollapsed() const {
+   return browser_view_->IsVerticalTabStripCollapsed();
+ }
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.h
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.h
+@@ -40,6 +40,7 @@ class BrowserViewLayoutDelegateImpl : pu
+   bool IsActiveTabSplit() const override;
+   bool IsActiveTabAtLeadingWindowEdge() const override;
+   bool IsCollapsedSidebarFullyHiddenForLayout() const override;
++  bool IsCollapsedSidebarRevealAnimationActive() const override;
+   const ImmersiveModeController* GetImmersiveModeController() const override;
+   ExclusiveAccessBubbleViews* GetExclusiveAccessBubble() const override;
+   bool IsTopControlsSlideBehaviorEnabled() const override;
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -125,13 +125,14 @@ ZenModeLayoutState GetZenModeLayoutState
+   ZenModeLayoutState state;
+   state.collapsed_sidebar_fully_hidden =
+       delegate.IsCollapsedSidebarFullyHiddenForLayout();
+-  state.enabled = delegate.IsZenModeEnabledForLayout() ||
+-                  state.collapsed_sidebar_fully_hidden;
+-  state.floating_vertical_tab_strip = state.enabled &&
+-                                      vertical_tab_strip_active &&
+-                                      !delegate.IsZenModeSideChromePinned() &&
+-                                      !state.collapsed_sidebar_fully_hidden;
+   state.top_chrome_ratio = delegate.GetTopChromeRevealRatio();
++  state.enabled = delegate.IsZenModeEnabledForLayout() ||
++                  state.collapsed_sidebar_fully_hidden ||
++                  state.top_chrome_ratio < 1.0f;
++  state.floating_vertical_tab_strip =
++      delegate.IsZenModeEnabledForLayout() && vertical_tab_strip_active &&
++      !delegate.IsZenModeSideChromePinned() &&
++      !state.collapsed_sidebar_fully_hidden;
+   state.side_chrome_ratio = state.collapsed_sidebar_fully_hidden
+                                 ? 0.0f
+                                 : delegate.GetSideChromeRevealRatio();
+@@ -211,6 +212,7 @@ struct BrowserViewTabbedLayoutImpl::Hori
+   VerticalTabStripCollapsedState vertical_tab_strip_collapsed_state =
+       VerticalTabStripCollapsedState::kExpanded;
+   int vertical_tab_strip_width = 0;
++  int vertical_tab_strip_layout_width = 0;
+   int side_panel_width = 0;
+   int min_content_width = 0;
+ 
+@@ -417,6 +419,13 @@ BrowserViewTabbedLayoutImpl::HorizontalL
+ BrowserViewTabbedLayoutImpl::CalculateHorizontalLayout(
+     BrowserLayoutParams& params) const {
+   HorizontalLayout layout;
++  const auto* animation_controller = BrowserAnimationController::From(browser());
++  const auto motion = animation_controller->GetCurrentMotion(
++      TabStripAnimations::kVerticalTabStrip);
++  const bool slide_full_sidebar =
++      delegate().IsCollapsedSidebarRevealAnimationActive() &&
++      (motion == TabStripAnimations::kExpand ||
++       motion == TabStripAnimations::kCollapse);
+   // Start with some preliminary values.
+   layout.force_top_container_to_top =
+       layout_data_->tab_strip_type != TabStripType::kHorizontal;
+@@ -442,20 +451,26 @@ BrowserViewTabbedLayoutImpl::CalculateHo
+     const auto* const vertical_tab_strip =
+         views().vertical_tab_strip_region_view.get();
+     preferred_vertical_tab_strip_width =
+-        vertical_tab_strip->GetPreferredSize().width();
++        slide_full_sidebar ? vertical_tab_strip->uncollapsed_width()
++                           : vertical_tab_strip->GetPreferredSize().width();
+     layout.vertical_tab_strip_collapsed_state =
+         GetVerticalTabStripCollapsedState();
+-    if (layout.vertical_tab_strip_collapsed_state ==
+-        VerticalTabStripCollapsedState::kCollapsed) {
++    if (!slide_full_sidebar &&
++        layout.vertical_tab_strip_collapsed_state ==
++            VerticalTabStripCollapsedState::kCollapsed) {
+       // Collapsed tab strip always gets its preferred size.
+       min_vertical_tab_strip_width = preferred_vertical_tab_strip_width;
+ 
+     } else {
+       // Minimum size is bounded from below by size of leading exclusion area.
+-      if (layout.vertical_tab_strip_collapsed_state ==
+-          VerticalTabStripCollapsedState::kExpanded) {
++      if (slide_full_sidebar || layout.vertical_tab_strip_collapsed_state ==
++                                    VerticalTabStripCollapsedState::kExpanded) {
+         min_vertical_tab_strip_width = std::max(
+-            vertical_tab_strip->GetMinimumSize().width(),
++            slide_full_sidebar
++                ? arcium::ScaleChromeDip(
++                      vertical_tab_strip,
++                      VerticalTabStripRegionView::kUncollapsedMinWidth)
++                : vertical_tab_strip->GetMinimumSize().width(),
+             base::ClampCeil(
+                 params.leading_exclusion.ContentWithPadding().width()));
+       } else {
+@@ -556,6 +571,17 @@ BrowserViewTabbedLayoutImpl::CalculateHo
+     layout.side_panel_width += toolbar_height_flex_amount;
+   }
+ 
++  // Allocate the expanded layout first, including toolbar and content
++  // minimums. Animate only its exposed portion so narrow windows do not hit a
++  // width cap halfway through the motion and then snap at the end.
++  layout.vertical_tab_strip_layout_width = layout.vertical_tab_strip_width;
++  if (slide_full_sidebar) {
++    layout.vertical_tab_strip_width = ScaleExtent(
++        layout.vertical_tab_strip_layout_width,
++        *animation_controller->GetCurrentValue(
++            TabStripAnimations::kVerticalTabStrip,
++            TabStripAnimations::kTabStripWidth));
++  }
+   return layout;
+ }
+ 
+@@ -877,10 +903,17 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+         vertical_tab_strip_width = 0;
+       }
+ 
++      const bool slide_full_sidebar =
++          delegate().IsCollapsedSidebarRevealAnimationActive() &&
++          (vertical_tab_strip_animation.current_motion ==
++               TabStripAnimations::kExpand ||
++           vertical_tab_strip_animation.current_motion ==
++               TabStripAnimations::kCollapse);
++
+       // The overall width during an expand must change monotonically. A fully
+       // hidden Arc sidebar has no transition rail to reserve while it is
+       // collapsed, even if a previous tab strip animation is still settling.
+-      if (!zen.collapsed_sidebar_fully_hidden &&
++      if (!slide_full_sidebar && !zen.collapsed_sidebar_fully_hidden &&
+           vertical_tab_strip_animation.current_motion ==
+               TabStripAnimations::kExpand) {
+         const int target_width =
+@@ -900,12 +933,20 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+         last_vertical_tab_strip_width_ = 0;
+       }
+ 
++      // Reveal a stable expanded layout from the window edge. Resizing the
++      // contents from zero makes Favorites change columns and tab labels pop
++      // between compact and expanded layouts during the same transition.
++      const int sidebar_layout_width =
++          slide_full_sidebar
++              ? horizontal_layout.vertical_tab_strip_layout_width
++              : vertical_tab_strip_width;
+       const int vertical_tab_strip_x =
+           vertical_right_aligned
+               ? params.visual_client_area.right() -
+                     zen.vertical_tab_strip_padding - vertical_tab_strip_width
+               : params.visual_client_area.x() +
+-                    zen.vertical_tab_strip_padding;
++                    zen.vertical_tab_strip_padding -
++                    (sidebar_layout_width - vertical_tab_strip_width);
+ 
+       int top_offset = vertical_tab_strip_animation.top_offset;
+       if (zen.enabled) {
+@@ -920,7 +961,7 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+           vertical_tab_strip_x,
+           params.visual_client_area.y() + top_offset +
+               zen.vertical_tab_strip_top_padding,
+-          vertical_tab_strip_width, vertical_tab_strip_height};
++          sidebar_layout_width, vertical_tab_strip_height};
+       if (zen.floating_vertical_tab_strip) {
+         vertical_tab_strip_bounds = SlideBoundsFromSide(
+             vertical_tab_strip_bounds, params.visual_client_area,
+@@ -933,7 +974,11 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+             gfx::Insets::TLBR(views::Separator::kThickness, 0, 0, 0));
+       }
+ 
+-      vertical_tab_strip_width = vertical_tab_strip_bounds.width();
++      // Content follows the exposed width, not the off-window portion of the
++      // sliding sidebar.
++      if (!slide_full_sidebar) {
++        vertical_tab_strip_width = vertical_tab_strip_bounds.width();
++      }
+       if (!zen.floating_vertical_tab_strip) {
+         int inset_amount = vertical_tab_strip_width;
+         if (adjust_for_cracking && inset_amount > 0) {
+@@ -953,11 +998,14 @@ BrowserViewTabbedLayoutImpl::CalculatePr
+                 TabStripAnimations::kCollapse;
+         clip_content_for_animation =
+             clip_content_for_animation || vertical_tab_strip_resize_animation;
++        const int clipping_width =
++            delegate().IsCollapsedSidebarRevealAnimationActive()
++                ? vertical_tab_strip_width
++                : arcium::ScaleChromeDip(
++                      views().toolbar,
++                      VerticalTabStripRegionView::kCollapsedWidth);
+         InsetHorizontal(
+-            unclipped_contents_region,
+-            arcium::ScaleChromeDip(views().toolbar,
+-                                   VerticalTabStripRegionView::kCollapsedWidth),
+-            !vertical_right_aligned);
++            unclipped_contents_region, clipping_width, !vertical_right_aligned);
+       } else {
+         InsetHorizontal(unclipped_contents_region,
+                         horizontal_layout.vertical_tab_strip_width,
+@@ -1610,7 +1658,8 @@ void BrowserViewTabbedLayoutImpl::Config
+   CHECK(layout_data_);
+   const bool frame_has_top_border = views().browser_view->bounds().y() > 0;
+   const bool zen_mode = delegate().IsZenModeEnabledForLayout() ||
+-                        delegate().IsCollapsedSidebarFullyHiddenForLayout();
++                        delegate().IsCollapsedSidebarFullyHiddenForLayout() ||
++                        delegate().GetTopChromeRevealRatio() < 1.0f;
+   const bool zen_hiding =
+       zen_mode && delegate().GetTopChromeRevealRatio() < 1.0f;
+ 
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -232,6 +232,10 @@ bool VerticalTabStripRegionView::IsAnima
+ void VerticalTabStripRegionView::OnAnimationProgressed(
+     const BrowserAnimationController* controller,
+     BrowserAnimationUpdate status) {
++  browser_view_->OnCollapsedSidebarAnimationUpdated(
++      status,
++      controller->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip));
++
+   switch (status) {
+     case BrowserAnimationUpdate::kStarted: {
+       const auto motion =
+@@ -434,9 +438,22 @@ views::View* VerticalTabStripRegionView:
+ 
+ gfx::Size VerticalTabStripRegionView::GetMinimumSize() const {
+   auto min_size = BaseTabStripRegionView::GetMinimumSize();
+-  min_size.set_width((state_controller_->IsCollapsed() || IsAnimatingSize())
+-                         ? arcium::ScaleChromeDip(this, kCollapsedWidth)
+-                         : arcium::ScaleChromeDip(this, kUncollapsedMinWidth));
++  const auto* controller =
++      BrowserAnimationController::From(browser_view_->browser());
++  const auto motion =
++      controller->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip);
++  const bool full_hidden_layout =
++      browser_view_->IsCollapsedSidebarFullyHiddenForLayout() ||
++      ((motion == TabStripAnimations::kCollapse ||
++        motion == TabStripAnimations::kExpand) &&
++       browser_view_->IsCollapsedSidebarRevealAnimationActive());
++  const int minimum_width =
++      full_hidden_layout
++          ? 0
++          : (state_controller_->IsCollapsed() || IsAnimatingSize()
++                 ? kCollapsedWidth
++                 : kUncollapsedMinWidth);
++  min_size.set_width(arcium::ScaleChromeDip(this, minimum_width));
+   return min_size;
+ }
+ 
+@@ -452,11 +469,21 @@ gfx::Size VerticalTabStripRegionView::Ca
+   const double expand_percent =
+       *controller->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
+                                    TabStripAnimations::kTabStripWidth);
++  const bool full_hidden_layout =
++      browser_view_->IsCollapsedSidebarFullyHiddenForLayout() ||
++      ((motion == TabStripAnimations::kCollapse ||
++        motion == TabStripAnimations::kExpand) &&
++       browser_view_->IsCollapsedSidebarRevealAnimationActive());
++  const double width = full_hidden_layout
++                           ? target_collapse_state_.uncollapsed_width *
++                                 expand_percent
++                           : kCollapsedWidth +
++                                 (motion == TabStripAnimations::kExpand
++                                      ? std::floor<double>
++                                      : std::ceil<double>)(
++                                       expand_amount * expand_percent);
+   size.set_width(arcium::ScaleChromeDip(
+-      this, kCollapsedWidth +
+-                (motion == TabStripAnimations::kExpand
+-                     ? std::floor<double>
+-                     : std::ceil<double>)(expand_amount * expand_percent)));
++      this, base::ClampRound(width)));
+   return size;
+ }
+ 
+@@ -948,7 +975,13 @@ void VerticalTabStripRegionView::OnColla
+       this, collapsed ? kCollapsedResizeAreaWidth : kResizeAreaWidth);
+ 
+   if (tab_strip_view_) {
+-    tab_strip_view_->SetCollapsedState(collapsed);
++    // Fully hidden chrome slides the expanded sidebar out of the window.
++    // Keep its contents expanded until it is completely hidden; switching to
++    // the icon-rail layout at the start would make Favorites and labels jump.
++    const bool sliding_expanded_contents =
++        state == tabs::VerticalTabStripCollapseState::kCollapsing &&
++        browser_view_->IsFullyHiddenSidebarStyleEnabled();
++    tab_strip_view_->SetCollapsedState(collapsed && !sliding_expanded_contents);
+   }
+ 
+   if (state == tabs::VerticalTabStripCollapseState::kExpanded ||
+--- a/chrome/browser/ui/views/animations/tab_strip_animations.cc
++++ b/chrome/browser/ui/views/animations/tab_strip_animations.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ 
++#include <cmath>
++
+ #include "chrome/browser/ui/animation/browser_animation_types.h"
+ #include "ui/base/interaction/safe_castable.h"
+ 
+@@ -49,9 +51,30 @@ TabStripAnimations::TabStripAnimations()
+ TabStripAnimations::~TabStripAnimations() = default;
+ 
+ TabStripAnimations::GroupInfos TabStripAnimations::GenerateAnimations() const {
+-  constexpr int kExpandCollapseDurationMs = 250;
++  constexpr int kExpandCollapseDurationMs = 320;
+   constexpr gfx::Tween::Type kExpandCollapseTween =
+       gfx::Tween::EASE_IN_OUT_EMPHASIZED;
++
++  auto width_sequence = [](bool expanding) {
++    // Sample a normalized critically damped response on the existing clock.
++    // Absolute times avoid applying the motion's tween to the response twice.
++    // This bounded approximation preserves position, not spring velocity,
++    // when a motion is reversed.
++    auto sample = [expanding](int ms) {
++      const double t = ms / 320.0;
++      const double response =
++          (1.0 - (1.0 + 8.0 * t) * std::exp(-8.0 * t)) /
++          (1.0 - 9.0 * std::exp(-8.0));
++      return Keyframe(AtMs(ms),
++                      Value(expanding ? response : 1.0 - response));
++    };
++    return Sequence(
++        kTabStripWidth, Transition::kStartAtOldValue, sample(0), sample(20),
++        sample(40), sample(60), sample(80), sample(100), sample(120), sample(140),
++        sample(160), sample(180), sample(200), sample(220), sample(240),
++        sample(260), sample(280), sample(300), sample(320));
++  };
++
+   // The sequence goes: one corner disappears, the top animates, and then the
+   // other corner appears. These are the percentages of the animation at which
+   // these changes happen.
+@@ -62,7 +85,7 @@ TabStripAnimations::GroupInfos TabStripA
+       kVerticalTabStrip,
+       Motion(kExpand, TotalDurationMs(kExpandCollapseDurationMs),
+              kExpandCollapseTween,
+-             Animate(kTabStripWidth, FromValue(0.0), ToValue(1.0)),
++             width_sequence(true),
+              Sequence(kTopCorner, Transition::kCapAtOldValue,
+                       Keyframe(AtPercent(0), Value(DefaultValue())),
+                       Keyframe(AtPercent(kFirstCheckpoint),
+@@ -75,7 +98,7 @@ TabStripAnimations::GroupInfos TabStripA
+                       Keyframe(AtPercent(kSecondCheckpoint), Value(0.0)))),
+       Motion(kCollapse, TotalDurationMs(kExpandCollapseDurationMs),
+              kExpandCollapseTween,
+-             Animate(kTabStripWidth, FromValue(1.0), ToValue(0.0)),
++             width_sequence(false),
+              Sequence(kTopCorner, Transition::kCapAtOldValue,
+                       Keyframe(AtPercent(0), Value(1.0)),
+                       Keyframe(AtPercent(kFirstCheckpoint),
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -12,6 +12,7 @@
+ #include "base/feature_list.h"
+ #include "base/i18n/rtl.h"
+ #include "base/notreached.h"
++#include "base/numerics/safe_conversions.h"
+ #include "chrome/browser/actor/ui/actor_overlay_web_view.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -63,11 +64,35 @@ bool IsTopChromeAttached(const BrowserVi
+                          bool should_show_top_separator) {
+   return should_show_top_separator &&
+          (!(browser_view.IsZenModeEnabledForLayout() ||
+-            browser_view.IsCollapsedSidebarFullyHiddenForLayout()) ||
++            browser_view.IsCollapsedSidebarFullyHiddenForLayout() ||
++            browser_view.IsCollapsedSidebarRevealAnimationActive()) ||
+           browser_view.GetTopChromeRevealRatio() >=
+               kZenTopChromeAttachedThreshold);
+ }
+ 
++int GetTopChromeInset(const BrowserView& browser_view,
++                     bool attached_to_infobar,
++                     bool should_show_top_separator,
++                     int border_width) {
++  if (attached_to_infobar) {
++    return 0;
++  }
++  if (should_show_top_separator &&
++      (browser_view.IsZenModeEnabledForLayout() ||
++       browser_view.IsCollapsedSidebarFullyHiddenForLayout() ||
++       browser_view.IsCollapsedSidebarRevealAnimationActive() ||
++       browser_view.GetTopChromeRevealRatio() < 1.f)) {
++    // Content geometry follows the reveal continuously. The attachment
++    // threshold selects corner treatment, not a sudden page inset.
++    return base::ClampRound(
++        border_width *
++        std::clamp(1.f - browser_view.GetTopChromeRevealRatio(), 0.f, 1.f));
++  }
++  return IsTopChromeAttached(browser_view, should_show_top_separator)
++             ? 0
++             : border_width;
++}
++
+ }  // namespace
+ 
+ void MultiContentsView::ContentsSeparators::Reset() {
+@@ -572,7 +597,9 @@ views::ProposedLayout MultiContentsView:
+   } else if (should_use_rounded_frame) {
+     const int border_width = arcium::GetChromeFrameBorderWidth(this);
+     gfx::Insets single_insets(border_width);
+-    single_insets.set_top(attached_chrome.TopInset(border_width));
++    single_insets.set_top(GetTopChromeInset(
++        *browser_view_, top_edge_attached_to_infobar_,
++        contents_separators_.should_show_top, border_width));
+     single_insets.set_left(contents_separators_.leading_side_chrome_attached
+                                ? 0
+                                : border_width);
+@@ -733,7 +760,10 @@ gfx::Rect MultiContentsView::CalculateDr
+           should_use_rounded_frame && !IsInSplitView()
+               ? arcium::GetChromeFrameBorderWidth(this)
+               : kSplitViewContentInset;
+-      top_margin = attached_chrome.TopInset(border_width);
++      top_margin = GetTopChromeInset(*browser_view_,
++                                    top_edge_attached_to_infobar_,
++                                    contents_separators_.should_show_top,
++                                    border_width);
+     } else if (contents_separators_.should_show_top) {
+       top_margin =
+           contents_separators_.top_separator->GetPreferredSize().height();
+--- a/chrome/browser/ui/views/tabs/common/folder_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/folder_tab_container_view.cc
+@@ -7,7 +7,10 @@
+ #include <algorithm>
+ 
+ #include "base/functional/bind.h"
++#include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/views/animations/tab_strip_animations.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+@@ -133,8 +136,10 @@ void FolderTabContainerView::OnTabSelect
+ 
+ void FolderTabContainerView::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState collapse_state) {
+-  compact_ = collapse_state !=
+-             tabs::VerticalTabStripCollapseState::kExpanded;
++  // Keep expanded presentation throughout the slide; compact geometry belongs
++  // to the settled rail.
++  compact_ = collapse_state ==
++             tabs::VerticalTabStripCollapseState::kCollapsed;
+   UpdateHeaderPresentation();
+   InvalidateLayout();
+   PreferredSizeChanged();
+@@ -200,6 +205,20 @@ void FolderTabContainerView::OnPaint(gfx
+   if (!compact_ || !collection_node_ || !GetColorProvider() || width() < 3) {
+     return;
+   }
++  auto* controller = collection_node_->GetController();
++  if (!controller) {
++    return;
++  }
++  if (auto* browser_view = controller->GetBrowserView()) {
++    const auto motion =
++        BrowserAnimationController::From(browser_view->browser())
++            ->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip);
++    if (browser_view->IsCollapsedSidebarFullyHiddenForLayout() ||
++        motion == TabStripAnimations::kCollapse ||
++        motion == TabStripAnimations::kExpand) {
++      return;
++    }
++  }
+ 
+   views::View* last_visible_child = nullptr;
+   for (views::View* child : children()) {
+--- a/chrome/browser/ui/views/tabs/common/pin_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pin_tab_container_view.cc
+@@ -17,6 +17,7 @@
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/task/sequenced_task_runner.h"
++#include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
+ #include "chrome/browser/ui/helium/helium_persistent_item_model.h"
+@@ -28,6 +29,7 @@
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+@@ -760,14 +762,14 @@ bool PinTabContainerView::IsCollectionOw
+ }
+ 
+ bool PinTabContainerView::IsCompactSidebar() const {
+-  return GetTabStripCollapseState() !=
+-         tabs::VerticalTabStripCollapseState::kExpanded;
++  return GetTabStripCollapseState() ==
++         tabs::VerticalTabStripCollapseState::kCollapsed;
+ }
+ 
+ void PinTabContainerView::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState collapse_state) {
+   UpdatePersistentRowPresentation(
+-      collapse_state != tabs::VerticalTabStripCollapseState::kExpanded);
++      collapse_state == tabs::VerticalTabStripCollapseState::kCollapsed);
+   InvalidateLayout();
+   PreferredSizeChanged();
+   SchedulePaint();
+@@ -785,10 +787,24 @@ void PinTabContainerView::UpdatePersiste
+ void PinTabContainerView::OnPaint(gfx::Canvas* canvas) {
+   views::View::OnPaint(canvas);
+ 
+-  if (sidebar_preview_active_ || !IsCompactSidebar() ||
++  if (sidebar_preview_active_ || !collection_node_ || !IsCompactSidebar() ||
+       folder_connectors_.empty() || width() < 3 || !GetColorProvider()) {
+     return;
+   }
++  auto* controller = collection_node_->GetController();
++  if (!controller) {
++    return;
++  }
++  if (auto* browser_view = controller->GetBrowserView()) {
++    const auto motion =
++        BrowserAnimationController::From(browser_view->browser())
++            ->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip);
++    if (browser_view->IsCollapsedSidebarFullyHiddenForLayout() ||
++        motion == TabStripAnimations::kCollapse ||
++        motion == TabStripAnimations::kExpand) {
++      return;
++    }
++  }
+ 
+   cc::PaintFlags flags;
+   flags.setStyle(cc::PaintFlags::kFill_Style);

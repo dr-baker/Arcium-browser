@@ -1,0 +1,380 @@
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/glass_surface_configuration.h
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration.h
+@@ -40,6 +40,7 @@
+ inline constexpr char kGlassAppearancePointsKey[] = "points";
+ inline constexpr char kGlassAppearanceMatchColorAdjustmentsKey[] =
+     "matchColorAdjustments";
++inline constexpr char kGlassAppearanceColorHarmonyKey[] = "colorHarmony";
+ 
+ inline constexpr char kGlassAppearanceAuto[] = "auto";
+ inline constexpr char kGlassAppearanceLiquidGlass[] = "liquidGlass";
+@@ -52,6 +53,13 @@
+ inline constexpr char kGlassAppearanceFrostedStyleMenu[] = "menu";
+ inline constexpr char kGlassAppearanceFrostedStylePopover[] = "popover";
+ inline constexpr char kGlassAppearanceFrostedStyleHud[] = "hud";
++inline constexpr char kGlassAppearanceColorHarmonyCustom[] = "custom";
++inline constexpr char kGlassAppearanceColorHarmonyComplementary[] =
++    "complementary";
++inline constexpr char kGlassAppearanceColorHarmonySplitComplementary[] =
++    "splitComplementary";
++inline constexpr char kGlassAppearanceColorHarmonyTriadic[] = "triadic";
++inline constexpr char kGlassAppearanceColorHarmonyTetradic[] = "tetradic";
+ 
+ inline constexpr char kGlassPointIdKey[] = "id";
+ inline constexpr char kGlassPointColorKey[] = "color";
+@@ -80,6 +88,14 @@
+   kMenu,
+   kPopover,
+   kHud,
++};
++
++enum class GlassSurfaceColorHarmony {
++  kCustom,
++  kComplementary,
++  kSplitComplementary,
++  kTriadic,
++  kTetradic,
+ };
+ 
+ struct GlassColorPoint {
+@@ -111,6 +127,7 @@
+   double grain = 0.0;
+   double grain_scale = 0.5;
+   bool match_color_adjustments = false;
++  GlassSurfaceColorHarmony color_harmony = GlassSurfaceColorHarmony::kCustom;
+   std::array<GlassColorPoint, kMaxGlassColorPoints> points;
+   size_t point_count = 0;
+ 
+@@ -124,6 +141,7 @@
+         tint_strength != other.tint_strength || grain != other.grain ||
+         grain_scale != other.grain_scale ||
+         match_color_adjustments != other.match_color_adjustments ||
++        color_harmony != other.color_harmony ||
+         point_count != other.point_count) {
+       return false;
+     }
+
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/glass_surface_configuration.cc
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration.cc
+@@ -24,6 +24,8 @@
+ constexpr double kMaximumGrain = 0.3;
+ constexpr double kMinimumGrainScale = 0.5;
+ constexpr double kMaximumGrainScale = 2.0;
++constexpr size_t kLegacyGlassSurfaceFieldCount = 12;
++constexpr size_t kGlassSurfaceFieldCount = kLegacyGlassSurfaceFieldCount + 1;
+ 
+ std::optional<double> FindNumber(const base::DictValue& dict,
+                                  std::string_view key) {
+@@ -169,6 +171,47 @@
+   }
+   if (value == kGlassAppearanceFrostedStyleHud) {
+     return GlassSurfaceFrostedStyle::kHud;
++  }
++  return std::nullopt;
++}
++
++GlassSurfaceColorHarmony ParseColorHarmony(
++    std::string_view value,
++    GlassSurfaceColorHarmony fallback) {
++  if (value == kGlassAppearanceColorHarmonyCustom) {
++    return GlassSurfaceColorHarmony::kCustom;
++  }
++  if (value == kGlassAppearanceColorHarmonyComplementary) {
++    return GlassSurfaceColorHarmony::kComplementary;
++  }
++  if (value == kGlassAppearanceColorHarmonySplitComplementary) {
++    return GlassSurfaceColorHarmony::kSplitComplementary;
++  }
++  if (value == kGlassAppearanceColorHarmonyTriadic) {
++    return GlassSurfaceColorHarmony::kTriadic;
++  }
++  if (value == kGlassAppearanceColorHarmonyTetradic) {
++    return GlassSurfaceColorHarmony::kTetradic;
++  }
++  return fallback;
++}
++
++std::optional<GlassSurfaceColorHarmony> ParseColorHarmonyStrict(
++    std::string_view value) {
++  if (value == kGlassAppearanceColorHarmonyCustom) {
++    return GlassSurfaceColorHarmony::kCustom;
++  }
++  if (value == kGlassAppearanceColorHarmonyComplementary) {
++    return GlassSurfaceColorHarmony::kComplementary;
++  }
++  if (value == kGlassAppearanceColorHarmonySplitComplementary) {
++    return GlassSurfaceColorHarmony::kSplitComplementary;
++  }
++  if (value == kGlassAppearanceColorHarmonyTriadic) {
++    return GlassSurfaceColorHarmony::kTriadic;
++  }
++  if (value == kGlassAppearanceColorHarmonyTetradic) {
++    return GlassSurfaceColorHarmony::kTetradic;
+   }
+   return std::nullopt;
+ }
+@@ -189,6 +232,22 @@
+   return kGlassAppearanceFrostedStyleAutomatic;
+ }
+ 
++const char* ColorHarmonyString(GlassSurfaceColorHarmony harmony) {
++  switch (harmony) {
++    case GlassSurfaceColorHarmony::kCustom:
++      return kGlassAppearanceColorHarmonyCustom;
++    case GlassSurfaceColorHarmony::kComplementary:
++      return kGlassAppearanceColorHarmonyComplementary;
++    case GlassSurfaceColorHarmony::kSplitComplementary:
++      return kGlassAppearanceColorHarmonySplitComplementary;
++    case GlassSurfaceColorHarmony::kTriadic:
++      return kGlassAppearanceColorHarmonyTriadic;
++    case GlassSurfaceColorHarmony::kTetradic:
++      return kGlassAppearanceColorHarmonyTetradic;
++  }
++  return kGlassAppearanceColorHarmonyCustom;
++}
++
+ const char* MaterialString(GlassSurfaceMaterial material) {
+   switch (material) {
+     case GlassSurfaceMaterial::kAuto:
+@@ -215,7 +274,8 @@
+          key == kGlassAppearanceGrainKey ||
+          key == kGlassAppearanceGrainScaleKey ||
+          key == kGlassAppearancePointsKey ||
+-         key == kGlassAppearanceMatchColorAdjustmentsKey;
++         key == kGlassAppearanceMatchColorAdjustmentsKey ||
++         key == kGlassAppearanceColorHarmonyKey;
+ }
+ 
+ bool IsKnownPointKey(std::string_view key) {
+@@ -298,6 +358,11 @@
+       dict.FindBool(kGlassAppearanceEnabledKey).value_or(configuration.enabled);
+   configuration.match_color_adjustments =
+       dict.FindBool(kGlassAppearanceMatchColorAdjustmentsKey).value_or(false);
++  if (const std::string* color_harmony =
++          dict.FindString(kGlassAppearanceColorHarmonyKey)) {
++    configuration.color_harmony =
++        ParseColorHarmony(*color_harmony, GlassSurfaceColorHarmony::kCustom);
++  }
+   if (const std::string* material =
+           dict.FindString(kGlassAppearanceMaterialKey)) {
+     configuration.material = ParseMaterial(*material, configuration.material);
+@@ -368,7 +433,8 @@
+ 
+ std::optional<GlassSurfaceConfiguration> ParseGlassSurfaceConfigurationStrict(
+     const base::DictValue& dict) {
+-  if (dict.size() != 12) {
++  if (dict.size() != kLegacyGlassSurfaceFieldCount &&
++      dict.size() != kGlassSurfaceFieldCount) {
+     return std::nullopt;
+   }
+   for (const auto item : dict) {
+@@ -380,6 +446,16 @@
+   const std::optional<bool> enabled = dict.FindBool(kGlassAppearanceEnabledKey);
+   const std::optional<bool> match_color_adjustments =
+       dict.FindBool(kGlassAppearanceMatchColorAdjustmentsKey);
++  const std::string* color_harmony_string =
++      dict.FindString(kGlassAppearanceColorHarmonyKey);
++  if ((dict.size() == kGlassSurfaceFieldCount && !color_harmony_string) ||
++      (dict.size() == kLegacyGlassSurfaceFieldCount && color_harmony_string)) {
++    return std::nullopt;
++  }
++  const std::optional<GlassSurfaceColorHarmony> color_harmony =
++      color_harmony_string ? ParseColorHarmonyStrict(*color_harmony_string)
++                           : std::optional<GlassSurfaceColorHarmony>(
++                                 GlassSurfaceColorHarmony::kCustom);
+   const std::string* material_string =
+       dict.FindString(kGlassAppearanceMaterialKey);
+   const std::optional<GlassSurfaceMaterial> material =
+@@ -395,7 +471,7 @@
+       frosted_style_string ? ParseFrostedStyleStrict(*frosted_style_string)
+                            : std::nullopt;
+   if (!enabled || !match_color_adjustments || !material || !glass_style ||
+-      !frosted_style) {
++      !frosted_style || !color_harmony) {
+     return std::nullopt;
+   }
+ 
+@@ -405,6 +481,7 @@
+   configuration.material = *material;
+   configuration.glass_style = *glass_style;
+   configuration.frosted_style = *frosted_style;
++  configuration.color_harmony = *color_harmony;
+   if (!HasFiniteNumberInRange(dict, kGlassAppearanceMaterialOpacityKey, 0.0,
+                               1.0, &configuration.material_opacity) ||
+       !HasFiniteNumberInRange(dict, kGlassAppearanceGlassTintOpacityKey, 0.0,
+@@ -513,6 +590,8 @@
+              CanonicalNumber(configuration.grain_scale, kMinimumGrainScale,
+                              kMaximumGrainScale));
+   result.Set(kGlassAppearancePointsKey, std::move(points));
++  result.Set(kGlassAppearanceColorHarmonyKey,
++             ColorHarmonyString(configuration.color_harmony));
+   return result;
+ }
+ 
+
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
+@@ -27,6 +27,7 @@
+   EXPECT_DOUBLE_EQ(configuration.tint_strength, 0.4);
+   EXPECT_DOUBLE_EQ(configuration.grain, 0.06);
+   EXPECT_DOUBLE_EQ(configuration.grain_scale, 0.5);
++  EXPECT_EQ(configuration.color_harmony, GlassSurfaceColorHarmony::kCustom);
+   ASSERT_EQ(configuration.point_count, 2u);
+   EXPECT_EQ(configuration.points[0].id, "yellow");
+   EXPECT_EQ(configuration.points[1].id, "blue");
+@@ -43,6 +44,9 @@
+   EXPECT_DOUBLE_EQ(*serialized.FindDouble(kGlassAppearanceGlassTintOpacityKey),
+                    0.7);
+   EXPECT_DOUBLE_EQ(*serialized.FindDouble(kGlassAppearanceGrainScaleKey), 0.5);
++  ASSERT_NE(serialized.FindString(kGlassAppearanceColorHarmonyKey), nullptr);
++  EXPECT_STREQ(serialized.FindString(kGlassAppearanceColorHarmonyKey)->c_str(),
++               kGlassAppearanceColorHarmonyCustom);
+ }
+ 
+ TEST(GlassSurfaceConfigurationTest, EmptyDictionaryUsesCanonicalDefaults) {
+@@ -73,6 +77,7 @@
+   EXPECT_DOUBLE_EQ(configuration.frosted_tint_strength, 1.0);
+   EXPECT_DOUBLE_EQ(configuration.grain_scale, 0.5);
+   EXPECT_EQ(configuration.point_count, 0u);
++  EXPECT_EQ(configuration.color_harmony, GlassSurfaceColorHarmony::kCustom);
+ }
+ 
+ TEST(GlassSurfaceConfigurationTest, EqualityIncludesNewFields) {
+@@ -95,6 +100,9 @@
+   EXPECT_NE(changed, baseline);
+   changed = baseline;
+   changed.grain_scale = 2.0;
++  EXPECT_NE(changed, baseline);
++  changed = baseline;
++  changed.color_harmony = GlassSurfaceColorHarmony::kTriadic;
+   EXPECT_NE(changed, baseline);
+ }
+ 
+@@ -111,7 +119,7 @@
+   base::DictValue complete =
+       CompleteGlassSurfaceConfigurationForEditing(legacy);
+   EXPECT_EQ(legacy, original);
+-  EXPECT_EQ(complete.size(), 12u);
++  EXPECT_EQ(complete.size(), 13u);
+   EXPECT_TRUE(ParseGlassSurfaceConfigurationStrict(complete));
+   EXPECT_TRUE(*complete.FindBool(kGlassAppearanceEnabledKey));
+   EXPECT_STREQ(complete.FindString(kGlassAppearanceMaterialKey)->c_str(),
+@@ -129,6 +137,8 @@
+   EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceFrostedTintStrengthKey),
+                    1.0);
+   EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceGrainScaleKey), 0.5);
++  EXPECT_STREQ(complete.FindString(kGlassAppearanceColorHarmonyKey)->c_str(),
++               kGlassAppearanceColorHarmonyCustom);
+ }
+ 
+ TEST(GlassSurfaceConfigurationTest,
+@@ -253,6 +263,94 @@
+   EXPECT_TRUE(resolution.paints_chrome_transparent);
+ }
+ 
++TEST(GlassSurfaceConfigurationTest,
++     StrictParserAcceptsLegacyDictionaryWithoutColorHarmony) {
++  base::DictValue legacy =
++      SerializeGlassSurfaceConfiguration(DefaultGlassSurfaceConfiguration());
++  EXPECT_TRUE(legacy.Remove(kGlassAppearanceColorHarmonyKey));
++  EXPECT_EQ(legacy.size(), 12u);
++
++  std::optional<GlassSurfaceConfiguration> parsed =
++      ParseGlassSurfaceConfigurationStrict(legacy);
++  ASSERT_TRUE(parsed);
++  EXPECT_EQ(parsed->color_harmony, GlassSurfaceColorHarmony::kCustom);
++}
++
++TEST(GlassSurfaceConfigurationTest, StrictParserRoundTripsColorHarmonyModes) {
++  struct HarmonyCase {
++    const char* serialized;
++    GlassSurfaceColorHarmony value;
++  };
++  const HarmonyCase cases[] = {
++      {kGlassAppearanceColorHarmonyCustom,
++       GlassSurfaceColorHarmony::kCustom},
++      {kGlassAppearanceColorHarmonyComplementary,
++       GlassSurfaceColorHarmony::kComplementary},
++      {kGlassAppearanceColorHarmonySplitComplementary,
++       GlassSurfaceColorHarmony::kSplitComplementary},
++      {kGlassAppearanceColorHarmonyTriadic, GlassSurfaceColorHarmony::kTriadic},
++      {kGlassAppearanceColorHarmonyTetradic,
++       GlassSurfaceColorHarmony::kTetradic},
++  };
++
++  for (const HarmonyCase& harmony_case : cases) {
++    base::DictValue serialized = SerializeGlassSurfaceConfiguration(
++        DefaultGlassSurfaceConfiguration());
++    serialized.Set(kGlassAppearanceColorHarmonyKey, harmony_case.serialized);
++
++    std::optional<GlassSurfaceConfiguration> parsed =
++        ParseGlassSurfaceConfigurationStrict(serialized);
++    ASSERT_TRUE(parsed) << harmony_case.serialized;
++    EXPECT_EQ(parsed->color_harmony, harmony_case.value);
++    const base::DictValue canonical =
++        SerializeGlassSurfaceConfiguration(*parsed);
++    ASSERT_NE(canonical.FindString(kGlassAppearanceColorHarmonyKey), nullptr);
++    EXPECT_STREQ(canonical.FindString(kGlassAppearanceColorHarmonyKey)->c_str(),
++                 harmony_case.serialized);
++  }
++}
++
++TEST(GlassSurfaceConfigurationTest,
++     StrictParserRequiresValidColorHarmonyWhenPresent) {
++  base::DictValue missing =
++      SerializeGlassSurfaceConfiguration(DefaultGlassSurfaceConfiguration());
++  EXPECT_TRUE(missing.Remove(kGlassAppearanceColorHarmonyKey));
++  // Removing the harmony field makes this a valid legacy twelve-field value.
++  EXPECT_TRUE(ParseGlassSurfaceConfigurationStrict(missing));
++
++  base::DictValue missing_old_field = SerializeGlassSurfaceConfiguration(
++      DefaultGlassSurfaceConfiguration());
++  EXPECT_TRUE(missing_old_field.Remove(kGlassAppearanceMaterialKey));
++  EXPECT_EQ(missing_old_field.size(), 12u);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(missing_old_field));
++
++  base::DictValue invalid =
++      SerializeGlassSurfaceConfiguration(DefaultGlassSurfaceConfiguration());
++  invalid.Set(kGlassAppearanceColorHarmonyKey, "unknown");
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(invalid));
++
++  base::DictValue wrong_type = SerializeGlassSurfaceConfiguration(
++      DefaultGlassSurfaceConfiguration());
++  wrong_type.Set(kGlassAppearanceColorHarmonyKey, 1);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(wrong_type));
++}
++
++TEST(GlassSurfaceConfigurationTest,
++     PermissiveParserCanonicalizesUnknownColorHarmony) {
++  base::DictValue dict;
++  dict.Set(kGlassAppearanceColorHarmonyKey, "unknown");
++
++  const GlassSurfaceConfiguration configuration =
++      ParseGlassSurfaceConfiguration(dict);
++  EXPECT_EQ(configuration.color_harmony, GlassSurfaceColorHarmony::kCustom);
++
++  const base::DictValue canonical =
++      SerializeGlassSurfaceConfiguration(configuration);
++  ASSERT_NE(canonical.FindString(kGlassAppearanceColorHarmonyKey), nullptr);
++  EXPECT_STREQ(canonical.FindString(kGlassAppearanceColorHarmonyKey)->c_str(),
++               kGlassAppearanceColorHarmonyCustom);
++}
++
+ TEST(GlassSurfaceConfigurationTest, StrictSerializerRoundTripsCanonicalValue) {
+   GlassSurfaceConfiguration configuration = DefaultGlassSurfaceConfiguration();
+   configuration.enabled = true;
+@@ -272,7 +370,7 @@
+ 
+   base::DictValue canonical_again = SerializeGlassSurfaceConfiguration(*parsed);
+   EXPECT_EQ(serialized, canonical_again);
+-  EXPECT_EQ(serialized.size(), 12u);
++  EXPECT_EQ(serialized.size(), 13u);
+   ASSERT_NE(serialized.FindString(kGlassAppearanceMaterialKey), nullptr);
+   EXPECT_STREQ(serialized.FindString(kGlassAppearanceMaterialKey)->c_str(),
+                "solid");

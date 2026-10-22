@@ -1,0 +1,46 @@
+# Initialize raw link parameters in the existing Little Arc menu fixture.
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
+@@ -184,8 +184,8 @@ static content::ContextMenuParams Create
+ // Returns a test context menu.
+ std::unique_ptr<TestRenderViewContextMenu> CreateContextMenu(
+     content::WebContents* web_contents,
+-    custom_handlers::ProtocolHandlerRegistry* registry) {
+-  content::ContextMenuParams params = CreateParams(MenuItem::LINK);
++    custom_handlers::ProtocolHandlerRegistry* registry,
++    content::ContextMenuParams params = CreateParams(MenuItem::LINK)) {
+   params.unfiltered_link_url = params.link_url;
+   auto menu = std::make_unique<TestRenderViewContextMenu>(
+       *web_contents->GetPrimaryMainFrame(), params);
+@@ -413,8 +413,9 @@ class RenderViewContextMenuPrefsTest
+     ChromeRenderViewHostTestHarness::TearDown();
+   }
+ 
+-  std::unique_ptr<TestRenderViewContextMenu> CreateContextMenu() {
+-    return ::CreateContextMenu(web_contents(), registry_.get());
++  std::unique_ptr<TestRenderViewContextMenu> CreateContextMenu(
++      content::ContextMenuParams params = CreateParams(MenuItem::LINK)) {
++    return ::CreateContextMenu(web_contents(), registry_.get(), std::move(params));
+   }
+ 
+   // Returns a test context menu for a chrome:// url not permitted to open in
+@@ -574,17 +575,13 @@ TEST_F(RenderViewContextMenuPrefsTest,
+ 
+ TEST_F(RenderViewContextMenuPrefsTest, LittleArcCommandRequiresEligibleLink) {
+   content::ContextMenuParams params = CreateParams(MenuItem::LINK);
+-  auto menu = std::make_unique<TestRenderViewContextMenu>(
+-      *web_contents()->GetPrimaryMainFrame(), params);
+-  menu->Init();
++  auto menu = CreateContextMenu(params);
+ 
+   EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKLITTLEARC));
+   EXPECT_TRUE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_OPENLINKLITTLEARC));
+ 
+   params.link_url = GURL("mailto:person@example.test");
+-  menu = std::make_unique<TestRenderViewContextMenu>(
+-      *web_contents()->GetPrimaryMainFrame(), params);
+-  menu->Init();
++  menu = CreateContextMenu(params);
+   EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKLITTLEARC));
+   EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_OPENLINKLITTLEARC));
+ }

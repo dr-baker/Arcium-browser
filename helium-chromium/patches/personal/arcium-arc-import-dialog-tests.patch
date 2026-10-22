@@ -1,0 +1,214 @@
+--- a/chrome/test/data/webui/settings/import_data_dialog_test.ts
++++ b/chrome/test/data/webui/settings/import_data_dialog_test.ts
+@@ -5,7 +5,7 @@
+ // clang-format off
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+ import {dashToCamelCase, flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+-import type {BrowserProfile, ImportDataBrowserProxy, SettingsCheckboxElement, SettingsImportDataDialogElement} from 'chrome://settings/lazy_load.js';
++import type {BrowserProfile, ImportDataBrowserProxy, SettingsCheckboxElement, SettingsImportDataDialogElement, SettingsToggleButtonElement} from 'chrome://settings/lazy_load.js';
+ import {ImportDataBrowserProxyImpl, ImportDataStatus} from 'chrome://settings/lazy_load.js';
+ import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+ import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+@@ -38,8 +38,11 @@
+     this.methodCalled('importFromBookmarksFile');
+   }
+ 
+-  importData(browserProfileIndex: number, types: {[type: string]: boolean}) {
+-    this.methodCalled('importData', [browserProfileIndex, types]);
++  importData(
++      browserProfileIndex: number, types: {[type: string]: boolean},
++      importArcAsPins: boolean) {
++    this.methodCalled(
++        'importData', [browserProfileIndex, types, importArcAsPins]);
+   }
+ }
+ 
+@@ -72,6 +75,17 @@
+       favorites: true,
+       history: false,
+       index: 2,
++      isArc: true,
++      name: 'Arc',
++      passwords: false,
++      profileName: '',
++      search: false,
++    },
++    {
++      autofillFormData: false,
++      favorites: true,
++      history: false,
++      index: 3,
+       isArc: false,
+       name: 'Bookmarks HTML File',
+       passwords: false,
+@@ -132,6 +146,16 @@
+     dialog.$.browserSelect.dispatchEvent(new CustomEvent('change'));
+   }
+ 
++  function getImportArcAsPinsToggle(): SettingsToggleButtonElement {
++    return dialog.shadowRoot!.querySelector<SettingsToggleButtonElement>(
++        '#importArcAsPins')!;
++  }
++
++  function getShowBookmarksBarToggle(): SettingsToggleButtonElement {
++    return dialog.shadowRoot!.querySelector<SettingsToggleButtonElement>(
++        'settings-toggle-button:not(#importArcAsPins)')!;
++  }
++
+   test('Initialization', function() {
+     assertFalse(dialog.$.import.hidden);
+     assertFalse(dialog.$.import.disabled);
+@@ -145,6 +169,7 @@
+     const expectedText = [
+       'Mozilla Firefox',
+       'Mozilla Firefox - My profile',
++      'Arc',
+       'Bookmarks HTML File',
+     ];
+ 
+@@ -163,7 +188,7 @@
+     assertTrue(dialog.$.import.disabled);
+ 
+     // Change browser selection to "Import from Bookmarks HTML file".
+-    simulateBrowserProfileChange(2);
++    simulateBrowserProfileChange(3);
+     assertTrue(dialog.$.import.disabled);
+ 
+     // Ensure everything except |import_dialog_bookmarks| is ignored.
+@@ -172,6 +197,45 @@
+ 
+     await ensureSettingsCheckboxCheckedStatus('import_dialog_bookmarks', true);
+     assertFalse(dialog.$.import.disabled);
++  });
++
++  test('ImportAsPinsToggleVisibility', function() {
++    const toggle = getImportArcAsPinsToggle();
++    assertTrue(toggle.hidden);
++
++    simulateBrowserProfileChange(2);
++    flush();
++    assertFalse(toggle.hidden);
++
++    simulateBrowserProfileChange(0);
++    flush();
++    assertTrue(toggle.hidden);
++  });
++
++  test('ImportAsPinsToggleResetsOnSourceChange', async function() {
++    const toggle = getImportArcAsPinsToggle();
++    simulateBrowserProfileChange(2);
++    flush();
++
++    toggle.click();
++    assertTrue(toggle.checked);
++
++    simulateBrowserProfileChange(0);
++    flush();
++    assertTrue(toggle.hidden);
++    assertFalse(toggle.checked);
++
++    simulateBrowserProfileChange(2);
++    flush();
++    assertFalse(toggle.hidden);
++    assertFalse(toggle.checked);
++    simulateBrowserProfileChange(0);
++    flush();
++
++    // A previous Arc selection must not affect a regular browser import.
++    dialog.$.import.click();
++    const [, , importArcAsPins] = await browserProxy.whenCalled('importData');
++    assertFalse(importArcAsPins);
+   });
+ 
+   function assertInProgressButtons() {
+@@ -199,7 +263,7 @@
+   }
+ 
+   test('ImportFromBookmarksFile', async function() {
+-    simulateBrowserProfileChange(2);
++    simulateBrowserProfileChange(3);
+     dialog.$.import.click();
+     await browserProxy.whenCalled('importFromBookmarksFile');
+     simulateImportStatusChange(ImportDataStatus.IN_PROGRESS);
+@@ -209,9 +273,7 @@
+     assertSucceededButtons();
+ 
+     assertFalse(dialog.$.successIcon.parentElement!.hidden);
+-    assertFalse(
+-        dialog.shadowRoot!.querySelector(
+-                              'settings-toggle-button')!.parentElement!.hidden);
++    assertFalse(getShowBookmarksBarToggle().parentElement!.hidden);
+   });
+ 
+   test('ImportFromBrowserProfile', async function() {
+@@ -223,9 +285,11 @@
+     simulateBrowserProfileChange(expectedIndex);
+     dialog.$.import.click();
+ 
+-    const [actualIndex, types] = await browserProxy.whenCalled('importData');
++    const [actualIndex, types, importArcAsPins] =
++        await browserProxy.whenCalled('importData');
+ 
+     assertEquals(expectedIndex, actualIndex);
++    assertFalse(importArcAsPins);
+     assertFalse(types['import_dialog_bookmarks']);
+     assertTrue(types['import_dialog_search_engine']);
+ 
+@@ -236,9 +300,42 @@
+     assertSucceededButtons();
+ 
+     assertFalse(dialog.$.successIcon.parentElement!.hidden);
+-    assertTrue(
+-        dialog.shadowRoot!.querySelector(
+-                              'settings-toggle-button')!.parentElement!.hidden);
++    assertTrue(getShowBookmarksBarToggle().parentElement!.hidden);
++  });
++
++  test('ImportFromArcProfileAsTabsByDefault', async function() {
++    const expectedIndex = 2;
++    simulateBrowserProfileChange(expectedIndex);
++    flush();
++    assertFalse(getImportArcAsPinsToggle().checked);
++
++    dialog.$.import.click();
++    const [actualIndex, types, importArcAsPins] =
++        await browserProxy.whenCalled('importData');
++
++    assertEquals(expectedIndex, actualIndex);
++    assertTrue(types['import_dialog_bookmarks']);
++    assertFalse(importArcAsPins);
++  });
++
++  test('ImportFromArcProfileAsPins', async function() {
++    const expectedIndex = 2;
++    simulateBrowserProfileChange(expectedIndex);
++    flush();
++
++    const toggle = getImportArcAsPinsToggle();
++    assertFalse(toggle.hidden);
++    assertFalse(toggle.checked);
++    toggle.click();
++    assertTrue(toggle.checked);
++
++    dialog.$.import.click();
++    const [actualIndex, types, importArcAsPins] =
++        await browserProxy.whenCalled('importData');
++
++    assertEquals(expectedIndex, actualIndex);
++    assertTrue(types['import_dialog_bookmarks']);
++    assertTrue(importArcAsPins);
+   });
+ 
+   test('ImportFromBrowserProfileWithUnsupportedOption', async function() {
+@@ -251,8 +348,10 @@
+     simulateBrowserProfileChange(expectedIndex);
+     dialog.$.import.click();
+ 
+-    const [actualIndex, types] = await browserProxy.whenCalled('importData');
++    const [actualIndex, types, importArcAsPins] =
++        await browserProxy.whenCalled('importData');
+     assertEquals(expectedIndex, actualIndex);
++    assertFalse(importArcAsPins);
+ 
+     Object.keys(prefs).forEach(function(prefName) {
+       // import_dialog_history is unsupported and hidden

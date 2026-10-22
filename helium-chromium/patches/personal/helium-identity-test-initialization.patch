@@ -1,0 +1,24 @@
+# Applies to Chromium identity test support with Helium production credential initialization disabled.
+# Initialize the fake token service used by component tests without restoring Google sign-in in production.
+Index: src/components/signin/public/identity_manager/identity_test_environment.cc
+===================================================================
+--- src.orig/components/signin/public/identity_manager/identity_test_environment.cc
++++ src/components/signin/public/identity_manager/identity_test_environment.cc
+@@ -383,7 +383,16 @@
+ #endif
+   init_params.signin_client = signin_client;
+ 
+-  return std::make_unique<IdentityManager>(std::move(init_params));
++  auto identity_manager =
++      std::make_unique<IdentityManager>(std::move(init_params));
++#if !BUILDFLAG(IS_CHROMEOS)
++  // Helium omits Google credential initialization in production. Component
++  // tests use fake tokens and initialize only their in-memory credential state.
++  if (!identity_manager->AreRefreshTokensLoaded()) {
++    identity_manager->GetTokenService()->LoadCredentials(CoreAccountId());
++  }
++#endif
++  return identity_manager;
+ }
+ 
+ IdentityTestEnvironment::~IdentityTestEnvironment() {

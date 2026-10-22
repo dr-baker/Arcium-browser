@@ -1,0 +1,632 @@
+--- a/chrome/browser/importer/profile_writer.cc
++++ b/chrome/browser/importer/profile_writer.cc
+@@ -13,6 +13,8 @@
+ #include <set>
+ #include <string>
+ 
++#include "base/containers/span.h"
++#include "base/memory/ref_counted_memory.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -25,6 +27,10 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+ #include "chrome/browser/webdata_services/web_data_service_factory.h"
++#include "chrome/browser/ui/helium/helium_persistent_item_model.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+ #include "components/bookmarks/browser/bookmark_model.h"
+@@ -40,6 +46,8 @@
+ #include "components/search_engines/template_url.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "components/user_data_importer/common/imported_bookmark_entry.h"
++#include "ui/gfx/codec/png_codec.h"
++#include "ui/gfx/geometry/size.h"
+ 
+ using bookmarks::BookmarkModel;
+ using bookmarks::BookmarkNode;
+@@ -76,6 +84,37 @@
+ // Shows the bookmarks toolbar.
+ void ShowBookmarkBar(Profile* profile) {
+   profile->GetPrefs()->SetBoolean(bookmarks::prefs::kShowBookmarkBar, true);
++}
++
++void AddPersistentNodeURLs(const helium::PersistentNodes& nodes,
++                           std::set<GURL>* urls) {
++  for (const helium::PersistentNode& node : nodes) {
++    if (const auto* link = std::get_if<helium::PersistentLink>(&node.data)) {
++      if (link->url.is_valid()) {
++        urls->insert(link->url);
++      }
++    } else if (const auto* folder =
++                   std::get_if<helium::PersistentFolder>(&node.data)) {
++      AddPersistentNodeURLs(folder->children, urls);
++    }
++  }
++}
++
++std::set<GURL> GetPersistentSidebarURLs(Profile* profile) {
++  std::set<GURL> urls;
++  helium::HeliumSpaceService* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(profile);
++  if (!service) {
++    return urls;
++  }
++
++  AddPersistentNodeURLs(service->GetLocalFavorites(), &urls);
++  const std::vector<helium::HeliumSpace*> spaces = service->GetSpaces();
++  for (const helium::HeliumSpace* space : spaces) {
++    AddPersistentNodeURLs(service->GetFavoritesForSpace(*space), &urls);
++    AddPersistentNodeURLs(space->pins(), &urls);
++  }
++  return urls;
+ }
+ 
+ }  // namespace
+@@ -239,9 +278,42 @@
+ 
+ void ProfileWriter::AddFavicons(
+     const favicon_base::FaviconUsageDataList& favicons) {
+-  FaviconServiceFactory::GetForProfile(profile_,
+-                                       ServiceAccessType::EXPLICIT_ACCESS)
+-      ->SetImportedFavicons(favicons);
++  favicon::FaviconService* favicon_service = FaviconServiceFactory::GetForProfile(
++      profile_, ServiceAccessType::EXPLICIT_ACCESS);
++  favicon_service->SetImportedFavicons(favicons);
++
++  const std::set<GURL> persistent_urls = GetPersistentSidebarURLs(profile_);
++  if (persistent_urls.empty()) {
++    return;
++  }
++
++  for (const favicon_base::FaviconUsageData& favicon_usage : favicons) {
++    std::vector<GURL> matching_urls;
++    for (const GURL& page_url : favicon_usage.urls) {
++      if (persistent_urls.contains(page_url)) {
++        matching_urls.push_back(page_url);
++      }
++    }
++    if (matching_urls.empty() || !favicon_usage.favicon_url.is_valid() ||
++        favicon_usage.png_data.empty()) {
++      continue;
++    }
++
++    std::optional<gfx::PNGCodec::DecodeOutput> decoded = gfx::PNGCodec::Decode(
++        base::span(favicon_usage.png_data), gfx::PNGCodec::FORMAT_RGBA);
++    if (!decoded || decoded->width <= 0 || decoded->height <= 0) {
++      continue;
++    }
++
++    scoped_refptr<base::RefCountedBytes> bitmap_data =
++        base::MakeRefCounted<base::RefCountedBytes>(favicon_usage.png_data);
++    const gfx::Size pixel_size(decoded->width, decoded->height);
++    for (const GURL& page_url : matching_urls) {
++      favicon_service->MergeFavicon(page_url, favicon_usage.favicon_url,
++                                    favicon_base::IconType::kFavicon,
++                                    bitmap_data, pixel_size);
++    }
++  }
+ }
+ 
+ typedef std::map<std::string, TemplateURL*> HostPathMap;
+--- a/chrome/utility/BUILD.gn
++++ b/chrome/utility/BUILD.gn
+@@ -290,6 +290,7 @@
+     sources = [
+       "importer/arc_sidebar_snapshot_unittest.cc",
+       "importer/bookmarks_file_importer_unittest.cc",
++      "importer/chrome_importer_unittest.cc",
+     ]
+     if (!is_chromeos) {
+       sources += [ "importer/firefox_importer_unittest.cc" ]
+@@ -316,6 +317,7 @@
+       "//testing/gmock",
+       "//testing/gtest",
+       "//third_party/zlib/google:compression_utils",
++      "//ui/gfx",
+       "//url",
+     ]
+   }
+--- a/chrome/utility/importer/arc_sidebar_importer.cc
++++ b/chrome/utility/importer/arc_sidebar_importer.cc
+@@ -75,11 +75,6 @@
+   bridge_->AddArcSidebarSnapshot(snapshot_json);
+ }
+ 
+-void ArcSidebarImporter::ImportBookmarks() {
+-  const base::FilePath bookmarks_path =
+-      source_path_.Append(FILE_PATH_LITERAL("Bookmarks"));
+-  if (base::PathExists(bookmarks_path)) {
+-    ChromeImporter::ImportBookmarks();
+-  }
++void ArcSidebarImporter::ImportAdditionalBookmarks() {
+   ImportBookmarksImpl();
+ }
+--- a/chrome/utility/importer/arc_sidebar_importer.h
++++ b/chrome/utility/importer/arc_sidebar_importer.h
+@@ -23,7 +23,7 @@
+  protected:
+   ~ArcSidebarImporter() override;
+ 
+-  void ImportBookmarks() override;
++  void ImportAdditionalBookmarks() override;
+ 
+  private:
+   base::FilePath GetStorableSidebarPath() const;
+--- a/chrome/utility/importer/chrome_importer.cc
++++ b/chrome/utility/importer/chrome_importer.cc
+@@ -25,6 +25,14 @@
+ #include "ui/base/page_transition_types.h"
+ #include "url/gurl.h"
+ 
++namespace {
++
++// Preserve larger Arc/Chrome favorite artwork while keeping each image bounded
++// for the existing chunked importer IPC.
++constexpr int kImportedFaviconMaxSize = 64;
++
++}  // namespace
++
+ ChromeImporter::ChromeImporter() = default;
+ 
+ ChromeImporter::~ChromeImporter() = default;
+@@ -109,47 +117,50 @@
+   base::FilePath bookmarks_path = source_path_.Append(
+       base::FilePath::StringType(FILE_PATH_LITERAL("Bookmarks")));
+   ScopedCopyFile copy_bookmark_file(bookmarks_path);
+-  if (!copy_bookmark_file.copy_success())
+-    return;
+-
+-  base::ReadFileToString(copy_bookmark_file.copied_file_path(),
+-                         &bookmarks_content);
+-  std::optional<base::DictValue> bookmark_dict =
+-      base::JSONReader::ReadDict(bookmarks_content,
+-                                 base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+-  if (!bookmark_dict)
+-    return;
+-
+-  std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks;
+-  const base::DictValue* roots = bookmark_dict->FindDict("roots");
+-  if (roots) {
+-    // Importing bookmark bar items
+-    const base::DictValue* bookmark_bar = roots->FindDict("bookmark_bar");
+-    if (bookmark_bar) {
+-      std::vector<std::u16string> path;
+-      const auto* name = bookmark_bar->FindString("name");
+-
+-      path.push_back(base::UTF8ToUTF16(name ? *name : std::string()));
+-      RecursiveReadBookmarksFolder(bookmark_bar, path, true, &bookmarks);
+-    }
+-    // Importing other items
+-    const base::DictValue* other = roots->FindDict("other");
+-    if (other) {
+-      std::vector<std::u16string> path;
+-      const auto* name = other->FindString("name");
+-
+-      path.push_back(base::UTF8ToUTF16(name ? *name : std::string()));
+-      RecursiveReadBookmarksFolder(other, path, false, &bookmarks);
+-    }
+-  }
+-  // Write into profile.
+-  if (!bookmarks.empty() && !cancelled()) {
+-    bridge_->AddBookmarks(
+-        bookmarks, l10n_util::GetStringFUTF16(IDS_IMPORTED_FROM_BOOKMARK_FOLDER,
+-                                              importer_name_));
+-  }
+-
+-  // Import favicons.
++  if (copy_bookmark_file.copy_success() &&
++      base::ReadFileToString(copy_bookmark_file.copied_file_path(),
++                             &bookmarks_content)) {
++    std::optional<base::DictValue> bookmark_dict =
++        base::JSONReader::ReadDict(bookmarks_content,
++                                   base::JSON_PARSE_CHROMIUM_EXTENSIONS);
++    if (bookmark_dict) {
++      std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks;
++      const base::DictValue* roots = bookmark_dict->FindDict("roots");
++      if (roots) {
++        // Importing bookmark bar items
++        const base::DictValue* bookmark_bar = roots->FindDict("bookmark_bar");
++        if (bookmark_bar) {
++          std::vector<std::u16string> path;
++          const auto* name = bookmark_bar->FindString("name");
++
++          path.push_back(base::UTF8ToUTF16(name ? *name : std::string()));
++          RecursiveReadBookmarksFolder(bookmark_bar, path, true, &bookmarks);
++        }
++        // Importing other items
++        const base::DictValue* other = roots->FindDict("other");
++        if (other) {
++          std::vector<std::u16string> path;
++          const auto* name = other->FindString("name");
++
++          path.push_back(base::UTF8ToUTF16(name ? *name : std::string()));
++          RecursiveReadBookmarksFolder(other, path, false, &bookmarks);
++        }
++      }
++      // Write into profile.
++      if (!bookmarks.empty() && !cancelled()) {
++        bridge_->AddBookmarks(
++            bookmarks,
++            l10n_util::GetStringFUTF16(IDS_IMPORTED_FROM_BOOKMARK_FOLDER,
++                                        importer_name_));
++      }
++    }
++  }
++
++  ImportAdditionalBookmarks();
++  ImportFavicons();
++}
++
++void ChromeImporter::ImportFavicons() {
+   base::FilePath favicons_path = source_path_.Append(
+       base::FilePath::StringType(FILE_PATH_LITERAL("Favicons")));
+   if (!base::PathExists(favicons_path))
+@@ -169,9 +180,13 @@
+   if (!favicon_map.empty() && !cancelled()) {
+     favicon_base::FaviconUsageDataList favicons;
+     LoadFaviconData(&db, favicon_map, &favicons);
+-    bridge_->SetFavicons(favicons);
+-  }
+-}
++    if (!favicons.empty()) {
++      bridge_->SetFavicons(favicons);
++    }
++  }
++}
++
++void ChromeImporter::ImportAdditionalBookmarks() {}
+ 
+ void ChromeImporter::ImportFaviconURLs(sql::Database* db,
+                                        FaviconMap* favicon_map) {
+@@ -194,7 +209,9 @@
+       "FROM favicons f "
+       "JOIN favicon_bitmaps fb "
+       "ON f.id = fb.icon_id "
+-      "WHERE f.id = ?;";
++      "WHERE f.id = ? "
++      "ORDER BY fb.width * fb.height DESC, fb.width DESC, fb.height DESC, "
++      "fb.last_updated DESC, fb.id DESC;";
+   sql::Statement s(db->GetUniqueStatement(query));
+ 
+   if (!s.is_valid())
+@@ -202,25 +219,27 @@
+ 
+   for (const auto& entry : favicon_map) {
+     s.BindInt64(0, entry.first);
+-    if (s.Step()) {
+-      favicon_base::FaviconUsageData usage;
+-
+-      usage.favicon_url = GURL(s.ColumnString(0));
+-      if (!usage.favicon_url.is_valid())
+-        continue;  // Don't bother importing favicons with invalid URLs.
++    while (s.Step()) {
++      GURL favicon_url(s.ColumnString(0));
++      if (!favicon_url.is_valid()) {
++        break;  // The URL is shared by all bitmaps for this icon.
++      }
+ 
+       std::vector<uint8_t> data = s.ColumnBlobAsVector(1);
+       if (data.empty())
+-        continue;  // Data definitely invalid.
+-
+-      auto decoded_data = importer::ReencodeFavicon(base::span(data));
+-      if (!decoded_data) {
+-        continue;  // Unable to decode.
+-      }
+-
++        continue;  // Try the next smaller bitmap for this icon.
++
++      auto decoded_data = importer::ReencodeFavicon(
++          base::span(data), kImportedFaviconMaxSize);
++      if (!decoded_data)
++        continue;  // Try the next smaller bitmap for this icon.
++
++      favicon_base::FaviconUsageData usage;
++      usage.favicon_url = std::move(favicon_url);
+       usage.urls = entry.second;
+       usage.png_data = std::move(decoded_data).value();
+-      favicons->push_back(usage);
++      favicons->push_back(std::move(usage));
++      break;
+     }
+     s.Reset(true);
+   }
+--- a/chrome/utility/importer/chrome_importer.h
++++ b/chrome/utility/importer/chrome_importer.h
+@@ -44,6 +44,8 @@
+   ~ChromeImporter() override;
+ 
+   virtual void ImportBookmarks();
++  void ImportFavicons();
++  virtual void ImportAdditionalBookmarks();
+   void ImportHistory();
+ 
+   double chromeTimeToDouble(int64_t time);
+--- /dev/null
++++ b/chrome/utility/importer/chrome_importer_unittest.cc
+@@ -0,0 +1,212 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/utility/importer/arc_sidebar_importer.h"
++
++#include <algorithm>
++#include <array>
++#include <string>
++#include <vector>
++
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/memory/ref_counted.h"
++#include "chrome/common/importer/importer_bridge.h"
++#include "chrome/common/importer/importer_autofill_form_data_entry.h"
++#include "chrome/utility/importer/chrome_importer.h"
++#include "components/favicon_base/favicon_usage_data.h"
++#include "components/user_data_importer/common/importer_data_types.h"
++#include "sql/database.h"
++#include "sql/statement.h"
++#include "sql/test/test_helpers.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "ui/gfx/codec/png_codec.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace {
++
++std::vector<uint8_t> MakeSolidPng(int size,
++                                  const std::array<uint8_t, 4>& rgba) {
++  std::vector<uint8_t> pixels(size * size * rgba.size());
++  for (size_t i = 0; i < pixels.size(); i += rgba.size()) {
++    std::copy(rgba.begin(), rgba.end(), pixels.begin() + i);
++  }
++  auto png = gfx::PNGCodec::Encode(
++      pixels.data(), gfx::PNGCodec::FORMAT_RGBA, gfx::Size(size, size),
++      size * rgba.size(), /*discard_transparency=*/false,
++      std::vector<gfx::PNGCodec::Comment>());
++  return png.value_or(std::vector<uint8_t>());
++}
++
++bool CreateFaviconsDatabase(const base::FilePath& database_path) {
++  sql::Database db(sql::test::kTestTag);
++  if (!db.Open(database_path) ||
++      !db.Execute("CREATE TABLE favicons (id INTEGER PRIMARY KEY, url TEXT);")) {
++    return false;
++  }
++  if (!db.Execute(
++          "CREATE TABLE icon_mapping (icon_id INTEGER, page_url TEXT);")) {
++    return false;
++  }
++  if (!db.Execute(
++          "CREATE TABLE favicon_bitmaps (id INTEGER PRIMARY KEY, "
++          "icon_id INTEGER, last_updated INTEGER, image_data BLOB, "
++          "width INTEGER, height INTEGER);")) {
++    return false;
++  }
++  if (!db.Execute(
++          "INSERT INTO favicons (id, url) VALUES "
++          "(1, 'not a url'), "
++          "(2, 'https://empty.example/favicon.ico'), "
++          "(3, 'https://corrupt.example/favicon.ico'), "
++          "(4, 'https://favorite.example/favicon.ico');")) {
++    return false;
++  }
++  if (!db.Execute(
++          "INSERT INTO icon_mapping (icon_id, page_url) VALUES "
++          "(1, 'https://invalid.example/'), "
++          "(2, 'https://empty.example/'), "
++          "(3, 'https://corrupt.example/'), "
++          "(4, 'https://favorite.example/');")) {
++    return false;
++  }
++
++  auto insert_bitmap = [&db](int64_t id, int64_t icon_id,
++                             const std::vector<uint8_t>& image_data, int width,
++                             int height) {
++    sql::Statement statement(db.GetUniqueStatement(
++        "INSERT INTO favicon_bitmaps "
++        "(id, icon_id, last_updated, image_data, width, height) "
++        "VALUES (?, ?, 0, ?, ?, ?);"));
++    statement.BindInt64(0, id);
++    statement.BindInt64(1, icon_id);
++    statement.BindBlob(2, image_data);
++    statement.BindInt(3, width);
++    statement.BindInt(4, height);
++    return statement.Run();
++  };
++
++  const std::vector<uint8_t> small_red =
++      MakeSolidPng(16, {0xff, 0x00, 0x00, 0xff});
++  const std::vector<uint8_t> large_blue =
++      MakeSolidPng(32, {0x00, 0x00, 0xff, 0xff});
++  if (small_red.empty() || large_blue.empty() ||
++      !insert_bitmap(1, 1, small_red, 16, 16) ||
++      !insert_bitmap(2, 2, {}, 16, 16) ||
++      !insert_bitmap(3, 3, {1, 2, 3}, 16, 16) ||
++      !insert_bitmap(4, 4, small_red, 16, 16) ||
++      !insert_bitmap(5, 4, large_blue, 32, 32) ||
++      !insert_bitmap(6, 4, {1, 2, 3}, 64, 64)) {
++    return false;
++  }
++  return true;
++}
++
++class RecordingImporterBridge : public ImporterBridge {
++ public:
++  void AddBookmarks(
++      const std::vector<user_data_importer::ImportedBookmarkEntry>&,
++      const std::u16string&) override {
++    events.push_back("bookmarks");
++  }
++  void AddArcSidebarSnapshot(const std::string&) override {
++    events.push_back("arc_snapshot");
++  }
++  void AddHomePage(const GURL&) override {}
++  void SetFavicons(
++      const favicon_base::FaviconUsageDataList& imported_favicons) override {
++    events.push_back("favicons");
++    favicons = imported_favicons;
++  }
++  void SetHistoryItems(
++      const std::vector<user_data_importer::ImporterURLRow>&,
++      user_data_importer::VisitSource) override {}
++  void SetKeywords(
++      const std::vector<user_data_importer::SearchEngineInfo>&,
++      bool) override {}
++  void SetPasswordForm(
++      const user_data_importer::ImportedPasswordForm&) override {}
++  void SetAutofillFormData(
++      const std::vector<ImporterAutofillFormDataEntry>&) override {}
++  void NotifyStarted() override {}
++  void NotifyItemStarted(user_data_importer::ImportItem) override {}
++  void NotifyItemEnded(user_data_importer::ImportItem) override {}
++  void NotifyEnded() override {}
++  std::u16string GetLocalizedString(int) override { return {}; }
++
++  std::vector<std::string> events;
++  favicon_base::FaviconUsageDataList favicons;
++
++ protected:
++  ~RecordingImporterBridge() override = default;
++};
++
++base::FilePath MakeProfileDirectory(base::ScopedTempDir& temp_dir) {
++  if (!temp_dir.CreateUniqueTempDir()) {
++    return base::FilePath();
++  }
++  const base::FilePath profile_directory =
++      temp_dir.GetPath().AppendASCII("Arc Profile");
++  if (!base::CreateDirectory(profile_directory) ||
++      !CreateFaviconsDatabase(
++          profile_directory.Append(FILE_PATH_LITERAL("Favicons")))) {
++    return base::FilePath();
++  }
++  return profile_directory;
++}
++
++}  // namespace
++
++TEST(ChromeImporterTest, ImportsFaviconsWhenBookmarksFileIsMissing) {
++  base::ScopedTempDir temp_dir;
++  const base::FilePath profile_directory = MakeProfileDirectory(temp_dir);
++  ASSERT_FALSE(profile_directory.empty());
++
++  user_data_importer::SourceProfile source_profile;
++  source_profile.source_path = profile_directory;
++  auto bridge = base::MakeRefCounted<RecordingImporterBridge>();
++  auto importer = base::MakeRefCounted<ChromeImporter>();
++
++  importer->StartImport(source_profile, user_data_importer::FAVORITES,
++                        bridge.get());
++
++  EXPECT_EQ((std::vector<std::string>{"favicons"}), bridge->events);
++  ASSERT_EQ(1u, bridge->favicons.size());
++  EXPECT_EQ("https://favorite.example/favicon.ico",
++            bridge->favicons[0].favicon_url.spec());
++}
++
++TEST(ArcSidebarImporterTest,
++     ImportsLargestValidFaviconAfterDispatchingSnapshotWithoutBookmarks) {
++  base::ScopedTempDir temp_dir;
++  const base::FilePath profile_directory = MakeProfileDirectory(temp_dir);
++  ASSERT_FALSE(profile_directory.empty());
++  ASSERT_TRUE(base::WriteFile(
++      profile_directory.Append(FILE_PATH_LITERAL("StorableSidebar.json")),
++      R"json({"sidebar":{"items":[]}})json"));
++
++  user_data_importer::SourceProfile source_profile;
++  source_profile.source_path = profile_directory;
++  auto bridge = base::MakeRefCounted<RecordingImporterBridge>();
++  auto importer = base::MakeRefCounted<ArcSidebarImporter>();
++
++  importer->StartImport(source_profile, user_data_importer::FAVORITES,
++                        bridge.get());
++
++  EXPECT_EQ((std::vector<std::string>{"arc_snapshot", "favicons"}),
++            bridge->events);
++  ASSERT_EQ(1u, bridge->favicons.size());
++  EXPECT_EQ("https://favorite.example/favicon.ico",
++            bridge->favicons[0].favicon_url.spec());
++  auto decoded = gfx::PNGCodec::Decode(base::span(bridge->favicons[0].png_data),
++                                       gfx::PNGCodec::FORMAT_RGBA);
++  ASSERT_TRUE(decoded);
++  EXPECT_EQ(32, decoded->width);
++  EXPECT_EQ(32, decoded->height);
++  ASSERT_GE(decoded->output.size(), 4u);
++  EXPECT_EQ(0x00, decoded->output[0]);
++  EXPECT_EQ(0x00, decoded->output[1]);
++  EXPECT_EQ(0xff, decoded->output[2]);
++  EXPECT_EQ(0xff, decoded->output[3]);
++}
+--- a/components/user_data_importer/content/favicon_reencode.cc
++++ b/components/user_data_importer/content/favicon_reencode.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "components/user_data_importer/content/favicon_reencode.h"
++
++#include <algorithm>
+ 
+ #include "content/public/child/image_decoder_utils.h"
+ #include "skia/ext/image_operations.h"
+@@ -37,4 +39,32 @@
+                                            /*discard_transparency=*/false);
+ }
+ 
++std::optional<std::vector<uint8_t>> ReencodeFavicon(
++    base::span<const uint8_t> src,
++    int max_size) {
++  if (max_size <= 0) {
++    return std::nullopt;
++  }
++
++  SkBitmap decoded = content::DecodeImage(src, gfx::Size(max_size, max_size));
++  if (decoded.empty()) {
++    return std::nullopt;
++  }
++
++  if (decoded.width() > max_size || decoded.height() > max_size) {
++    const double scale = std::min(
++        static_cast<double>(max_size) / decoded.width(),
++        static_cast<double>(max_size) / decoded.height());
++    const int new_width =
++        std::max(1, static_cast<int>(decoded.width() * scale));
++    const int new_height =
++        std::max(1, static_cast<int>(decoded.height() * scale));
++    decoded = skia::ImageOperations::Resize(
++        decoded, skia::ImageOperations::RESIZE_LANCZOS3, new_width, new_height);
++  }
++
++  return gfx::PNGCodec::EncodeBGRASkBitmap(decoded,
++                                           /*discard_transparency=*/false);
++}
++
+ }  // namespace importer
+--- a/components/user_data_importer/content/favicon_reencode.h
++++ b/components/user_data_importer/content/favicon_reencode.h
+@@ -14,11 +14,18 @@
+ 
+ namespace importer {
+ 
+-// Given raw image data, decodes the icon, re-sampling to the correct size as
+-// necessary, and re-encodes as PNG data. Returns the PNG data if successful,
+-// nullopt if not.
++// Given raw image data, decodes the icon, downsampling it when either axis is
++// larger than `max_size`, and re-encodes it as PNG data. Returns the PNG data
++// if successful, nullopt if not. Existing callers retain the standard 16px
++// favicon bound.
+ std::optional<std::vector<uint8_t>> ReencodeFavicon(
+     base::span<const uint8_t> src);
++
++// Bounded variant for callers that can retain larger images. Images are
++// downsampled only when either axis exceeds `max_size`.
++std::optional<std::vector<uint8_t>> ReencodeFavicon(
++    base::span<const uint8_t> src,
++    int max_size);
+ 
+ }  // namespace importer
+ 

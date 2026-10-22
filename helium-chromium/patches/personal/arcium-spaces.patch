@@ -1,0 +1,1746 @@
+Index: src/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+===================================================================
+--- src.orig/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
++++ src/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+@@ -257,6 +257,7 @@
+ #include "chrome/browser/ui/autofill/autofill_client_provider_factory.h"
+ #include "chrome/browser/ui/find_bar/find_bar_state_factory.h"
+ #include "chrome/browser/ui/hats/hats_service_factory.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
+ #include "chrome/browser/ui/safety_hub/menu_notification_service_factory.h"
+ #include "chrome/browser/ui/safety_hub/notification_permission_review_service_factory.h"
+@@ -1302,6 +1303,7 @@ void ChromeBrowserMainExtraPartsProfiles
+   PersonalContextServiceFactory::GetInstance();
+ #if !BUILDFLAG(IS_ANDROID)
+   PinnedTabServiceFactory::GetInstance();
++  helium::HeliumSpaceServiceFactory::GetInstance();
+   PinnedToolbarActionsModelFactory::GetInstance();
+ #endif
+   PlatformNotificationServiceFactory::GetInstance();
+Index: src/chrome/browser/sessions/session_restore.cc
+===================================================================
+--- src.orig/chrome/browser/sessions/session_restore.cc
++++ src/chrome/browser/sessions/session_restore.cc
+@@ -64,6 +64,8 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/ui/startup/startup_browser_creator.h"
+@@ -834,6 +836,12 @@ class SessionRestoreImpl : public Browse
+ #endif
+       }
+ 
++      if (helium::HeliumSpaceService* space_service =
++              helium::HeliumSpaceServiceFactory::GetForProfile(profile_)) {
++        space_service->RestoreSpaceForBrowserFromSession(browser,
++                                                         window->extra_data);
++      }
++
+       // 2. Track TYPE_NORMAL browsers.
+       if (is_normal_window) {
+         has_normal_browser = true;
+@@ -1216,7 +1224,7 @@ class SessionRestoreImpl : public Browse
+       ui::mojom::WindowShowState show_state,
+       const std::string& app_name,
+       const std::string& user_title,
+-      const std::map<std::string, std::string>& /*extra_data*/,
++      const std::map<std::string, std::string>& extra_data,
+       int32_t restore_id) {
+     Browser::CreateParams params(type, profile_, false);
+     params.initial_bounds = bounds;
+@@ -1244,6 +1252,10 @@ class SessionRestoreImpl : public Browse
+ 
+     base::TimeTicks now = base::TimeTicks::Now();
+     Browser* browser = Browser::Create(params);
++    if (helium::HeliumSpaceService* space_service =
++            helium::HeliumSpaceServiceFactory::GetForProfile(profile_)) {
++      space_service->RestoreSpaceForBrowserFromSession(browser, extra_data);
++    }
+     if (auto* manager = InitialWebUIWindowMetricsManager::From(browser)) {
+       manager->SetWindowCreationInfo(
+           waap::NewWindowCreationSource::kSessionRestore, now);
+Index: src/chrome/browser/sessions/session_service_base.cc
+===================================================================
+--- src.orig/chrome/browser/sessions/session_service_base.cc
++++ src/chrome/browser/sessions/session_service_base.cc
+@@ -26,9 +26,12 @@
+ #include "chrome/browser/sessions/session_service_utils.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
+ #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
++#include "chrome/browser/ui/arcium/tab_provenance.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/startup/startup_browser_creator.h"
+ #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+@@ -672,6 +675,13 @@
+         sessions::CreatePinnedStateCommand(session_id, true));
+   }
+ 
++  std::map<std::string, std::string> extra_data;
++  arcium::TabProvenance::PopulateExtraData(tab, &extra_data);
++  for (const auto& [key, value] : extra_data) {
++    command_storage_manager()->AppendRebuildCommand(
++        sessions::CreateAddTabExtraDataCommand(session_id, key, value));
++  }
++
+   // Record the association between the sessionStorage namespace and the tab.
+   content::SessionStorageNamespace* session_storage_namespace =
+       tab->GetController().GetDefaultSessionStorageNamespace();
+@@ -718,6 +728,18 @@
+       sessions::CreateSetWindowVisibleOnAllWorkspacesCommand(
+           browser->session_id(),
+           BrowserWindow::FromBrowser(browser)->IsVisibleOnAllWorkspaces()));
++
++  if (auto* space_service = helium::HeliumSpaceServiceFactory::GetForProfile(
++          browser->profile())) {
++    const std::string_view space_id =
++        space_service->GetSpaceIdForBrowser(browser);
++    if (!space_id.empty()) {
++      command_storage_manager()->AppendRebuildCommand(
++          sessions::CreateAddWindowExtraDataCommand(
++              browser->session_id(), helium::kHeliumSpaceIdWindowExtraDataKey,
++              std::string(space_id)));
++    }
++  }
+ 
+   TabStripModel* tab_strip = browser->tab_strip_model();
+   int persisted_active_index = tab_strip->active_index();
+Index: src/chrome/browser/ui/BUILD.gn
+===================================================================
+--- src.orig/chrome/browser/ui/BUILD.gn
++++ src/chrome/browser/ui/BUILD.gn
+@@ -360,6 +360,21 @@ if (!is_android) {
+   }
+ }
+ 
++executable("arcium_optional_navigation_tests") {
++  testonly = true
++  sources = [
++    "arcium/optional_navigation.cc",
++    "arcium/optional_navigation_unittest.cc",
++  ]
++  deps = [
++    "//base",
++    "//content/public/browser",
++    "//testing/gtest",
++    "//testing/gtest:gtest_main",
++    "//url",
++  ]
++}
++
+ # Use a static library here because many test binaries depend on this but don't
+ # require many files from it. This makes linking more efficient.
+ # TODO(https://crbug.com/353332589): Once //chrome/browser is properly
+@@ -368,11 +383,21 @@ if (!is_android) {
+ # circular includes from each other.
+ static_library("ui") {
+   sources = [
++    "arcium/optional_navigation.cc",
++    "arcium/optional_navigation.h",
++    "arcium/tab_provenance.cc",
++    "arcium/tab_provenance.h",
+     "confirm_bubble.h",
+     "crypto_module_password_dialog.h",
+     "enterprise_startup_dialog.h",
+     "helium/helium_layout_state_controller.cc",
+     "helium/helium_layout_state_controller.h",
++    "helium/helium_space.cc",
++    "helium/helium_space.h",
++    "helium/helium_space_service.cc",
++    "helium/helium_space_service.h",
++    "helium/helium_space_service_factory.cc",
++    "helium/helium_space_service_factory.h",
+     "idle_bubble.h",
+     "managed_ui.cc",
+     "managed_ui.h",
+Index: src/chrome/browser/ui/browser_live_tab_context.cc
+===================================================================
+--- src.orig/chrome/browser/ui/browser_live_tab_context.cc
++++ src/chrome/browser/ui/browser_live_tab_context.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/sessions/session_service_utils.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
+ #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
++#include "chrome/browser/ui/arcium/tab_provenance.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_tab_strip_model_delegate.h"
+@@ -29,6 +30,8 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -202,13 +205,21 @@
+ 
+   glic::PopulateGlicExtraData(tab_strip_model_->GetTabAtIndex(index),
+                               &extra_data);
++  arcium::TabProvenance::PopulateExtraData(
++      tab_strip_model_->GetWebContentsAt(index), &extra_data);
+ 
+   return extra_data;
+ }
+ 
+ std::map<std::string, std::string>
+ BrowserLiveTabContext::GetExtraDataForWindow() const {
+-  return std::map<std::string, std::string>();
++  std::map<std::string, std::string> extra_data;
++  if (auto* service =
++          helium::HeliumSpaceServiceFactory::GetForProfile(&profile_.get())) {
++    service->AddSpaceToSessionExtraData(browser_->GetBrowserForMigrationOnly(),
++                                        &extra_data);
++  }
++  return extra_data;
+ }
+ 
+ std::optional<tab_groups::TabGroupId> BrowserLiveTabContext::GetTabGroupForTab(
+@@ -470,7 +481,7 @@
+     ui::mojom::WindowShowState show_state,
+     const std::string& workspace,
+     const std::string& user_title,
+-    const std::map<std::string, std::string>& /*extra_data*/) {
++    const std::map<std::string, std::string>& extra_data) {
+   std::unique_ptr<Browser::CreateParams> create_params;
+   if (ShouldCreateAppWindowForAppName(profile, app_name)) {
+     // Only trusted app popup windows should ever be restored.
+@@ -496,6 +507,10 @@
+   create_params->user_title = user_title;
+ 
+   Browser* browser = Browser::Create(*create_params.get());
++  if (auto* service =
++          helium::HeliumSpaceServiceFactory::GetForProfile(profile)) {
++    service->RestoreSpaceForBrowserFromSession(browser, extra_data);
++  }
+ 
+   return browser->GetFeatures().live_tab_context();
+ }
+Index: src/chrome/browser/ui/helium/helium_space.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/helium/helium_space.cc
+@@ -0,0 +1,111 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/helium/helium_space.h"
++
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_tabstrip.h"
++#include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/prefs/scoped_user_pref_update.h"
++
++namespace helium {
++
++namespace {
++
++constexpr char kIdKey[] = "id";
++constexpr char kNameKey[] = "name";
++
++base::DictValue* FindSpaceRecord(base::ListValue& records,
++                                 const std::string& id) {
++  for (base::Value& value : records) {
++    base::DictValue* record = value.GetIfDict();
++    const std::string* record_id =
++        record ? record->FindString(kIdKey) : nullptr;
++    if (record_id && *record_id == id) {
++      return record;
++    }
++  }
++  return nullptr;
++}
++
++}  // namespace
++
++HeliumSpace::HeliumSpace(Profile* profile, std::string id, std::u16string name)
++    : profile_(profile), id_(std::move(id)), name_(std::move(name)) {}
++
++HeliumSpace::~HeliumSpace() = default;
++
++void HeliumSpace::SetName(std::u16string name) {
++  name_ = name.empty() ? u"Space" : std::move(name);
++  ScopedListPrefUpdate update(profile_->GetPrefs(), kHeliumSpacesPref);
++  if (base::DictValue* record = FindSpaceRecord(update.Get(), id_)) {
++    record->Set(kNameKey, base::UTF16ToUTF8(name_));
++  }
++}
++
++BrowserWindowInterface* HeliumSpace::GetPrimaryBrowser() const {
++  BrowserWindowInterface* match = nullptr;
++  auto* space_service = HeliumSpaceServiceFactory::GetForProfile(profile_);
++  if (!space_service) {
++    return nullptr;
++  }
++  ProfileBrowserCollection::GetForProfile(profile_)->ForEach(
++      [this, space_service, &match](BrowserWindowInterface* window) {
++        if (window->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
++          return true;
++        }
++        Browser* browser = window->GetBrowserForMigrationOnly();
++        const std::string_view browser_space_id =
++            space_service->GetSpaceIdForBrowser(browser);
++        if (browser && browser_space_id == id_) {
++          match = window;
++          return false;
++        }
++        return true;
++      },
++      BrowserCollection::Order::kActivation);
++  return match;
++}
++
++BrowserWindowInterface* HeliumSpace::ActivateOrCreatePrimaryWindow() {
++  auto* space_service = HeliumSpaceServiceFactory::GetForProfile(profile_);
++  if (!space_service) {
++    return nullptr;
++  }
++  space_service->SetActiveSpace(id_);
++  if (BrowserWindowInterface* existing = GetPrimaryBrowser()) {
++    if (Browser* browser = existing->GetBrowserForMigrationOnly()) {
++      browser->window()->Show();
++      return existing;
++    }
++  }
++
++  if (Browser::GetCreationStatusForProfile(profile_) !=
++      Browser::CreationStatus::kOk) {
++    return nullptr;
++  }
++  if (profile_->ShutdownStarted()) {
++    return nullptr;
++  }
++
++  Browser::CreateParams params(Browser::TYPE_NORMAL, profile_, true);
++  params.should_trigger_session_restore = false;
++  Browser* browser = Browser::Create(params);
++  space_service->SetSpaceForBrowser(browser, id_);
++
++  if (browser->tab_strip_model()->empty()) {
++    chrome::AddTabAt(browser, GURL(), -1, true);
++  }
++  browser->window()->Show();
++  return browser;
++}
++
++}  // namespace helium
+Index: src/chrome/browser/ui/helium/helium_space.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/helium/helium_space.h
+@@ -0,0 +1,45 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_H_
++#define CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_H_
++
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++class BrowserWindowInterface;
++class Profile;
++
++namespace helium {
++
++// User-facing browsing context within a Chromium Profile.
++class HeliumSpace {
++ public:
++  HeliumSpace(Profile* profile, std::string id, std::u16string name);
++  HeliumSpace(const HeliumSpace&) = delete;
++  HeliumSpace& operator=(const HeliumSpace&) = delete;
++  ~HeliumSpace();
++
++  Profile* profile() const { return profile_; }
++
++  const std::string& id() const { return id_; }
++  const std::u16string& name() const { return name_; }
++
++  void SetName(std::u16string name);
++
++  // Primary TYPE_NORMAL tabbed window for this Space, if any.
++  BrowserWindowInterface* GetPrimaryBrowser() const;
++
++  // Activate the primary window, or create one when missing.
++  BrowserWindowInterface* ActivateOrCreatePrimaryWindow();
++
++ private:
++  raw_ptr<Profile> profile_;
++  std::string id_;
++  std::u16string name_;
++};
++
++}  // namespace helium
++
++#endif  // CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_H_
+Index: src/chrome/browser/ui/helium/helium_space_service.cc
+===================================================================
+--- src.orig/chrome/browser/ui/helium/helium_space_service.cc
++++ src/chrome/browser/ui/helium/helium_space_service.cc
+@@ -0,0 +1,218 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/helium/helium_space_service.h"
++
++#include "base/strings/utf_string_conversions.h"
++#include "base/uuid.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_service.h"
++#include "chrome/browser/sessions/session_service_factory.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
++
++namespace helium {
++
++HeliumSpaceService::HeliumSpaceService(Profile* profile) : profile_(profile) {
++  auto* browser_collection = ProfileBrowserCollection::GetForProfile(profile_);
++  browser_collection_observation_.Observe(browser_collection);
++  LoadSpaces();
++  EnsureDefaultSpace();
++  // The service can be created while the first BrowserView is being assembled,
++  // after its creation notification. Adopt that window immediately as well as
++  // observing later windows.
++  OnBrowserCreated(browser_collection->FindTabbedBrowser());
++}
++
++HeliumSpaceService::~HeliumSpaceService() = default;
++
++void HeliumSpaceService::LoadSpaces() {
++  constexpr char kIdKey[] = "id";
++  constexpr char kNameKey[] = "name";
++  for (const base::Value& value :
++       profile_->GetPrefs()->GetList(kHeliumSpacesPref)) {
++    const base::DictValue* record = value.GetIfDict();
++    if (!record) {
++      continue;
++    }
++    const std::string* id = record->FindString(kIdKey);
++    const std::string* name = record->FindString(kNameKey);
++    if (!id || id->empty()) {
++      continue;
++    }
++    spaces_.push_back(std::make_unique<HeliumSpace>(
++        profile_, *id, name ? base::UTF8ToUTF16(*name) : u"Space"));
++  }
++}
++
++void HeliumSpaceService::EnsureDefaultSpace() {
++  if (!spaces_.empty()) {
++    if (profile_->GetPrefs()->GetString(kHeliumActiveSpaceIdPref).empty()) {
++      SetActiveSpace(spaces_.front()->id());
++    }
++    return;
++  }
++
++  PrefService* prefs = profile_->GetPrefs();
++  std::string id = prefs->GetString(prefs::kHeliumSpaceId);
++  if (id.empty()) {
++    id = base::Uuid::GenerateRandomV4().AsLowercaseString();
++  }
++  const std::string& legacy_name = prefs->GetString(prefs::kHeliumSpaceName);
++  GetOrCreateSpace(std::move(id), legacy_name.empty()
++                                      ? u"Space"
++                                      : base::UTF8ToUTF16(legacy_name));
++}
++
++HeliumSpace* HeliumSpaceService::GetDefaultSpace() {
++  EnsureDefaultSpace();
++  return spaces_.front().get();
++}
++
++const HeliumSpace* HeliumSpaceService::GetDefaultSpace() const {
++  return spaces_.empty() ? nullptr : spaces_.front().get();
++}
++
++HeliumSpace* HeliumSpaceService::GetActiveSpace() {
++  EnsureDefaultSpace();
++  const std::string& active_id =
++      profile_->GetPrefs()->GetString(kHeliumActiveSpaceIdPref);
++  if (HeliumSpace* active = GetSpaceById(active_id)) {
++    return active;
++  }
++  return spaces_.front().get();
++}
++
++HeliumSpace* HeliumSpaceService::GetSpaceById(std::string_view id) {
++  for (const auto& space : spaces_) {
++    if (space->id() == id) {
++      return space.get();
++    }
++  }
++  return nullptr;
++}
++
++HeliumSpace* HeliumSpaceService::GetOrCreateSpace(std::string id,
++                                                  std::u16string name) {
++  if (HeliumSpace* existing = GetSpaceById(id)) {
++    existing->SetName(std::move(name));
++    return existing;
++  }
++
++  base::DictValue record;
++  record.Set("id", id);
++  record.Set("name", base::UTF16ToUTF8(name.empty() ? u"Space" : name));
++  base::ListValue records =
++      profile_->GetPrefs()->GetList(kHeliumSpacesPref).Clone();
++  records.Append(std::move(record));
++  profile_->GetPrefs()->SetList(kHeliumSpacesPref, std::move(records));
++
++  spaces_.push_back(std::make_unique<HeliumSpace>(
++      profile_, std::move(id), name.empty() ? u"Space" : std::move(name)));
++  if (spaces_.size() == 1u) {
++    SetActiveSpace(spaces_.front()->id());
++  }
++  return spaces_.back().get();
++}
++
++void HeliumSpaceService::SetActiveSpace(std::string_view id) {
++  if (GetSpaceById(id)) {
++    profile_->GetPrefs()->SetString(kHeliumActiveSpaceIdPref, std::string(id));
++  }
++}
++
++void HeliumSpaceService::SetSpaceForBrowser(Browser* browser,
++                                            std::string_view id) {
++  if (!browser || browser->profile() != profile_ ||
++      browser->type() != Browser::TYPE_NORMAL || !GetSpaceById(id)) {
++    return;
++  }
++  const std::string space_id(id);
++  browser_space_ids_[browser] = space_id;
++  if (SessionService* sessions =
++          SessionServiceFactory::GetForProfile(profile_)) {
++    sessions->AddWindowExtraData(browser->session_id(),
++                                 kHeliumSpaceIdWindowExtraDataKey, space_id);
++  }
++}
++
++bool HeliumSpaceService::RestoreSpaceForBrowserFromSession(
++    Browser* browser,
++    const std::map<std::string, std::string>& extra_data) {
++  const auto found = extra_data.find(kHeliumSpaceIdWindowExtraDataKey);
++  if (found == extra_data.end() || !browser || browser->profile() != profile_ ||
++      browser->type() != Browser::TYPE_NORMAL || !GetSpaceById(found->second)) {
++    return false;
++  }
++  SetSpaceForBrowser(browser, found->second);
++  return true;
++}
++
++void HeliumSpaceService::AddSpaceToSessionExtraData(
++    Browser* browser,
++    std::map<std::string, std::string>* extra_data) const {
++  if (!extra_data) {
++    return;
++  }
++  const std::string_view space_id = GetSpaceIdForBrowser(browser);
++  if (space_id.empty()) {
++    extra_data->erase(kHeliumSpaceIdWindowExtraDataKey);
++    return;
++  }
++  extra_data->insert_or_assign(kHeliumSpaceIdWindowExtraDataKey,
++                               std::string(space_id));
++}
++
++std::string_view HeliumSpaceService::GetSpaceIdForBrowser(
++    Browser* browser) const {
++  auto found = browser_space_ids_.find(browser);
++  return found == browser_space_ids_.end() ? std::string_view()
++                                           : std::string_view(found->second);
++}
++
++std::vector<HeliumSpace*> HeliumSpaceService::GetSpaces() {
++  EnsureDefaultSpace();
++  std::vector<HeliumSpace*> result;
++  result.reserve(spaces_.size());
++  for (const auto& space : spaces_) {
++    result.push_back(space.get());
++  }
++  return result;
++}
++
++void HeliumSpaceService::OnBrowserCreated(BrowserWindowInterface* window) {
++  Browser* browser = window ? window->GetBrowserForMigrationOnly() : nullptr;
++  if (!browser || browser->profile() != profile_ ||
++      browser->type() != Browser::TYPE_NORMAL ||
++      !GetSpaceIdForBrowser(browser).empty()) {
++    return;
++  }
++  if (HeliumSpace* active_space = GetActiveSpace()) {
++    SetSpaceForBrowser(browser, active_space->id());
++  }
++}
++
++void HeliumSpaceService::OnBrowserActivated(BrowserWindowInterface* window) {
++  OnBrowserCreated(window);
++  Browser* browser = window ? window->GetBrowserForMigrationOnly() : nullptr;
++  if (!browser || browser->profile() != profile_ ||
++      browser->type() != Browser::TYPE_NORMAL) {
++    return;
++  }
++  const std::string_view space_id = GetSpaceIdForBrowser(browser);
++  if (!space_id.empty()) {
++    SetActiveSpace(space_id);
++  }
++}
++
++void HeliumSpaceService::OnBrowserClosed(BrowserWindowInterface* window) {
++  if (Browser* browser = window->GetBrowserForMigrationOnly()) {
++    browser_space_ids_.erase(browser);
++  }
++}
++
++}  // namespace helium
+Index: src/chrome/browser/ui/helium/helium_space_service.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/helium/helium_space_service.h
+@@ -0,0 +1,78 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_SERVICE_H_
++#define CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_SERVICE_H_
++
++#include <map>
++#include <memory>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/ui/browser_window/public/browser_collection_observer.h"
++#include "components/keyed_service/core/keyed_service.h"
++
++class Profile;
++class Browser;
++class BrowserWindowInterface;
++class ProfileBrowserCollection;
++
++namespace helium {
++
++inline constexpr char kHeliumSpacesPref[] = "helium.spaces";
++inline constexpr char kHeliumActiveSpaceIdPref[] = "helium.active_space_id";
++inline constexpr char kHeliumSpaceIdWindowExtraDataKey[] = "helium_space_id";
++
++class HeliumSpace;
++
++// Profile-scoped owner of ordered Helium Spaces. Profile identity stays an
++// implementation detail; Spaces are the user-facing browsing contexts.
++class HeliumSpaceService : public KeyedService,
++                           public BrowserCollectionObserver {
++ public:
++  explicit HeliumSpaceService(Profile* profile);
++  HeliumSpaceService(const HeliumSpaceService&) = delete;
++  HeliumSpaceService& operator=(const HeliumSpaceService&) = delete;
++  ~HeliumSpaceService() override;
++
++  // Always non-null after construction.
++  HeliumSpace* GetDefaultSpace();
++  const HeliumSpace* GetDefaultSpace() const;
++  HeliumSpace* GetActiveSpace();
++  HeliumSpace* GetSpaceById(std::string_view id);
++  HeliumSpace* GetOrCreateSpace(std::string id, std::u16string name);
++  void SetActiveSpace(std::string_view id);
++  void SetSpaceForBrowser(Browser* browser, std::string_view id);
++  bool RestoreSpaceForBrowserFromSession(
++      Browser* browser,
++      const std::map<std::string, std::string>& extra_data);
++  void AddSpaceToSessionExtraData(
++      Browser* browser,
++      std::map<std::string, std::string>* extra_data) const;
++  std::string_view GetSpaceIdForBrowser(Browser* browser) const;
++
++  std::vector<HeliumSpace*> GetSpaces();
++
++  // BrowserCollectionObserver:
++  void OnBrowserCreated(BrowserWindowInterface* browser) override;
++  void OnBrowserActivated(BrowserWindowInterface* browser) override;
++  void OnBrowserClosed(BrowserWindowInterface* browser) override;
++
++ private:
++  void LoadSpaces();
++  void EnsureDefaultSpace();
++
++  raw_ptr<Profile> profile_;
++  std::vector<std::unique_ptr<HeliumSpace>> spaces_;
++  std::map<Browser*, std::string> browser_space_ids_;
++  base::ScopedObservation<ProfileBrowserCollection, BrowserCollectionObserver>
++      browser_collection_observation_{this};
++};
++
++}  // namespace helium
++
++#endif  // CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_SERVICE_H_
+Index: src/chrome/browser/ui/helium/helium_space_service_factory.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/helium/helium_space_service_factory.cc
+@@ -0,0 +1,60 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++
++#include "base/no_destructor.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/common/pref_names.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++
++namespace helium {
++
++// static
++HeliumSpaceService* HeliumSpaceServiceFactory::GetForProfile(Profile* profile) {
++  return static_cast<HeliumSpaceService*>(
++      GetInstance()->GetServiceForBrowserContext(profile, true));
++}
++
++// static
++HeliumSpaceServiceFactory* HeliumSpaceServiceFactory::GetInstance() {
++  static base::NoDestructor<HeliumSpaceServiceFactory> instance;
++  return instance.get();
++}
++
++HeliumSpaceServiceFactory::HeliumSpaceServiceFactory()
++    : ProfileKeyedServiceFactory(
++          "HeliumSpaceService",
++          ProfileSelections::Builder()
++              .WithRegular(ProfileSelection::kOriginalOnly)
++              .WithGuest(ProfileSelection::kOriginalOnly)
++              .WithAshInternals(ProfileSelection::kOriginalOnly)
++              .Build()) {}
++
++HeliumSpaceServiceFactory::~HeliumSpaceServiceFactory() = default;
++
++std::unique_ptr<KeyedService>
++HeliumSpaceServiceFactory::BuildServiceInstanceForBrowserContext(
++    content::BrowserContext* context) const {
++  return std::make_unique<HeliumSpaceService>(static_cast<Profile*>(context));
++}
++
++bool HeliumSpaceServiceFactory::ServiceIsCreatedWithBrowserContext() const {
++  return true;
++}
++
++bool HeliumSpaceServiceFactory::ServiceIsNULLWhileTesting() const {
++  return true;
++}
++
++void HeliumSpaceServiceFactory::RegisterProfilePrefs(
++    user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(prefs::kHeliumSpaceId, std::string());
++  registry->RegisterStringPref(prefs::kHeliumSpaceName, std::string());
++  registry->RegisterListPref(kHeliumSpacesPref);
++  registry->RegisterStringPref(kHeliumActiveSpaceIdPref, std::string());
++}
++
++}  // namespace helium
+Index: src/chrome/browser/ui/helium/helium_space_service_factory.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/helium/helium_space_service_factory.h
+@@ -0,0 +1,49 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_SERVICE_FACTORY_H_
++#define CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_SERVICE_FACTORY_H_
++
++#include "chrome/browser/profiles/profile_keyed_service_factory.h"
++
++namespace base {
++template <typename T>
++class NoDestructor;
++}  // namespace base
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace helium {
++
++class HeliumSpaceService;
++
++class HeliumSpaceServiceFactory : public ProfileKeyedServiceFactory {
++ public:
++  static HeliumSpaceService* GetForProfile(Profile* profile);
++  static HeliumSpaceServiceFactory* GetInstance();
++
++  HeliumSpaceServiceFactory(const HeliumSpaceServiceFactory&) = delete;
++  HeliumSpaceServiceFactory& operator=(const HeliumSpaceServiceFactory&) =
++      delete;
++
++ private:
++  friend base::NoDestructor<HeliumSpaceServiceFactory>;
++
++  HeliumSpaceServiceFactory();
++  ~HeliumSpaceServiceFactory() override;
++
++  // BrowserContextKeyedServiceFactory:
++  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
++      content::BrowserContext* context) const override;
++  bool ServiceIsCreatedWithBrowserContext() const override;
++  bool ServiceIsNULLWhileTesting() const override;
++  void RegisterProfilePrefs(
++      user_prefs::PrefRegistrySyncable* registry) override;
++};
++
++}  // namespace helium
++
++#endif  // CHROME_BROWSER_UI_HELIUM_HELIUM_SPACE_SERVICE_FACTORY_H_
+Index: src/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ src/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -50,7 +51,9 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
++#include "chrome/browser/ui/views/tabs/new_tab_button.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
++#include "chrome/browser/ui/views/tabs/vertical/vertical_new_tab_button.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/tabs/public/tab_group.h"
+@@ -68,6 +71,7 @@
+ #include "ui/views/background.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/focus_ring.h"
++#include "ui/views/controls/menu/menu_runner.h"
+ #include "ui/views/controls/resize_area.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/separator.h"
+@@ -88,6 +92,17 @@ constexpr int kSnapDistance = 15;
+ constexpr int kBottomContainerGap = 2;
+ constexpr int kDefaultWidthSnapDistance = 6;
+ 
++gfx::Size GetTopAnchoredTabStripSize(const views::View* view,
++                                     const views::SizeBounds& size_bounds) {
++  gfx::Size preferred_size = view->GetPreferredSize(views::SizeBounds(
++      size_bounds.width(), views::SizeBound()));
++  if (size_bounds.height().is_bounded()) {
++    preferred_size.set_height(
++        std::min(preferred_size.height(), size_bounds.height().value()));
++  }
++  return preferred_size;
++}
++
+ // Shadow is used in expand-on-hover mode. Shadow radius and opacity are dynamic
+ // and set by the layout.
+ constexpr int kExpandOnHoverShadowElevation = 4;
+@@ -127,16 +142,36 @@ VerticalTabStripRegionView::VerticalTabS
+                                    views::MinimumFlexSizeRule::kPreferred,
+                                    views::MaximumFlexSizeRule::kPreferred));
+ 
++  auto new_tab_button =
++      std::make_unique<VerticalNewTabButton>(browser_view->browser());
++  new_tab_button->set_context_menu_controller(this);
++  new_tab_button_pressed_subscription_ =
++      new_tab_button->RegisterWillInvokeActionCallback(base::BindRepeating(
++          &VerticalTabStripRegionView::RecordNewTabButtonPressed,
++          base::Unretained(this)));
++  new_tab_button_ = AddChildView(std::move(new_tab_button));
++  new_tab_button_->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
++                        kBottomContainerGap, region_horizontal_padding));
++
++  tab_area_spacer_ = AddChildView(std::make_unique<views::View>());
++  tab_area_spacer_->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(
++          views::LayoutOrientation::kVertical,
++          views::MinimumFlexSizeRule::kPreferred,
++          views::MaximumFlexSizeRule::kUnbounded)
++          .WithWeight(1));
++
+   bottom_button_container_ =
+       AddChildView(std::make_unique<VerticalTabStripBottomContainer>(
+-          state_controller_, root_action_item, browser_view->browser(),
+-          base::BindRepeating(
+-              &VerticalTabStripRegionView::RecordNewTabButtonPressed,
+-              base::Unretained(this))));
++          state_controller_, browser_view->browser()));
+   bottom_button_container_->SetProperty(
+       views::kFlexBehaviorKey,
+-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+-                               views::MaximumFlexSizeRule::kUnbounded));
++      views::FlexSpecification(views::LayoutOrientation::kVertical,
++                               views::MinimumFlexSizeRule::kPreferred,
++                               views::MaximumFlexSizeRule::kPreferred));
+   bottom_button_container_->SetProperty(
+       views::kMarginsKey,
+       gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
+@@ -666,6 +701,42 @@ void VerticalTabStripRegionView::OnResiz
+   }
+ }
+ 
++void VerticalTabStripRegionView::ShowContextMenuForViewImpl(
++    views::View* source,
++    const gfx::Point& point,
++    ui::mojom::MenuSourceType source_type) {
++  if (!features::IsTabGroupMenuMoreEntryPointsEnabled()) {
++    return;
++  }
++
++  context_menu_model_ =
++      std::make_unique<NewTabButtonMenuModel>(browser_view_->browser());
++  new_tab_context_menu_hover_lock_ = GetExpandOnHoverLock(
++      ExpandOnHoverLockType::kKeepCurrentState);
++
++  constexpr int32_t kMenuRunnerFlags =
++      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU;
++  context_menu_runner_ = std::make_unique<views::MenuRunner>(
++      context_menu_model_.get(), kMenuRunnerFlags,
++      base::BindRepeating(
++          &VerticalTabStripRegionView::OnNewTabButtonContextMenuClosed,
++          base::Unretained(this)));
++  context_menu_runner_->RunMenuAt(
++      source->GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
++      views::MenuAnchorPosition::kTopLeft, source_type);
++}
++
++void VerticalTabStripRegionView::OnNewTabButtonContextMenuClosed() {
++  new_tab_context_menu_hover_lock_.reset();
++}
++
++void VerticalTabStripRegionView::OnTabCollectionChanged() {
++  // The tab strip uses content-sized flex behavior so that short tab lists
++  // stay at the top. Its nested scroll views do not propagate preferred-size
++  // changes, so explicitly remeasure the region as tabs are restored or moved.
++  InvalidateLayout();
++}
++
+ void VerticalTabStripRegionView::SetCollapsedStateUpdatedCallback(
+     base::RepeatingCallback<void(bool)> callback) {
+   update_state_controller_collapsed_callback_ = std::move(callback);
+@@ -729,8 +800,8 @@ views::View* VerticalTabStripRegionView:
+   tab_strip_view_ = static_cast<TabStripView*>(AddChildView(std::move(view)));
+   tab_strip_view_->SetProperty(
+       views::kFlexBehaviorKey,
+-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
+-                               views::MaximumFlexSizeRule::kPreferred));
++      views::FlexSpecification(
++          base::BindRepeating(&GetTopAnchoredTabStripSize)));
+   tab_strip_view_->SetProperty(views::kMarginsKey,
+                                gfx::Insets::TLBR(0, 0, kBottomContainerGap, 0));
+ 
+@@ -738,6 +809,20 @@ views::View* VerticalTabStripRegionView:
+       root_node_->RegisterOnActiveTabChangedCallback(
+           base::BindRepeating(&VerticalTabStripRegionView::OnActiveTabChanged,
+                               base::Unretained(this)));
++  tab_children_added_subscription_ =
++      root_node_->RegisterOnChildrenAddedCallback(base::BindRepeating(
++          &VerticalTabStripRegionView::OnTabCollectionChanged,
++          base::Unretained(this)));
++  tab_child_removed_subscription_ =
++      root_node_->RegisterOnChildRemovedCallback(base::BindRepeating(
++          &VerticalTabStripRegionView::OnTabCollectionChanged,
++          base::Unretained(this)));
++  tab_child_moved_subscription_ = root_node_->RegisterOnChildMovedCallback(
++      base::BindRepeating(
++          [](VerticalTabStripRegionView* region, TabCollectionNode*) {
++            region->OnTabCollectionChanged();
++          },
++          base::Unretained(this)));
+ 
+   // Pre-set the animation values to the appropriate state.
+   auto* const animation_controller =
+@@ -758,10 +843,9 @@ views::View* VerticalTabStripRegionView:
+               &VerticalTabStripRegionView::OnExpandOnHoverEnabledChanged,
+               base::Unretained(this)));
+ 
+-  std::optional<size_t> bottom_container_index =
+-      GetIndexOf(bottom_button_container_);
+-  CHECK(bottom_container_index.has_value());
+-  ReorderChildView(tab_strip_view_, bottom_container_index.value());
++  std::optional<size_t> new_tab_button_index = GetIndexOf(new_tab_button_);
++  CHECK(new_tab_button_index.has_value());
++  ReorderChildView(tab_strip_view_, new_tab_button_index.value());
+ 
+   OnCollapseStateChanged(state_controller_->GetCollapseState());
+ 
+@@ -771,6 +855,9 @@ views::View* VerticalTabStripRegionView:
+ void VerticalTabStripRegionView::ClearTabStripView(views::View* view) {
+   on_animation_update_subscription_.reset();
+   on_active_tab_changed_subscription_.reset();
++  tab_children_added_subscription_ = {};
++  tab_child_removed_subscription_ = {};
++  tab_child_moved_subscription_ = {};
+   expand_on_hover_enabled_changed_subscription_.reset();
+   omnibox_tab_helper_observation_.Reset();
+ 
+Index: src/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ src/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_VERTICAL_TAB_STRIP_REGION_VIEW_H_
+ #define CHROME_BROWSER_UI_VIEWS_FRAME_VERTICAL_TAB_STRIP_REGION_VIEW_H_
+ 
++#include <memory>
+ #include <optional>
+ 
+ #include "base/callback_list.h"
+@@ -27,12 +28,16 @@
+ #include "ui/base/interaction/element_tracker.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/events/event_handler.h"
++#include "ui/views/context_menu_controller.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/views/accessible_pane_view.h"
+ #include "ui/views/controls/resize_area_delegate.h"
+ #include "ui/views/focus/focus_manager.h"
+ 
+ class BrowserView;
++class ExpandOnHoverLock;
++class NewTabButtonMenuModel;
++class VerticalNewTabButton;
+ class VerticalTabStripBottomContainer;
+ class ShadowFrameView;
+ 
+@@ -41,6 +46,7 @@ class VerticalTabStripStateController;
+ }  // namespace tabs
+ 
+ namespace views {
++class MenuRunner;
+ class ResizeArea;
+ class Separator;
+ class View;
+@@ -54,6 +60,7 @@ class VerticalTabStripRegionView final
+       public views::ResizeAreaDelegate,
+       public OmniboxTabHelper::Observer,
+       public tabs::VerticalTabStripStateController::Delegate,
++      public views::ContextMenuController,
+       public views::WidgetObserver {
+   METADATA_HEADER(VerticalTabStripRegionView, BaseTabStripRegionView)
+ 
+@@ -121,6 +128,12 @@ class VerticalTabStripRegionView final
+   // views::ResizeAreaDelegate:
+   void OnResize(int resize_amount, bool done_resizing) override;
+ 
++  // views::ContextMenuController:
++  void ShowContextMenuForViewImpl(
++      views::View* source,
++      const gfx::Point& point,
++      ui::mojom::MenuSourceType source_type) override;
++
+   // tabs::VerticalTabStripStateController::Delegate
+   void SetCollapsedStateUpdatedCallback(
+       base::RepeatingCallback<void(bool)> callback) override;
+@@ -229,12 +242,16 @@ class VerticalTabStripRegionView final
+   void OnOmniboxPopupVisibilityChanged(bool is_open) override;
+ 
+   void OnActiveTabChanged(const tabs::TabInterface* active_tab);
++  void OnTabCollectionChanged();
++  void OnNewTabButtonContextMenuClosed();
+ 
+   // Whether a leading exclusion exists due to window controls.
+   bool has_leading_exclusion_ = false;
+   bool zen_mode_floating_style_ = false;
+ 
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
++  raw_ptr<VerticalNewTabButton> new_tab_button_ = nullptr;
++  raw_ptr<views::View> tab_area_spacer_ = nullptr;
+   raw_ptr<views::View> gemini_button_ = nullptr;
+   raw_ptr<views::ResizeArea> resize_area_ = nullptr;
+   raw_ptr<ShadowFrameView> shadow_frame_ = nullptr;
+@@ -263,6 +280,10 @@ class VerticalTabStripRegionView final
+   tabs::VerticalTabStripState target_collapse_state_;
+ 
+   base::CallbackListSubscription collapsed_state_changed_subscription_;
++  base::CallbackListSubscription new_tab_button_pressed_subscription_;
++  base::CallbackListSubscription tab_children_added_subscription_;
++  base::CallbackListSubscription tab_child_removed_subscription_;
++  base::CallbackListSubscription tab_child_moved_subscription_;
+   base::RepeatingCallback<void(bool)>
+       update_state_controller_collapsed_callback_;
+ 
+@@ -274,6 +295,10 @@ class VerticalTabStripRegionView final
+   std::optional<base::TimeTicks> time_at_expand_on_hover_timer_start_;
+   int expand_on_hover_heuristic_samples_ = 0;
+ 
++  std::unique_ptr<NewTabButtonMenuModel> context_menu_model_;
++  std::unique_ptr<views::MenuRunner> context_menu_runner_;
++  std::unique_ptr<ExpandOnHoverLock> new_tab_context_menu_hover_lock_;
++
+   // Given that both lock counters are non-zero, force_collapse_lock_count_ will
+   // always take precedence.
+   int force_collapse_lock_count_ = 0;
+Index: src/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
++++ src/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+@@ -4,36 +4,39 @@
+ 
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ 
++#include "base/functional/bind.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+-#include "chrome/browser/ui/ui_features.h"
+-#include "chrome/browser/ui/views/frame/browser_view.h"
+-#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+-#include "chrome/browser/ui/views/tabs/new_tab_button.h"
+-#include "chrome/browser/ui/views/tabs/vertical/vertical_new_tab_button.h"
+-#include "ui/actions/actions.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+-#include "ui/views/controls/menu/menu_runner.h"
+-#include "ui/views/view_class_properties.h"
++#include "ui/views/controls/button/label_button.h"
+ 
+ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+     tabs::VerticalTabStripStateController* state_controller,
+-    actions::ActionItem*,
+-    BrowserWindowInterface* browser,
+-    base::RepeatingClosure record_new_tab_button_pressed)
+-    : browser_(browser) {
++    BrowserWindowInterface* browser)
++    : state_controller_(state_controller), browser_(browser) {
+   SetProperty(views::kElementIdentifierKey,
+               kVerticalTabStripBottomContainerElementId);
+ 
+-  auto new_tab_button = std::make_unique<VerticalNewTabButton>(browser_);
+-  new_tab_button->set_context_menu_controller(this);
+-
+-  new_tab_button_pressed_subscription_ =
+-      new_tab_button->RegisterWillInvokeActionCallback(
+-          record_new_tab_button_pressed);
+-
+-  new_tab_button_ = AddChildView(std::move(new_tab_button));
++  spaces_list_ = AddChildView(std::make_unique<views::FlexLayoutView>());
++  spaces_list_->SetOrientation(views::LayoutOrientation::kVertical);
++  spaces_list_->SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
++  spaces_list_->SetVisible(false);
++
++  spaces_disclosure_button_ = AddChildView(
++      std::make_unique<views::LabelButton>(
++          base::BindRepeating(
++              &VerticalTabStripBottomContainer::ToggleSpacesList,
++              base::Unretained(this)),
++          u"Spaces"));
++  spaces_disclosure_button_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  spaces_disclosure_button_->SetTooltipText(
++      u"Show Spaces. Each Space opens in its own window.");
+ 
+   OnCollapseStateChanged(state_controller->GetCollapseState());
+   collapsed_state_change_subscription_ =
+@@ -44,7 +47,6 @@ VerticalTabStripBottomContainer::Vertica
+ 
+ VerticalTabStripBottomContainer::~VerticalTabStripBottomContainer() = default;
+ 
+-
+ bool VerticalTabStripBottomContainer::IsPositionInWindowCaption(
+     const gfx::Point& point) {
+   for (views::View* child : children()) {
+@@ -64,64 +66,77 @@ void VerticalTabStripBottomContainer::On
+     tabs::VerticalTabStripCollapseState state) {
+   // Updating the styles immediately at start of the animation by including
+   // collapsing state.
+-  UpdateButtonStyles(state != tabs::VerticalTabStripCollapseState::kExpanded);
++  tab_strip_collapsed_ =
++      state != tabs::VerticalTabStripCollapseState::kExpanded;
++  UpdateButtonStyles(tab_strip_collapsed_);
+ }
+ 
+-void VerticalTabStripBottomContainer::ShowContextMenuForViewImpl(
+-    View* source,
+-    const gfx::Point& point,
+-    ui::mojom::MenuSourceType source_type) {
+-  if (features::IsTabGroupMenuMoreEntryPointsEnabled()) {
+-    context_menu_model_ = std::make_unique<NewTabButtonMenuModel>(browser_);
+-
+-    int32_t menu_runner_flags =
+-        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU;
+-
+-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+-    CHECK(browser_view);
+-    CHECK(browser_view->tab_strip_view());
+-    expand_on_hover_lock_ =
+-        browser_view->tab_strip_view()->GetExpandOnHoverLock(
+-            ExpandOnHoverLockType::kKeepCurrentState);
+-
+-    // `base::Unretained(this)` is safe because `context_menu_runner_` is owned
+-    // by `this`, ensuring the callback cannot outlive `this`.
+-    auto on_menu_closed = base::BindRepeating(
+-        &VerticalTabStripBottomContainer::OnNewTabButtonContextMenuClosed,
+-        base::Unretained(this));
+-
+-    context_menu_runner_ = std::make_unique<views::MenuRunner>(
+-        context_menu_model_.get(), menu_runner_flags,
+-        std::move(on_menu_closed));
++void VerticalTabStripBottomContainer::ToggleSpacesList() {
++  if (tab_strip_collapsed_) {
++    state_controller_->RequestCollapse(false);
++    spaces_expanded_ = true;
++    RebuildSpacesList();
++    spaces_list_->SetVisible(true);
++    InvalidateLayout();
++    return;
++  }
++  spaces_expanded_ = !spaces_expanded_;
++  if (spaces_expanded_) {
++    RebuildSpacesList();
++  }
++  spaces_list_->SetVisible(spaces_expanded_);
++  spaces_disclosure_button_->SetText(spaces_expanded_ ? u"Hide Spaces"
++                                                      : u"Spaces");
++  InvalidateLayout();
++}
+ 
+-    context_menu_runner_->RunMenuAt(
+-        source->GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
+-        views::MenuAnchorPosition::kTopLeft, source_type);
++void VerticalTabStripBottomContainer::RebuildSpacesList() {
++  spaces_list_->RemoveAllChildViews();
++  auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(
++      browser_->GetProfile());
++  if (!service) {
++    return;
++  }
++  for (helium::HeliumSpace* space : service->GetSpaces()) {
++    auto row = std::make_unique<views::LabelButton>(
++        base::BindRepeating(&VerticalTabStripBottomContainer::ActivateSpace,
++                            base::Unretained(this), space->id()),
++        space->name());
++    row->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    row->SetTooltipText(u"Open this Space window");
++    spaces_list_->AddChildView(std::move(row));
+   }
+ }
+ 
+-void VerticalTabStripBottomContainer::OnNewTabButtonContextMenuClosed() {
+-  expand_on_hover_lock_.reset();
++void VerticalTabStripBottomContainer::ActivateSpace(std::string space_id) {
++  auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(
++      browser_->GetProfile());
++  if (!service) {
++    return;
++  }
++  if (helium::HeliumSpace* space = service->GetSpaceById(space_id)) {
++    service->SetActiveSpace(space_id);
++    space->ActivateOrCreatePrimaryWindow();
++  }
+ }
+ 
+ void VerticalTabStripBottomContainer::UpdateButtonStyles(bool collapsed) {
+-  auto orientation = collapsed ? views::LayoutOrientation::kVertical
+-                               : views::LayoutOrientation::kHorizontal;
+-
+-  // Setting button's layout based on collapsed state
+-  SetOrientation(orientation);
+-  SetCrossAxisAlignment(collapsed ? views::LayoutAlignment::kStretch
+-                                  : views::LayoutAlignment::kStart);
+-
+-  new_tab_button_->SetProperty(
+-      views::kFlexBehaviorKey,
+-      views::FlexSpecification(
+-          orientation,
+-          collapsed ? views::MinimumFlexSizeRule::kPreferred
+-                    : views::MinimumFlexSizeRule::kScaleToMinimum,
+-          collapsed ? views::MaximumFlexSizeRule::kPreferred
+-                    : views::MaximumFlexSizeRule::kUnbounded,
+-          false, views::MinimumFlexSizeRule::kPreferred));
++  // This stack contains only the bottom-anchored Space selector. Tab content
++  // and the New Tab control remain together at the top of the sidebar.
++  SetOrientation(views::LayoutOrientation::kVertical);
++  SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
++
++  if (spaces_disclosure_button_) {
++    spaces_disclosure_button_->SetVisible(true);
++    spaces_disclosure_button_->SetHorizontalAlignment(
++        collapsed ? gfx::ALIGN_CENTER : gfx::ALIGN_LEFT);
++    if (collapsed && spaces_expanded_) {
++      spaces_expanded_ = false;
++      spaces_list_->SetVisible(false);
++    }
++    spaces_disclosure_button_->SetText(
++        collapsed ? u"S" : (spaces_expanded_ ? u"Hide Spaces" : u"Spaces"));
++  }
+ }
+ 
+ BEGIN_METADATA(VerticalTabStripBottomContainer)
+Index: src/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
++++ src/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+@@ -5,14 +5,11 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_BOTTOM_CONTAINER_H_
+ #define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_BOTTOM_CONTAINER_H_
+ 
+-#include "ui/views/context_menu_controller.h"
++#include <string>
++
+ #include "ui/views/layout/flex_layout_view.h"
+ 
+ class BrowserWindowInterface;
+-class ExpandOnHoverLock;
+-class NewTabButtonMenuModel;
+-class VerticalNewTabButton;
+-
+ namespace actions {
+ class ActionItem;
+ }  // namespace actions
+@@ -23,44 +20,37 @@ enum class VerticalTabStripCollapseState
+ }  // namespace tabs
+ 
+ namespace views {
+-class MenuRunner;
++class LabelButton;
++class View;
+ }  // namespace views
+ 
+-// Bottom container of the vertical tab strip which includes the new tab button.
+-class VerticalTabStripBottomContainer : public views::FlexLayoutView,
+-                                        public views::ContextMenuController {
++// Bottom-anchored Space selector for the vertical tab strip.
++class VerticalTabStripBottomContainer : public views::FlexLayoutView {
+   METADATA_HEADER(VerticalTabStripBottomContainer, views::FlexLayoutView)
+  public:
+   VerticalTabStripBottomContainer(
+       tabs::VerticalTabStripStateController* state_controller,
+-      actions::ActionItem* root_action_item,
+-      BrowserWindowInterface* browser,
+-      base::RepeatingClosure record_new_tab_button_pressed);
++      BrowserWindowInterface* browser);
+   ~VerticalTabStripBottomContainer() override;
+ 
+   bool IsPositionInWindowCaption(const gfx::Point& point);
+ 
+   void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
+ 
+-  // views::ContextMenuController:
+-  void ShowContextMenuForViewImpl(
+-      View* source,
+-      const gfx::Point& point,
+-      ui::mojom::MenuSourceType source_type) override;
+-
+  private:
+-  void OnNewTabButtonContextMenuClosed();
++  void ToggleSpacesList();
++  void RebuildSpacesList();
++  void ActivateSpace(std::string space_id);
+ 
+   void UpdateButtonStyles(bool collapsed);
+ 
++  raw_ptr<tabs::VerticalTabStripStateController> state_controller_ = nullptr;
+   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
+-  raw_ptr<VerticalNewTabButton> new_tab_button_ = nullptr;
++  raw_ptr<views::FlexLayoutView> spaces_list_ = nullptr;
++  raw_ptr<views::LabelButton> spaces_disclosure_button_ = nullptr;
++  bool spaces_expanded_ = false;
++  bool tab_strip_collapsed_ = false;
+   base::CallbackListSubscription collapsed_state_change_subscription_;
+-  base::CallbackListSubscription new_tab_button_pressed_subscription_;
+-
+-  std::unique_ptr<NewTabButtonMenuModel> context_menu_model_;
+-  std::unique_ptr<views::MenuRunner> context_menu_runner_;
+-  std::unique_ptr<ExpandOnHoverLock> expand_on_hover_lock_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_BOTTOM_CONTAINER_H_
+Index: src/chrome/common/pref_names.h
+===================================================================
+--- src.orig/chrome/common/pref_names.h
++++ src/chrome/common/pref_names.h
+@@ -981,6 +981,9 @@
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ inline constexpr char kPinnedTabs[] = "pinned_tabs";
++// Legacy single-Space identity retained for migration into `helium.spaces`.
++inline constexpr char kHeliumSpaceId[] = "helium.space.id";
++inline constexpr char kHeliumSpaceName[] = "helium.space.name";
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+ // Preference to disable 3D APIs (WebGL).
+Index: src/chrome/browser/ui/arcium/tab_provenance.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/arcium/tab_provenance.cc
+@@ -0,0 +1,108 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/arcium/tab_provenance.h"
++
++#include <utility>
++
++#include "base/check.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_service.h"
++#include "chrome/browser/sessions/session_service_factory.h"
++#include "components/sessions/content/session_tab_helper.h"
++#include "content/public/browser/web_contents.h"
++
++namespace arcium {
++
++namespace {
++
++constexpr char kSourceKey[] = "arcium.provenance.source";
++constexpr char kCollectionIdKey[] = "arcium.provenance.collection_id";
++constexpr char kItemIdKey[] = "arcium.provenance.item_id";
++
++}  // namespace
++
++TabProvenance::TabProvenance(content::WebContents* web_contents,
++                             std::string source,
++                             std::string collection_id,
++                             std::string item_id)
++    : content::WebContentsUserData<TabProvenance>(*web_contents),
++      source_(std::move(source)),
++      collection_id_(std::move(collection_id)),
++      item_id_(std::move(item_id)) {
++  CHECK(!source_.empty());
++  CHECK(!collection_id_.empty());
++  CHECK(!item_id_.empty());
++}
++
++TabProvenance::~TabProvenance() = default;
++
++// static
++void TabProvenance::Set(content::WebContents* web_contents,
++                        std::string source,
++                        std::string collection_id,
++                        std::string item_id) {
++  CHECK(web_contents);
++  CreateForWebContents(web_contents, std::move(source),
++                       std::move(collection_id), std::move(item_id));
++  FromWebContents(web_contents)->Persist();
++}
++
++// static
++void TabProvenance::RestoreFromExtraData(
++    content::WebContents* web_contents,
++    const std::map<std::string, std::string>& extra_data) {
++  const auto source = extra_data.find(kSourceKey);
++  const auto collection_id = extra_data.find(kCollectionIdKey);
++  const auto item_id = extra_data.find(kItemIdKey);
++  if (source == extra_data.end() || collection_id == extra_data.end() ||
++      item_id == extra_data.end() || source->second.empty() ||
++      collection_id->second.empty() || item_id->second.empty()) {
++    return;
++  }
++  CreateForWebContents(web_contents, source->second, collection_id->second,
++                       item_id->second);
++}
++
++// static
++void TabProvenance::PopulateExtraData(
++    content::WebContents* web_contents,
++    std::map<std::string, std::string>* extra_data) {
++  CHECK(web_contents);
++  CHECK(extra_data);
++  const auto* provenance = FromWebContents(web_contents);
++  if (!provenance) {
++    return;
++  }
++  extra_data->insert_or_assign(kSourceKey, provenance->source());
++  extra_data->insert_or_assign(kCollectionIdKey, provenance->collection_id());
++  extra_data->insert_or_assign(kItemIdKey, provenance->item_id());
++}
++
++void TabProvenance::Persist() {
++  Profile* profile =
++      Profile::FromBrowserContext(GetWebContents().GetBrowserContext());
++  SessionService* session_service =
++      SessionServiceFactory::GetForProfile(profile);
++  if (!session_service) {
++    return;
++  }
++
++  const SessionID window_id =
++      sessions::SessionTabHelper::IdForWindowContainingTab(&GetWebContents());
++  const SessionID tab_id =
++      sessions::SessionTabHelper::IdForTab(&GetWebContents());
++  if (!window_id.is_valid() || !tab_id.is_valid()) {
++    return;
++  }
++
++  session_service->AddTabExtraData(window_id, tab_id, kSourceKey, source_);
++  session_service->AddTabExtraData(window_id, tab_id, kCollectionIdKey,
++                                   collection_id_);
++  session_service->AddTabExtraData(window_id, tab_id, kItemIdKey, item_id_);
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(TabProvenance);
++
++}  // namespace arcium
+Index: src/chrome/browser/ui/arcium/tab_provenance.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/arcium/tab_provenance.h
+@@ -0,0 +1,59 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_ARCIUM_TAB_PROVENANCE_H_
++#define CHROME_BROWSER_UI_ARCIUM_TAB_PROVENANCE_H_
++
++#include <map>
++#include <string>
++
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace content {
++class WebContents;
++}
++
++namespace arcium {
++
++// Identifies a tab owned by an external data source. Feature patches use this
++// identity to reconcile their own tabs without disturbing user-created tabs.
++class TabProvenance : public content::WebContentsUserData<TabProvenance> {
++ public:
++  TabProvenance(const TabProvenance&) = delete;
++  TabProvenance& operator=(const TabProvenance&) = delete;
++  ~TabProvenance() override;
++
++  static void Set(content::WebContents* web_contents,
++                  std::string source,
++                  std::string collection_id,
++                  std::string item_id);
++  static void RestoreFromExtraData(
++      content::WebContents* web_contents,
++      const std::map<std::string, std::string>& extra_data);
++  static void PopulateExtraData(content::WebContents* web_contents,
++                                std::map<std::string, std::string>* extra_data);
++
++  const std::string& source() const { return source_; }
++  const std::string& collection_id() const { return collection_id_; }
++  const std::string& item_id() const { return item_id_; }
++
++ private:
++  friend class content::WebContentsUserData<TabProvenance>;
++  TabProvenance(content::WebContents* web_contents,
++                std::string source,
++                std::string collection_id,
++                std::string item_id);
++
++  void Persist();
++
++  const std::string source_;
++  const std::string collection_id_;
++  const std::string item_id_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace arcium
++
++#endif  // CHROME_BROWSER_UI_ARCIUM_TAB_PROVENANCE_H_
+Index: src/chrome/browser/ui/browser_tabrestore.cc
+===================================================================
+--- src.orig/chrome/browser/ui/browser_tabrestore.cc
++++ src/chrome/browser/ui/browser_tabrestore.cc
+@@ -17,6 +17,7 @@
+ #include "chrome/browser/sessions/session_service_base.h"
+ #include "chrome/browser/sessions/session_service_lookup.h"
+ #include "chrome/browser/tab_contents/tab_util.h"
++#include "chrome/browser/ui/arcium/tab_provenance.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_activation_tracker.h"
+@@ -88,6 +89,7 @@ std::unique_ptr<WebContents> CreateResto
+   glic::RestoreGlicStateFromExtraData(web_contents.get(), extra_data);
+   send_tab_to_self::SendTabToSelfActivationTracker::RestoreFromExtraData(
+       web_contents.get(), extra_data);
++  arcium::TabProvenance::RestoreFromExtraData(web_contents.get(), extra_data);
+ 
+   std::vector<std::unique_ptr<NavigationEntry>> entries =
+       ContentSerializedNavigationBuilder::ToNavigationEntries(
+Index: src/chrome/browser/ui/arcium/optional_navigation.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/arcium/optional_navigation.cc
+@@ -0,0 +1,31 @@
++// Copyright 2026 The Arcium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/arcium/optional_navigation.h"
++
++#include <utility>
++
++#include "base/no_destructor.h"
++
++namespace arcium {
++namespace {
++
++OptionalNavigationHandler& GetHandler() {
++  static base::NoDestructor<OptionalNavigationHandler> handler;
++  return *handler;
++}
++
++}  // namespace
++
++void SetOptionalNavigationHandler(OptionalNavigationHandler handler) {
++  GetHandler() = std::move(handler);
++}
++
++bool MaybeHandleOptionalNavigation(Profile* profile,
++                                   const content::OpenURLParams& params) {
++  OptionalNavigationHandler& handler = GetHandler();
++  return handler && handler.Run(profile, params);
++}
++
++}  // namespace arcium
+Index: src/chrome/browser/ui/arcium/optional_navigation.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/arcium/optional_navigation.h
+@@ -0,0 +1,27 @@
++// Copyright 2026 The Arcium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_ARCIUM_OPTIONAL_NAVIGATION_H_
++#define CHROME_BROWSER_UI_ARCIUM_OPTIONAL_NAVIGATION_H_
++
++#include "base/functional/callback.h"
++#include "content/public/browser/page_navigator.h"
++
++class Profile;
++
++namespace arcium {
++
++// Optional features can install a handler for navigation that a caller has
++// already decided may leave the normal browser path. An empty handler always
++// falls through to normal Chromium navigation.
++using OptionalNavigationHandler =
++    base::RepeatingCallback<bool(Profile*, const content::OpenURLParams&)>;
++
++void SetOptionalNavigationHandler(OptionalNavigationHandler handler);
++bool MaybeHandleOptionalNavigation(Profile* profile,
++                                   const content::OpenURLParams& params);
++
++}  // namespace arcium
++
++#endif  // CHROME_BROWSER_UI_ARCIUM_OPTIONAL_NAVIGATION_H_
+Index: src/chrome/browser/ui/arcium/optional_navigation_unittest.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/arcium/optional_navigation_unittest.cc
+@@ -0,0 +1,78 @@
++// Copyright 2026 The Arcium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/arcium/optional_navigation.h"
++
++#include "base/functional/bind.h"
++#include "content/public/common/referrer.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "ui/base/page_transition_types.h"
++#include "ui/base/window_open_disposition.h"
++#include "url/gurl.h"
++#include "url/origin.h"
++
++namespace arcium {
++namespace {
++
++class OptionalNavigationTest : public testing::Test {
++ protected:
++  void SetUp() override { SetOptionalNavigationHandler({}); }
++  void TearDown() override { SetOptionalNavigationHandler({}); }
++};
++
++content::OpenURLParams MakeParams(const GURL& url) {
++  return content::OpenURLParams(
++      url,
++      content::Referrer(GURL("https://source.test/page"),
++                        network::mojom::ReferrerPolicy::kStrictOrigin),
++      WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_LINK,
++      /*is_renderer_initiated=*/true,
++      /*started_from_context_menu=*/true);
++}
++
++TEST_F(OptionalNavigationTest, FallsThroughWithoutHandler) {
++  EXPECT_FALSE(MaybeHandleOptionalNavigation(
++      /*profile=*/nullptr, MakeParams(GURL("https://example.test/"))));
++}
++
++TEST_F(OptionalNavigationTest, PreservesNavigationContext) {
++  bool called = false;
++  SetOptionalNavigationHandler(base::BindRepeating(
++      [](bool* called, Profile* profile, const content::OpenURLParams& params) {
++        *called = true;
++        EXPECT_EQ(nullptr, profile);
++        EXPECT_EQ(GURL("https://example.test/peek"), params.url);
++        EXPECT_EQ(GURL("https://source.test/page"), params.referrer.url);
++        EXPECT_EQ(
++            static_cast<int>(network::mojom::ReferrerPolicy::kStrictOrigin),
++            static_cast<int>(params.referrer.policy));
++        EXPECT_TRUE(params.initiator_origin.has_value());
++        if (params.initiator_origin) {
++          EXPECT_EQ(url::Origin::Create(GURL("https://source.test")),
++                    *params.initiator_origin);
++        }
++        EXPECT_TRUE(params.is_renderer_initiated);
++        EXPECT_TRUE(params.started_from_context_menu);
++        EXPECT_TRUE(params.user_gesture);
++        return true;
++      },
++      &called));
++
++  content::OpenURLParams params = MakeParams(GURL("https://example.test/peek"));
++  params.initiator_origin = url::Origin::Create(GURL("https://source.test"));
++  params.user_gesture = true;
++  EXPECT_TRUE(MaybeHandleOptionalNavigation(/*profile=*/nullptr, params));
++  EXPECT_TRUE(called);
++}
++
++TEST_F(OptionalNavigationTest, PreservesFallthroughFromInstalledHandler) {
++  SetOptionalNavigationHandler(base::BindRepeating(
++      [](Profile*, const content::OpenURLParams&) { return false; }));
++
++  EXPECT_FALSE(MaybeHandleOptionalNavigation(
++      /*profile=*/nullptr, MakeParams(GURL("https://example.test/"))));
++}
++
++}  // namespace
++}  // namespace arcium

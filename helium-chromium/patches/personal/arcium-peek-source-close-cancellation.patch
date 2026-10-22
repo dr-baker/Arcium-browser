@@ -1,0 +1,1933 @@
+# Requires arcium-peek and arcium-tab-close-lifecycle.
+# Hold both exact documents until every source-close decision accepts.
+--- a/chrome/browser/ui/unload_controller.cc
++++ b/chrome/browser/ui/unload_controller.cc
+@@ -5,9 +5,13 @@
+ #include "chrome/browser/ui/unload_controller.h"
+ 
+ #include <algorithm>
++#include <memory>
++#include <utility>
+ 
++#include "base/check.h"
+ #include "base/functional/bind.h"
+ #include "base/location.h"
++#include "base/supports_user_data.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "chrome/browser/devtools/devtools_window.h"
+ #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+@@ -28,7 +32,9 @@
+ #include "components/tabs/public/tab_group.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/webapps/common/web_app_id.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_view_host.h"
++#include "content/public/browser/weak_document_ptr.h"
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/buildflags/buildflags.h"
+ 
+@@ -42,6 +48,75 @@
+ #include "chrome/browser/ash/boca/on_task/on_task_locked_controller.h"
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
++namespace {
++
++char kCoordinatedCloseKey;
++
++struct CoordinatedCloseData : base::SupportsUserData::Data {
++  base::WeakPtr<UnloadController::TabCloseCoordinator> coordinator;
++  content::WeakDocumentPtr document;
++  const base::UnguessableToken token = base::UnguessableToken::Create();
++  bool handoff = false;
++};
++
++CoordinatedCloseData* TrackCoordinatedClose(
++    content::WebContents* contents,
++    base::WeakPtr<UnloadController::TabCloseCoordinator> coordinator,
++    bool handoff) {
++  auto data = std::make_unique<CoordinatedCloseData>();
++  data->coordinator = std::move(coordinator);
++  data->document = contents->GetPrimaryMainFrame()->GetWeakDocumentPtr();
++  data->handoff = handoff;
++  auto* result = data.get();
++  contents->SetUserData(&kCoordinatedCloseKey, std::move(data));
++  return result;
++}
++
++CoordinatedCloseData* GetCoordinatedClose(content::WebContents* contents) {
++  if (!contents || contents->IsBeingDestroyed()) {
++    return nullptr;
++  }
++  auto* data = static_cast<CoordinatedCloseData*>(
++      contents->GetUserData(&kCoordinatedCloseKey));
++  if (data && (!data->document.AsRenderFrameHostIfValid() ||
++               data->document.AsRenderFrameHostIfValid() !=
++                   contents->GetPrimaryMainFrame())) {
++    return nullptr;
++  }
++  return data;
++}
++
++bool IsCurrentDocument(base::WeakPtr<content::WebContents> contents,
++                       content::WeakDocumentPtr document) {
++  return contents && !contents->IsBeingDestroyed() &&
++         document.AsRenderFrameHostIfValid() &&
++         document.AsRenderFrameHostIfValid() == contents->GetPrimaryMainFrame();
++}
++
++UnloadController* GetCurrentUnloadController(content::WebContents* contents) {
++  auto* tab = tabs::TabInterface::GetFromContents(contents);
++  auto* browser = tab ? tab->GetBrowserWindowInterface() : nullptr;
++  return browser ? UnloadController::From(browser) : nullptr;
++}
++
++void CancelAbandonedClose(base::WeakPtr<content::WebContents> contents,
++                          content::WeakDocumentPtr document) {
++  if (!IsCurrentDocument(contents, document) ||
++      GetCoordinatedClose(contents.get())) {
++    return;
++  }
++  contents->RemoveUserData(TabCloseTypesData::UserDataKey());
++  contents->SetClosedByUserGesture(false);
++  DevToolsWindow::OnPageCloseCanceled(contents.get());
++  if (IsCurrentDocument(contents, document) &&
++      !GetCoordinatedClose(contents.get())) {
++    performance_manager::execution_context_priority::SetPageIsClosing(
++        contents.get(), /*is_closing=*/false);
++  }
++}
++
++}  // namespace
++
+ DEFINE_USER_DATA(UnloadController);
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -71,6 +146,12 @@ void UnloadController::AddTabUnloadHandl
+   tab_unload_handlers_.push_back(std::move(handler));
+ }
+ 
++void UnloadController::SetTabCloseCoordinator(
++    base::WeakPtr<TabCloseCoordinator> coordinator) {
++  CHECK(!tab_close_coordinator_);
++  tab_close_coordinator_ = std::move(coordinator);
++}
++
+ UnloadController::~UnloadController() {
+   browser_->tab_strip_model()->RemoveObserver(this);
+ }
+@@ -78,13 +159,28 @@ UnloadController::~UnloadController() {
+ bool UnloadController::ShouldRunUnloadListenerBeforeClosing(
+     content::WebContents* web_contents) {
+   return !force_skip_warning_user_on_close_ &&
+-         ShouldRunUnloadEventsHelper(web_contents);
++         ((!is_attempting_to_close_browser_ &&
++           (HasCoordinatedClose(web_contents) ||
++            (tab_close_coordinator_ &&
++             tab_close_coordinator_->ShouldDeferClose(web_contents)))) ||
++          ShouldRunUnloadEventsHelper(web_contents));
+ }
+ 
+ bool UnloadController::RunUnloadListenerBeforeClosing(
+     content::WebContents* web_contents) {
+-  return !force_skip_warning_user_on_close_ &&
+-         RunUnloadEventsHelper(web_contents);
++  if (force_skip_warning_user_on_close_) {
++    return false;
++  }
++  if (!is_attempting_to_close_browser_ && tab_close_coordinator_) {
++    if (auto result = tab_close_coordinator_->DeferClose(web_contents)) {
++      return *result;
++    }
++  }
++  if (!is_attempting_to_close_browser_ &&
++      HandoffCoordinatedClose(web_contents)) {
++    return true;
++  }
++  return RunUnloadEventsHelper(web_contents);
+ }
+ 
+ void UnloadController::BeforeUnloadFired(content::WebContents* web_contents,
+@@ -96,10 +192,63 @@ void UnloadController::BeforeUnloadFired
+     return;
+   }
+ 
++  const auto contents = web_contents->GetWeakPtr();
++  const auto document = web_contents->GetPrimaryMainFrame()->GetWeakDocumentPtr();
++  const auto controller = lifetime_factory_.GetWeakPtr();
++  const auto current_coordinator = tab_close_coordinator_;
++  auto* pending = GetCoordinatedClose(web_contents);
++  const bool coordinated = pending != nullptr;
++  const bool handoff = pending && pending->handoff;
++  const auto coordinator = pending ? pending->coordinator : current_coordinator;
++  if (coordinated) {
++    web_contents->RemoveUserData(&kCoordinatedCloseKey);
++  }
++  if (coordinated && is_attempting_to_close_browser_ &&
++      !force_skip_warning_user_on_close_ &&
++      !tabs_needing_before_unload_fired_.contains(web_contents)) {
++    // A moved reply cannot authorize an unrelated receiving-window close.
++    *proceed_to_fire_unload = false;
++    CancelAbandonedClose(contents, document);
++    if (IsCurrentDocument(contents, document) && coordinator) {
++      coordinator->BeforeUnloadFired(contents.get(), /*proceed=*/false);
++    }
++    return;
++  }
++  if (!is_attempting_to_close_browser_ &&
++      !force_skip_warning_user_on_close_) {
++    if (coordinator && coordinator->BeforeUnloadFired(web_contents, proceed)) {
++      *proceed_to_fire_unload = false;
++      return;
++    }
++    // The virtual call may have destroyed or moved either owner, navigated the
++    // document, or started a newer decision. Do not continue the old close.
++    if (!controller || !IsCurrentDocument(contents, document) ||
++        GetCurrentUnloadController(contents.get()) != controller.get() ||
++        GetCoordinatedClose(contents.get())) {
++      *proceed_to_fire_unload = false;
++      CancelAbandonedClose(contents, document);
++      return;
++    }
++    if (coordinated && !handoff) {
++      // Abandoned pair/window replies remain held after promotion or Cancel.
++      *proceed_to_fire_unload = false;
++      BeforeUnloadFired(web_contents, /*proceed=*/false);
++      if (IsCurrentDocument(contents, document) && coordinator) {
++        coordinator->OnCloseDecisionCancelled(contents.get());
++      }
++      if (IsCurrentDocument(contents, document) && current_coordinator &&
++          current_coordinator.get() != coordinator.get()) {
++        current_coordinator->OnCloseDecisionCancelled(contents.get());
++      }
++      return;
++    }
++  }
+   *proceed_to_fire_unload = BeforeUnloadFired(web_contents, proceed);
+ }
+ 
+ bool UnloadController::CanCloseContents(content::WebContents* contents) {
++  const bool browser_wide_close = is_attempting_to_close_browser_ ||
++                                  force_skip_warning_user_on_close_;
+   // Don't try to close the tab when the whole browser is being closed, since
+   // that avoids the fast shutdown path where we just kill all the renderers.
+   if (is_attempting_to_close_browser_) {
+@@ -121,8 +270,24 @@ bool UnloadController::CanCloseContents(
+   }
+ #endif
+ 
+-  return !is_attempting_to_close_browser_ ||
+-         is_calling_before_unload_handlers();
++  const bool can_close = !is_attempting_to_close_browser_ ||
++                         is_calling_before_unload_handlers();
++  if (can_close && !browser_wide_close && tab_close_coordinator_) {
++    // Pair cancellation can invoke observers that invalidate the caller's
++    // Browser/WebContents or transfer this close to the browser-wide queue.
++    const auto controller = lifetime_factory_.GetWeakPtr();
++    const auto weak_contents = contents->GetWeakPtr();
++    const auto document =
++        contents->GetPrimaryMainFrame()->GetWeakDocumentPtr();
++    auto* const original_host = GetCurrentUnloadController(contents);
++    tab_close_coordinator_->OnUnloadCompleted(contents);
++    return controller && IsCurrentDocument(weak_contents, document) &&
++           original_host == controller.get() &&
++           GetCurrentUnloadController(weak_contents.get()) == original_host &&
++           !controller->is_attempting_to_close_browser() &&
++           !controller->force_skip_warning_user_on_close();
++  }
++  return can_close;
+ }
+ 
+ bool UnloadController::ShouldRunUnloadEventsHelper(
+@@ -144,7 +309,9 @@ bool UnloadController::ShouldRunUnloadEv
+   return should_show_custom_confirmation;
+ }
+ 
+-bool UnloadController::RunUnloadEventsHelper(content::WebContents* contents) {
++bool UnloadController::RunUnloadEventsHelper(
++    content::WebContents* contents,
++    base::OnceCallback<void(bool)> on_custom_confirmation_closed) {
+   // If a tab unload handler indicates that beforeunload handling should be
+   // skipped (for example, because the user already confirmed closing the tab
+   // via a custom task confirmation dialog), return false immediately. This
+@@ -161,12 +328,62 @@ bool UnloadController::RunUnloadEventsHe
+     }
+   }
+ 
++  const auto weak_contents = contents->GetWeakPtr();
++  const auto document = contents->GetPrimaryMainFrame()->GetWeakDocumentPtr();
++  std::optional<base::UnguessableToken> ordinary_pair_token;
++  if (!on_custom_confirmation_closed && tab_close_coordinator_ &&
++      tab_close_coordinator_->ShouldTrackClose(contents)) {
++    // Only a live Peek participant needs an adoptable document-owned reply.
++    // This also covers its ordinary native/DevTools dismissal.
++    auto* pending = TrackCoordinatedClose(
++        contents, tab_close_coordinator_, /*handoff=*/true);
++    ordinary_pair_token = pending->token;
++    on_custom_confirmation_closed = base::BindOnce(
++        &UnloadController::OnCoordinatedCustomConfirmation,
++        weak_contents, document, pending->token);
++  }
++  auto clear_ordinary_pair = [&] {
++    if (ordinary_pair_token && IsCurrentDocument(weak_contents, document)) {
++      auto* pending = GetCoordinatedClose(weak_contents.get());
++      if (pending && pending->token == *ordinary_pair_token) {
++        weak_contents->RemoveUserData(&kCoordinatedCloseKey);
++      }
++    }
++  };
+   if (handler_to_show) {
++    const auto controller = lifetime_factory_.GetWeakPtr();
++    std::optional<base::UnguessableToken> token;
++    std::shared_ptr<bool> replied;
++    if (!on_custom_confirmation_closed) {
++      // Preserve the ordinary binding for tabs outside the live Peek pair.
++      on_custom_confirmation_closed = base::BindOnce(
++          &UnloadController::OnCustomConfirmationClosed,
++          weak_factory_.GetWeakPtr(), contents->GetWeakPtr());
++    } else {
++      if (auto* pending = GetCoordinatedClose(contents)) {
++        token = pending->token;
++      }
++      // A handler can deliver its answer even when Show returns false.
++      replied = std::make_shared<bool>(false);
++      on_custom_confirmation_closed = base::BindOnce(
++          [](std::shared_ptr<bool> replied,
++             base::OnceCallback<void(bool)> callback, bool confirmed) {
++            *replied = true;
++            std::move(callback).Run(confirmed);
++          }, replied, std::move(on_custom_confirmation_closed));
++    }
+     if (handler_to_show->ShowCustomConfirmation(
+-            contents,
+-            base::BindOnce(&UnloadController::OnCustomConfirmationClosed,
+-                           weak_factory_.GetWeakPtr(),
+-                           contents->GetWeakPtr()))) {
++            contents, std::move(on_custom_confirmation_closed)) ||
++        (replied && *replied)) {
++      return true;
++    }
++    // A failed Show may synchronously destroy/move/navigate the tab or destroy
++    // this controller. Returning false would authorize the old model removal.
++    if (!controller || !IsCurrentDocument(weak_contents, document) ||
++        GetCurrentUnloadController(weak_contents.get()) != controller.get()) {
++      if (token) {
++        OnCoordinatedCustomConfirmation(weak_contents, document, *token, false);
++      }
+       return true;
+     }
+   }
+@@ -179,6 +396,7 @@ bool UnloadController::RunUnloadEventsHe
+       !extensions::ExtensionRegistry::Get(browser_->profile())
+            ->enabled_extensions()
+            .GetExtensionOrAppByURL(url)) {
++    clear_ordinary_pair();
+     return false;
+   }
+ #endif  // (ENABLE_EXTENSIONS)
+@@ -188,6 +406,7 @@ bool UnloadController::RunUnloadEventsHe
+   // to the interception of it's content's beforeunload.
+   if (browser_->is_type_devtools() &&
+       DevToolsWindow::HasFiredBeforeUnloadEventForDevToolsBrowser(browser_)) {
++    clear_ordinary_pair();
+     return false;
+   }
+ 
+@@ -217,9 +436,160 @@ bool UnloadController::RunUnloadEventsHe
+     contents->DispatchBeforeUnload(false /* auto_cancel */);
+     return true;
+   }
++  clear_ordinary_pair();
+   return false;
+ }
+ 
++bool UnloadController::RunCoordinatedUnloadEvents(
++    content::WebContents* contents,
++    base::WeakPtr<TabCloseCoordinator> coordinator) {
++  const auto controller = lifetime_factory_.GetWeakPtr();
++  const auto weak_contents = contents->GetWeakPtr();
++  auto* data = TrackCoordinatedClose(contents, std::move(coordinator),
++                                     /*handoff=*/false);
++  const auto document = data->document;
++  const auto token = data->token;
++  const bool deferred = RunUnloadEventsHelper(
++      contents, base::BindOnce(&UnloadController::OnCoordinatedCustomConfirmation,
++                               weak_contents, document, token));
++  if (!deferred && controller && IsCurrentDocument(weak_contents, document) &&
++      GetCurrentUnloadController(weak_contents.get()) == controller.get()) {
++    auto* pending = GetCoordinatedClose(weak_contents.get());
++    if (pending && pending->token == token) {
++      weak_contents->RemoveUserData(&kCoordinatedCloseKey);
++    }
++  }
++  return deferred;
++}
++
++// static
++bool UnloadController::AdoptCoordinatedClose(
++    content::WebContents* contents,
++    base::WeakPtr<TabCloseCoordinator> coordinator) {
++  if (auto* pending = GetCoordinatedClose(contents)) {
++    pending->coordinator = std::move(coordinator);
++    pending->handoff = false;
++    return true;
++  }
++  if (TabCloseTypesData::FromWebContents(contents)) {
++    // Adopt an ordinary native close already waiting on this exact document.
++    TrackCoordinatedClose(contents, std::move(coordinator), /*handoff=*/false);
++    return true;
++  }
++  return false;
++}
++
++// static
++bool UnloadController::HasCoordinatedClose(content::WebContents* contents) {
++  return GetCoordinatedClose(contents) != nullptr;
++}
++
++// static
++bool UnloadController::HandoffCoordinatedClose(content::WebContents* contents) {
++  if (auto* pending = GetCoordinatedClose(contents)) {
++    pending->handoff = true;
++    return true;
++  }
++  return false;
++}
++
++// static
++void UnloadController::OnCoordinatedCustomConfirmation(
++    base::WeakPtr<content::WebContents> contents,
++    content::WeakDocumentPtr document,
++    base::UnguessableToken token,
++    bool confirmed) {
++  // A custom handler may answer synchronously inside the guarded model close.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(
++          [](base::WeakPtr<content::WebContents> contents,
++             content::WeakDocumentPtr document,
++             base::UnguessableToken token, bool confirmed) {
++            if (!IsCurrentDocument(contents, document)) {
++              return;
++            }
++            auto* pending = GetCoordinatedClose(contents.get());
++            if (!pending || pending->token != token) {
++              return;
++            }
++            const auto coordinator = pending->coordinator;
++            auto* unload = GetCurrentUnloadController(contents.get());
++            if (!unload) {
++              contents->RemoveUserData(&kCoordinatedCloseKey);
++              if (coordinator) {
++                coordinator->BeforeUnloadFired(contents.get(), false);
++              }
++              CancelAbandonedClose(contents, document);
++              return;
++            }
++            // Snapshot ownership before Cancel can reset browser-close state.
++            const bool ordinary_handoff = pending->handoff &&
++                !unload->is_attempting_to_close_browser() &&
++                !unload->force_skip_warning_user_on_close();
++            bool proceed_to_unload = false;
++            unload->BeforeUnloadFired(contents.get(), confirmed,
++                                      &proceed_to_unload);
++            if (!ordinary_handoff || !IsCurrentDocument(contents, document) ||
++                GetCoordinatedClose(contents.get())) {
++              return;
++            }
++            // The dispatcher can delete/move the tab or destroy its controller.
++            // Resolve the live host again; never reuse the pre-callback pointer.
++            unload = GetCurrentUnloadController(contents.get());
++            if (!unload || unload->is_attempting_to_close_browser() ||
++                unload->force_skip_warning_user_on_close()) {
++              return;
++            }
++            if (confirmed && proceed_to_unload) {
++              auto* tab = tabs::TabInterface::GetFromContents(contents.get());
++              auto* model = tab->GetBrowserWindowInterface()->GetTabStripModel();
++              const int index = model->GetIndexOfWebContents(contents.get());
++              if (index != TabStripModel::kNoTab) {
++                // The static adapter already runs after the model guard. This
++                // is the final operation on the validated exact document.
++                model->CloseWebContentsAt(
++                    index, TabCloseTypes::CLOSE_USER_GESTURE);
++              }
++            } else if (!confirmed && coordinator) {
++              coordinator->OnCloseDecisionCancelled(contents.get());
++            }
++          }, contents, document, token, confirmed));
++}
++
++void UnloadController::TakeOverCoordinatedCloses() {
++  const auto controller = lifetime_factory_.GetWeakPtr();
++  std::vector<base::WeakPtr<content::WebContents>> pending_contents;
++  for (int i = 0; i < browser_->tab_strip_model()->count(); ++i) {
++    auto* contents = browser_->tab_strip_model()->GetWebContentsAt(i);
++    if (GetCoordinatedClose(contents)) {
++      pending_contents.push_back(contents->GetWeakPtr());
++    }
++  }
++  if (tab_close_coordinator_) {
++    tab_close_coordinator_->OnBrowserCloseStarted();
++  }
++  for (const auto& contents : pending_contents) {
++    if (!controller) {
++      return;
++    }
++    if (!contents ||
++        GetCurrentUnloadController(contents.get()) != controller.get()) {
++      continue;
++    }
++    if (auto* pending = GetCoordinatedClose(contents.get())) {
++      const auto coordinator = pending->coordinator;
++      // Keep the document and token of the visible native/custom confirmation.
++      // Window Cancel leaves its eventual reply held, unless explicitly adopted.
++      pending->coordinator = tab_close_coordinator_;
++      pending->handoff = false;
++      if (coordinator && coordinator.get() != tab_close_coordinator_.get()) {
++        // Retire only the moved participant, not its old owner's unrelated Peek.
++        coordinator->BeforeUnloadFired(contents.get(), /*proceed=*/false);
++      }
++    }
++  }
++}
++
+ bool UnloadController::BeforeUnloadFired(content::WebContents* contents,
+                                          bool proceed) {
+   if (!proceed) {
+@@ -304,9 +674,16 @@ UnloadController::GetBrowserClosingStatu
+   // 3. If a batched shutdown is in progress: start sending unload events and
+   //    return false.
+   // 4. Otherwise: return true.
++  // Include an in-flight coordinated reply even while its native dialog makes
++  // NeedToFireBeforeUnloadOrUnloadEvents report false.
++  tabs_needing_before_unload_fired_ = GetTabsNeedingBeforeUnloadFired();
+   is_attempting_to_close_browser_ = true;
++  const auto controller = lifetime_factory_.GetWeakPtr();
++  TakeOverCoordinatedCloses();
++  if (!controller) {
++    return BrowserWindowInterface::ClosingStatus::kDeniedUnloadHandlersNeedTime;
++  }
+   // Cases 1 and 4.
+-  tabs_needing_before_unload_fired_ = GetTabsNeedingBeforeUnloadFired();
+ 
+   bool need_beforeunload_fired = !tabs_needing_before_unload_fired_.empty();
+   if (need_beforeunload_fired == is_calling_before_unload_handlers()) {
+@@ -339,6 +716,11 @@ bool UnloadController::TryToCloseWindow(
+ 
+   is_attempting_to_close_browser_ = true;
+   on_close_confirmed_ = on_close_confirmed;
++  const auto controller = lifetime_factory_.GetWeakPtr();
++  TakeOverCoordinatedCloses();
++  if (!controller) {
++    return false;
++  }
+ 
+   ProcessPendingTabs(skip_beforeunload);
+   return !skip_beforeunload;
+@@ -366,6 +748,7 @@ UnloadController::GetTabsNeedingBeforeUn
+     content::WebContents* const contents =
+         browser_->tab_strip_model()->GetWebContentsAt(i);
+     const bool should_fire_beforeunload =
++        HasCoordinatedClose(contents) ||
+         contents->NeedToFireBeforeUnloadOrUnloadEvents() ||
+         DevToolsWindow::NeedsToInterceptBeforeUnload(contents);
+     // Note that we filter out tabs in `tabs_needing_unload_fired_` as they have
+@@ -380,6 +763,7 @@ UnloadController::GetTabsNeedingBeforeUn
+ }
+ 
+ void UnloadController::CancelWindowClose() {
++  const bool was_closing_browser = is_attempting_to_close_browser_;
+   // Note that this method may be called if closing was canceled in a number of
+   // different ways, so is_attempting_to_close_browser_ may be false. In that
+   // case some of this code might not have an effect, but it's still useful to,
+@@ -393,6 +777,9 @@ void UnloadController::CancelWindowClose
+     std::move(on_close_confirmed_).Run(false);
+   }
+   is_attempting_to_close_browser_ = false;
++  if (was_closing_browser && tab_close_coordinator_) {
++    tab_close_coordinator_->OnBrowserCloseCancelled();
++  }
+ 
+   chrome::OnClosingAllBrowsers(false);
+ }
+@@ -498,8 +885,19 @@ void UnloadController::ProcessPendingTab
+   // Process beforeunload tabs first. When that queue is empty, process
+   // unload tabs.
+   if (!tabs_needing_before_unload_fired_.empty()) {
++    auto next = std::find_if(tabs_needing_before_unload_fired_.begin(),
++                             tabs_needing_before_unload_fired_.end(),
++                             [](content::WebContents* contents) {
++                               return HasCoordinatedClose(contents);
++                             });
+     content::WebContents* const web_contents =
+-        *(tabs_needing_before_unload_fired_.begin());
++        *(next != tabs_needing_before_unload_fired_.end()
++              ? next : tabs_needing_before_unload_fired_.begin());
++    if (HasCoordinatedClose(web_contents)) {
++      // Its real native/custom prompt owns this reply. The existing callback
++      // advances this queue or cancels the window; do not dispatch a competitor.
++      return;
++    }
+     // Null check render_view_host here as this gets called on a PostTask and
+     // the tab's render_view_host may have been nulled out.
+     if (web_contents->GetPrimaryMainFrame()->GetRenderViewHost()) {
+--- a/chrome/browser/ui/unload_controller.h
++++ b/chrome/browser/ui/unload_controller.h
+@@ -6,12 +6,14 @@
+ #define CHROME_BROWSER_UI_UNLOAD_CONTROLLER_H_
+ 
+ #include <memory>
++#include <optional>
+ #include <set>
+ #include <vector>
+ 
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/unguessable_token.h"
+ #include "chrome/browser/tab_contents/web_contents_collection.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+@@ -22,6 +24,7 @@ class TabStripModel;
+ 
+ namespace content {
+ class WebContents;
++class WeakDocumentPtr;
+ }  // namespace content
+ 
+ class UnloadController : public WebContentsCollection::Observer,
+@@ -54,6 +57,28 @@ class UnloadController : public WebConte
+         base::OnceCallback<void(bool /* confirmed */)> on_closed) = 0;
+   };
+ 
++  // Coordinates a close that requires several live tabs to agree before any
++  // of them unloads. Browser-wide close and forced shutdown retain ownership.
++  class TabCloseCoordinator {
++   public:
++    virtual ~TabCloseCoordinator() = default;
++    // A live participant may already be showing an ordinary close prompt.
++    virtual bool ShouldTrackClose(content::WebContents* contents) const = 0;
++    virtual bool ShouldDeferClose(content::WebContents* contents) const = 0;
++    // nullopt leaves the ordinary unload path in charge; a value is its result.
++    virtual std::optional<bool> DeferClose(content::WebContents* contents) = 0;
++    // True consumes the answer and holds this document's unload.
++    virtual bool BeforeUnloadFired(content::WebContents* contents,
++                                  bool proceed) = 0;
++    // Called at the existing CloseContents boundary after ClosePage completes.
++    virtual void OnUnloadCompleted(content::WebContents* contents) = 0;
++    virtual void OnBrowserCloseStarted() = 0;
++    virtual void OnBrowserCloseCancelled() = 0;
++    virtual void OnCloseDecisionCancelled(content::WebContents* contents) = 0;
++  };
++
++  void SetTabCloseCoordinator(base::WeakPtr<TabCloseCoordinator> coordinator);
++
+   explicit UnloadController(BrowserWindowInterface* browser);
+ 
+   void AddTabUnloadHandler(std::unique_ptr<TabUnloadHandler> handler);
+@@ -82,7 +107,19 @@ class UnloadController : public WebConte
+ 
+   // Helper function to run beforeunload listeners on a WebContents.
+   // Returns true if |contents| beforeunload listeners were invoked.
+-  bool RunUnloadEventsHelper(content::WebContents* contents);
++  bool RunUnloadEventsHelper(
++      content::WebContents* contents,
++      base::OnceCallback<void(bool)> on_custom_confirmation_closed = {});
++
++  // The pending decision follows its document if the tab changes browsers.
++  bool RunCoordinatedUnloadEvents(
++      content::WebContents* contents,
++      base::WeakPtr<TabCloseCoordinator> coordinator);
++  static bool AdoptCoordinatedClose(
++      content::WebContents* contents,
++      base::WeakPtr<TabCloseCoordinator> coordinator);
++  static bool HasCoordinatedClose(content::WebContents* contents);
++  static bool HandoffCoordinatedClose(content::WebContents* contents);
+ 
+   // Called when a BeforeUnload handler is fired for |contents|. |proceed|
+   // indicates the user's response to the Y/N BeforeUnload handler dialog. If
+@@ -137,7 +174,12 @@ class UnloadController : public WebConte
+ 
+   void set_force_skip_warning_user_on_close(
+       bool force_skip_warning_user_on_close) {
++    const bool starting = force_skip_warning_user_on_close &&
++                          !force_skip_warning_user_on_close_;
+     force_skip_warning_user_on_close_ = force_skip_warning_user_on_close;
++    if (starting) {
++      TakeOverCoordinatedCloses();
++    }
+   }
+   bool force_skip_warning_user_on_close() const {
+     return force_skip_warning_user_on_close_;
+@@ -188,6 +230,12 @@ class UnloadController : public WebConte
+   void OnCustomConfirmationClosed(
+       base::WeakPtr<content::WebContents> web_contents,
+       bool confirmed);
++  static void OnCoordinatedCustomConfirmation(
++      base::WeakPtr<content::WebContents> contents,
++      content::WeakDocumentPtr document,
++      base::UnguessableToken token,
++      bool confirmed);
++  void TakeOverCoordinatedCloses();
+ 
+   bool IsUnclosableApp() const;
+ 
+@@ -231,7 +279,11 @@ class UnloadController : public WebConte
+   // Registered handlers that can intercept and confirm tab unload events.
+   std::vector<std::unique_ptr<TabUnloadHandler>> tab_unload_handlers_;
+ 
++  base::WeakPtr<TabCloseCoordinator> tab_close_coordinator_;
+   base::WeakPtrFactory<UnloadController> weak_factory_{this};
++  // ProcessPendingTabs cancels queue tasks through weak_factory_. External
++  // confirmation/coordinator calls need a separate destruction-only guard.
++  base::WeakPtrFactory<UnloadController> lifetime_factory_{this};
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_UNLOAD_CONTROLLER_H_
+--- a/chrome/browser/ui/views/helium/peek_controller.cc
++++ b/chrome/browser/ui/views/helium/peek_controller.cc
+@@ -12,6 +12,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_close_types_data.h"
+ #include "chrome/browser/ui/tabs/tab_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -19,10 +20,13 @@
+ #include "chrome/browser/ui/views/frame/contents_web_view.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/grit/generated_resources.h"
++#include "components/javascript_dialogs/app_modal_dialog_controller.h"
++#include "components/javascript_dialogs/app_modal_dialog_queue.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/tabs/public/temporary_tab.h"
+ #include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -177,10 +181,44 @@ gfx::Rect GetPeekCardBounds(gfx::Rect bo
+                    card_height);
+ }
+ 
++// The controller observes the preview itself. The source needs a separate
++// observer because its native beforeunload prompt temporarily activates it.
++class PeekController::SourceContentsObserver
++    : public content::WebContentsObserver {
++ public:
++  SourceContentsObserver(content::WebContents* source,
++                         base::WeakPtr<PeekController> controller)
++      : content::WebContentsObserver(source), controller_(controller) {}
++
++  void BeforeUnloadFired(bool proceed) override {
++    if (controller_) {
++      controller_->OnSourceBeforeUnloadFired(web_contents()->GetWeakPtr(),
++                                             proceed);
++    }
++  }
++
++  void PrimaryPageChanged(content::Page& page) override {
++    if (controller_) {
++      controller_->OnCloseDocumentChanged();
++    }
++  }
++
++  void WebContentsDestroyed() override {
++    if (controller_) {
++      controller_->AbortSourceClose(/*restore_preview=*/false);
++    }
++  }
++
++ private:
++  base::WeakPtr<PeekController> controller_;
++};
++
+ PeekController::PeekController(BrowserView* browser_view)
+     : browser_view_(browser_view),
+       tab_strip_model_(browser_view->browser()->tab_strip_model()) {
+   tab_strip_model_->AddObserver(this);
++  UnloadController::From(browser_view_->browser())
++      ->SetTabCloseCoordinator(weak_factory_.GetWeakPtr());
+   pref_change_registrar_.Init(browser_view_->browser()->profile()->GetPrefs());
+   pref_change_registrar_.Add(
+       prefs::kHeliumPeekEnabled,
+@@ -189,8 +227,13 @@ PeekController::PeekController(BrowserVi
+ }
+ 
+ PeekController::~PeekController() {
++  weak_factory_.InvalidateWeakPtrs();
++  AbandonSourceClose();
+   ClearPresentation();
+   ResetPreviewState();
++  if (tab_strip_model_) {
++    tab_strip_model_->RemoveObserver(this);
++  }
+ }
+ 
+ bool PeekController::Show(content::NavigationController::LoadURLParams params,
+@@ -223,6 +266,8 @@ bool PeekController::Show(content::Navig
+   preview_contents_ = tab->GetContents()->GetWeakPtr();
+   Observe(preview_contents_.get());
+   source_contents_ = source_contents->GetWeakPtr();
++  source_contents_observer_ = std::make_unique<SourceContentsObserver>(
++      source_contents, weak_factory_.GetWeakPtr());
+   preview_will_deactivate_subscription_ = tab->RegisterWillDeactivate(
+       base::BindRepeating(&PeekController::OnPreviewWillDeactivate,
+                           weak_factory_.GetWeakPtr()));
+@@ -330,7 +375,12 @@ void PeekController::ClearPresentation()
+ }
+ 
+ void PeekController::ResetPreviewState() {
++  if (!AbortSourceClose(/*restore_preview=*/false)) {
++    return;
++  }
+   Observe(nullptr);
++  source_contents_observer_.reset();
++  source_modal_suspended_ = false;
+   preview_will_deactivate_subscription_ = {};
+   preview_did_activate_subscription_ = {};
+   preview_will_detach_subscription_ = {};
+@@ -344,7 +394,465 @@ void PeekController::ResetPreviewState()
+   restore_source_on_close_ = false;
+ }
+ 
++bool PeekController::IsBrowserClosing() const {
++  const auto* unload = UnloadController::From(browser_view_->browser());
++  return !tab_strip_model_ || !unload || closing_all_ ||
++         tab_strip_model_->closing_all() ||
++         unload->is_attempting_to_close_browser() ||
++         unload->force_skip_warning_user_on_close();
++}
++
++bool PeekController::IsLiveTab(content::WebContents* contents) const {
++  return contents && !contents->IsBeingDestroyed() && tab_strip_model_ &&
++         tab_strip_model_->GetIndexOfWebContents(contents) !=
++             TabStripModel::kNoTab;
++}
++
++bool PeekController::IsCurrentDocument(const CloseDecision& decision) const {
++  return decision.contents && !decision.contents->IsBeingDestroyed() &&
++         decision.document.AsRenderFrameHostIfValid() &&
++         decision.document.AsRenderFrameHostIfValid() ==
++             decision.contents->GetPrimaryMainFrame();
++}
++
++bool PeekController::IsSourceCloseValid() const {
++  return source_close_ && !IsBrowserClosing() &&
++         IsCurrentDocument(source_close_->source) &&
++         IsCurrentDocument(source_close_->preview) &&
++         IsLiveTab(source_close_->source.contents.get()) &&
++         IsLiveTab(source_close_->preview.contents.get()) &&
++         source_close_->source.contents.get() == source_contents_.get() &&
++         source_close_->preview.contents.get() == preview_contents_.get() &&
++         IsPeekEnabled(browser_view_->browser()->profile());
++}
++
++bool PeekController::IsCoordinatingClose(content::WebContents* contents) const {
++  return source_close_ &&
++         (source_close_->source.contents.get() == contents ||
++          source_close_->preview.contents.get() == contents);
++}
++
++bool PeekController::ShouldTrackClose(content::WebContents* contents) const {
++  return IsLiveTab(contents) && IsLiveTab(preview_contents_.get()) &&
++         tabs::TemporaryTab::IsTemporary(preview_contents_.get()) &&
++         (contents == source_contents_.get() ||
++          contents == preview_contents_.get());
++}
++
++bool PeekController::ShouldDeferClose(content::WebContents* contents) const {
++  if (IsBrowserClosing()) {
++    return false;
++  }
++  for (const auto& decision : approved_close_decisions_) {
++    if (decision.contents.get() == contents && IsCurrentDocument(decision)) {
++      return (decision.coordinated || decision.ready_to_remove) &&
++             !decision.ready_to_remove;
++    }
++    if (contents == source_contents_.get() &&
++        decision.contents.get() == preview_contents_.get() &&
++        !decision.coordinated && IsCurrentDocument(decision)) {
++      // An independently accepted preview dismissal is already irreversible.
++      return false;
++    }
++  }
++  if (IsCoordinatingClose(contents) ||
++      (source_close_restore_pending_ &&
++       (contents == source_contents_.get() ||
++        contents == preview_contents_.get()))) {
++    return true;
++  }
++  return contents == source_contents_.get() && IsLiveTab(contents) &&
++         IsLiveTab(preview_contents_.get()) &&
++         tabs::TemporaryTab::IsTemporary(preview_contents_.get()) &&
++         IsPeekEnabled(browser_view_->browser()->profile());
++}
++
++std::optional<bool> PeekController::DeferClose(content::WebContents* contents) {
++  if (IsBrowserClosing()) {
++    AbandonSourceClose();
++    return std::nullopt;
++  }
++  for (const auto& decision : approved_close_decisions_) {
++    if (decision.contents.get() == contents && IsCurrentDocument(decision)) {
++      // ClosePage is asynchronous even for documents without listeners.
++      // Only its actual CloseContents callback permits coordinated removal.
++      if (decision.coordinated || decision.ready_to_remove) {
++        return !decision.ready_to_remove;
++      }
++      return std::nullopt;
++    }
++    if (contents == source_contents_.get() &&
++        decision.contents.get() == preview_contents_.get() &&
++        !decision.coordinated && IsCurrentDocument(decision)) {
++      return std::nullopt;
++    }
++  }
++  if (IsCoordinatingClose(contents) ||
++      (source_close_restore_pending_ &&
++       (contents == source_contents_.get() ||
++        contents == preview_contents_.get()))) {
++    return true;
++  }
++  if (!ShouldDeferClose(contents)) {
++    return std::nullopt;
++  }
++
++  SourceClose close;
++  close.source = {source_contents_,
++                  source_contents_->GetPrimaryMainFrame()->GetWeakDocumentPtr()};
++  close.preview = {
++      preview_contents_,
++      preview_contents_->GetPrimaryMainFrame()->GetWeakDocumentPtr()};
++  close.generation = ++source_close_generation_;
++  close.waiting_for_reply =
++      TabCloseTypesData::FromWebContents(preview_contents_.get()) != nullptr;
++  close.waiting_for_reply |= UnloadController::AdoptCoordinatedClose(
++      preview_contents_.get(), weak_factory_.GetWeakPtr());
++  close.source_waiting_for_reply = UnloadController::AdoptCoordinatedClose(
++      source_contents_.get(), weak_factory_.GetWeakPtr());
++  source_close_ = std::move(close);
++  close_pending_ = false;
++  close_scheduled_ = false;
++  restore_source_on_close_ = false;
++  source_modal_suspended_ = false;
++  ClearPresentation();
++  // TabStripModel writes the original source close types after we return true.
++  // Start outside its guarded operation, including for eventless documents.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&PeekController::StartSourceClose,
++                                weak_factory_.GetWeakPtr(),
++                                source_close_generation_));
++  return true;
++}
++
++void PeekController::StartSourceClose(uint64_t generation) {
++  if (!source_close_ || source_close_->generation != generation) {
++    return;
++  }
++  if (!IsSourceCloseValid()) {
++    AbortSourceClose(/*restore_preview=*/true);
++    return;
++  }
++  if (source_close_->waiting_for_reply) {
++    return;
++  }
++  if (source_close_->phase == SourceClose::Phase::kSource &&
++      source_close_->source_waiting_for_reply) {
++    source_close_->waiting_for_reply = true;
++    return;
++  }
++  const CloseDecision decision =
++      source_close_->phase == SourceClose::Phase::kPreview
++          ? source_close_->preview : source_close_->source;
++  // Custom confirmation can complete synchronously inside this helper.
++  source_close_->waiting_for_reply = true;
++  const auto controller = weak_factory_.GetWeakPtr();
++  const bool deferred =
++      UnloadController::From(browser_view_->browser())->RunCoordinatedUnloadEvents(
++          decision.contents.get(), controller);
++  if (controller && !deferred && controller->source_close_ &&
++      controller->source_close_->generation == generation &&
++      controller->source_close_->waiting_for_reply &&
++      controller->IsCurrentDocument(decision)) {
++    controller->BeforeUnloadFired(decision.contents.get(), /*proceed=*/true);
++  }
++}
++
++bool PeekController::BeforeUnloadFired(content::WebContents* contents,
++                                      bool proceed) {
++  if (IsBrowserClosing()) {
++    // Snapshot this before cancellation bookkeeping can reset window ownership.
++    AbandonSourceClose();
++    return false;
++  }
++  if (IsCoordinatingClose(contents)) {
++    const bool expected =
++        source_close_->waiting_for_reply &&
++        contents == (source_close_->phase == SourceClose::Phase::kPreview
++                         ? source_close_->preview.contents.get()
++                         : source_close_->source.contents.get());
++    if (!expected) {
++      if (!proceed || !IsSourceCloseValid()) {
++        AbortSourceClose(/*restore_preview=*/true);
++      } else if (contents == source_close_->source.contents.get() &&
++                 source_close_->phase == SourceClose::Phase::kPreview) {
++        // A source decision already in flight is part of this transaction too.
++        source_close_->source_approved = true;
++        source_close_->source_waiting_for_reply = false;
++      }
++      return true;
++    }
++    source_close_->waiting_for_reply = false;
++    if (!proceed || !IsSourceCloseValid()) {
++      AbortSourceClose(/*restore_preview=*/true);
++      return true;
++    }
++    const uint64_t generation = source_close_->generation;
++    if (source_close_->phase == SourceClose::Phase::kPreview &&
++        !source_close_->source_approved) {
++      source_close_->phase = SourceClose::Phase::kSource;
++      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE, base::BindOnce(&PeekController::StartSourceClose,
++                                    weak_factory_.GetWeakPtr(), generation));
++    } else {
++      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE, base::BindOnce(&PeekController::CommitSourceClose,
++                                    weak_factory_.GetWeakPtr(), generation));
++    }
++    return true;
++  }
++  for (const auto& decision : approved_close_decisions_) {
++    if (decision.contents.get() == contents && IsCurrentDocument(decision)) {
++      return decision.coordinated;
++    }
++  }
++  if (proceed && contents == preview_contents_.get() &&
++      (close_pending_ || TabCloseTypesData::FromWebContents(contents))) {
++    // A separate preview dismissal accepted its own decision. A subsequent
++    // source close must not adopt an answer that has already been delivered.
++    approved_close_decisions_.push_back(
++        {preview_contents_,
++         contents->GetPrimaryMainFrame()->GetWeakDocumentPtr()});
++  }
++  return false;
++}
++
++void PeekController::OnUnloadCompleted(content::WebContents* contents) {
++  for (auto& decision : approved_close_decisions_) {
++    if (decision.contents.get() == contents && IsCurrentDocument(decision)) {
++      decision.ready_to_remove = true;
++      return;
++    }
++  }
++  if (contents == source_contents_.get() || contents == preview_contents_.get()) {
++    // A page may also complete a renderer/forced close outside source preflight.
++    // Its already-unloaded document must proceed to normal removal and cleanup.
++    CloseDecision decision = {
++        contents->GetWeakPtr(),
++        contents->GetPrimaryMainFrame()->GetWeakDocumentPtr()};
++    if (!AbortSourceClose(/*restore_preview=*/false) ||
++        !IsCurrentDocument(decision)) {
++      return;
++    }
++    decision.ready_to_remove = true;
++    approved_close_decisions_.push_back(std::move(decision));
++  }
++}
++
++bool PeekController::CancelTabClose(content::WebContents* contents) {
++  const auto controller = weak_factory_.GetWeakPtr();
++  if (IsLiveTab(contents) && !IsBrowserClosing()) {
++    // Normal marker, gesture, DevTools and priority cleanup can notify observers.
++    UnloadController::From(browser_view_->browser())
++        ->BeforeUnloadFired(contents, /*proceed=*/false);
++  }
++  return !!controller;
++}
++
++bool PeekController::AbortSourceClose(bool restore_preview) {
++  if (!source_close_ && !source_close_restore_pending_) {
++    return true;
++  }
++  if (IsBrowserClosing()) {
++    AbandonSourceClose();
++    return true;
++  }
++  const auto source = source_contents_;
++  const auto preview = preview_contents_;
++  source_close_.reset();
++  const uint64_t generation = ++source_close_generation_;
++  source_close_restore_pending_ = restore_preview;
++  source_modal_suspended_ = false;
++  if (!CancelTabClose(source.get())) {
++    return false;
++  }
++  if (generation != source_close_generation_) {
++    return true;
++  }
++  if (!CancelTabClose(preview.get())) {
++    return false;
++  }
++  if (restore_preview && generation == source_close_generation_) {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&PeekController::RestoreAfterCoordinatedCloseCancelled,
++                       weak_factory_.GetWeakPtr(), source, preview, generation));
++  }
++  return true;
++}
++
++void PeekController::AbandonSourceClose() {
++  source_close_.reset();
++  source_close_restore_pending_ = false;
++  approved_close_decisions_.clear();
++  ++source_close_generation_;
++}
++
++bool PeekController::HandoffPendingDecision(content::WebContents* contents) {
++  if (!UnloadController::HandoffCoordinatedClose(contents)) {
++    return false;
++  }
++  TabCloseTypesData::CreateForWebContents(contents, TabCloseTypes::CLOSE_NONE);
++  close_pending_ = true;
++  close_scheduled_ = false;
++  return true;
++}
++
++void PeekController::OnCloseDecisionCancelled(content::WebContents* contents) {
++  if (contents == preview_contents_.get() && close_pending_) {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&PeekController::HandlePreviewCloseCancelled,
++                       weak_factory_.GetWeakPtr(), preview_contents_));
++  } else if (contents == source_contents_.get() ||
++             contents == preview_contents_.get()) {
++    // A retained old reply may have activated its source after preflight was
++    // aborted. Restore the attached presentation after that modal unwinds.
++    OnBrowserCloseCancelled();
++  }
++}
++
++void PeekController::OnBrowserCloseStarted() {
++  // The window owns its existing queue and pending document replies now.
++  AbandonSourceClose();
++  close_pending_ = false;
++  close_scheduled_ = false;
++  restore_source_on_close_ = false;
++  source_modal_suspended_ = false;
++  ++source_modal_generation_;
++  ClearPresentation();
++}
++
++void PeekController::OnBrowserCloseCancelled() {
++  if (source_close_ || close_pending_ || IsBrowserClosing() ||
++      !IsLiveTab(source_contents_.get()) ||
++      !IsLiveTab(preview_contents_.get()) ||
++      !IsPeekEnabled(browser_view_->browser()->profile())) {
++    return;
++  }
++  source_close_restore_pending_ = true;
++  const uint64_t generation = ++source_close_generation_;
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(&PeekController::RestoreAfterCoordinatedCloseCancelled,
++                     weak_factory_.GetWeakPtr(), source_contents_,
++                     preview_contents_, generation));
++}
++
++void PeekController::RestoreAfterCoordinatedCloseCancelled(
++    base::WeakPtr<content::WebContents> source,
++    base::WeakPtr<content::WebContents> preview,
++    uint64_t generation) {
++  if (!source_close_restore_pending_ || generation != source_close_generation_) {
++    return;
++  }
++  source_close_restore_pending_ = false;
++  if (IsBrowserClosing()) {
++    AbandonSourceClose();
++    return;
++  }
++  if (source.get() != source_contents_.get() ||
++      preview.get() != preview_contents_.get() ||
++      !IsLiveTab(source.get()) || !IsLiveTab(preview.get()) || close_pending_ ||
++      !IsPeekEnabled(browser_view_->browser()->profile())) {
++    return;
++  }
++  // Duplicate closes while cancellation unwinds join that canceled attempt.
++  const auto controller = weak_factory_.GetWeakPtr();
++  if (!CancelTabClose(source.get()) || !CancelTabClose(preview.get()) ||
++      generation != source_close_generation_) {
++    return;
++  }
++  if (source.get() != source_contents_.get() ||
++      preview.get() != preview_contents_.get() ||
++      !IsLiveTab(source.get()) || !IsLiveTab(preview.get()) || close_pending_ ||
++      IsBrowserClosing() || !IsPeekEnabled(browser_view_->browser()->profile())) {
++    return;
++  }
++  const auto* active = tab_strip_model_->GetActiveWebContents();
++  if (active != source.get() && active != preview.get()) {
++    ScheduleClose(/*restore_source=*/false);
++    return;
++  }
++  tab_strip_model_->ActivateTabAt(
++      tab_strip_model_->GetIndexOfWebContents(preview.get()));
++  if (controller && source.get() == controller->source_contents_.get() &&
++      preview.get() == controller->preview_contents_.get() &&
++      !controller->close_pending_) {
++    controller->AttachPresentation();
++  }
++}
++
++void PeekController::CommitSourceClose(uint64_t generation) {
++  if (!source_close_ || source_close_->generation != generation) {
++    return;
++  }
++  if (!IsSourceCloseValid()) {
++    AbortSourceClose(/*restore_preview=*/true);
++    return;
++  }
++  const CloseDecision source = source_close_->source;
++  const CloseDecision preview = source_close_->preview;
++  const auto controller = weak_factory_.GetWeakPtr();
++  approved_close_decisions_.push_back(source);
++  approved_close_decisions_.back().coordinated = true;
++  approved_close_decisions_.push_back(preview);
++  approved_close_decisions_.back().coordinated = true;
++  source_close_.reset();
++  ++source_close_generation_;
++  close_pending_ = true;
++  close_scheduled_ = false;
++  restore_source_on_close_ = false;
++  source_modal_suspended_ = false;
++  ClearPresentation();
++  // Retain the original source's close types and ordinary history policy.
++  // The temporary target keeps its own exclusion from session/history records.
++  TabCloseTypesData::CreateForWebContents(preview.contents.get(),
++                                        TabCloseTypes::CLOSE_NONE);
++  preview.contents->ClosePage();
++  // The first unload can synchronously remove a tab or destroy the browser.
++  // Its removal also resets Peek state, so approvals live outside that state.
++  if (controller && !controller->IsBrowserClosing() &&
++      controller->IsCurrentDocument(source) &&
++      controller->IsLiveTab(source.contents.get())) {
++    source.contents->ClosePage();
++  }
++}
++
++void PeekController::OnCloseDocumentChanged() {
++  std::erase_if(approved_close_decisions_, [this](const CloseDecision& decision) {
++    return !IsCurrentDocument(decision);
++  });
++  if (source_close_ && !IsSourceCloseValid()) {
++    AbortSourceClose(/*restore_preview=*/true);
++  }
++}
++
++void PeekController::PrimaryPageChanged(content::Page& page) {
++  OnCloseDocumentChanged();
++}
++
++void PeekController::WebContentsDestroyed() {
++  AbortSourceClose(/*restore_preview=*/false);
++}
++
++bool PeekController::AdoptPendingPreviewClose() {
++  if (!preview_contents_ ||
++      !TabCloseTypesData::FromWebContents(preview_contents_.get())) {
++    return false;
++  }
++  // The model owns an outstanding unload decision. Do not dispatch it again
++  // from a queued controller close, or lose its actual cancellation callback.
++  close_pending_ = true;
++  close_scheduled_ = false;
++  return true;
++}
++
+ void PeekController::Close() {
++  if (!AbortSourceClose(/*restore_preview=*/false)) {
++    return;
++  }
++  source_modal_suspended_ = false;
+   if (!preview_contents_) {
+     ClearPresentation();
+     ResetPreviewState();
+@@ -352,7 +860,8 @@ void PeekController::Close() {
+   }
+   restore_source_on_close_ = true;
+   ClearPresentation();
+-  if (close_pending_) {
++  if (HandoffPendingDecision(preview_contents_.get()) || close_pending_ ||
++      AdoptPendingPreviewClose()) {
+     return;
+   }
+   close_pending_ = true;
+@@ -360,9 +869,14 @@ void PeekController::Close() {
+ }
+ 
+ void PeekController::ScheduleClose(bool restore_source) {
++  if (!AbortSourceClose(/*restore_preview=*/false)) {
++    return;
++  }
++  source_modal_suspended_ = false;
+   restore_source_on_close_ = restore_source;
+-  if (close_pending_ || closing_all_ || !tab_strip_model_ ||
+-      tab_strip_model_->closing_all()) {
++  if (closing_all_ || !tab_strip_model_ || tab_strip_model_->closing_all() ||
++      HandoffPendingDecision(preview_contents_.get()) ||
++      AdoptPendingPreviewClose() || close_pending_) {
+     return;
+   }
+   close_pending_ = true;
+@@ -388,6 +902,9 @@ void PeekController::FinishClose(
+       closing_all_ || tab_strip_model_->closing_all()) {
+     return;
+   }
++  if (AdoptPendingPreviewClose()) {
++    return;
++  }
+   ClearPresentation();
+   const int index =
+       tab_strip_model_->GetIndexOfWebContents(preview_contents_.get());
+@@ -414,13 +931,35 @@ void PeekController::OnPreviewWillDeacti
+   // Clear the passive source before normal selection can attach that source
+   // to a ContentsWebView. Never double-host the source during tab activation.
+   ClearPresentation();
++  if (IsBrowserClosing()) {
++    AbandonSourceClose();
++    return;
++  }
++  if (source_close_ || source_close_restore_pending_) {
++    return;
++  }
++  const auto* dialog =
++      javascript_dialogs::AppModalDialogQueue::GetInstance()->active_dialog();
++  if (!close_pending_ && !closing_all_ && tab_strip_model_ &&
++      !tab_strip_model_->closing_all() && source_contents_ &&
++      (TabCloseTypesData::FromWebContents(source_contents_.get()) ||
++       UnloadController::HasCoordinatedClose(source_contents_.get())) && dialog &&
++      dialog->is_before_unload_dialog() &&
++      dialog->web_contents() == source_contents_.get()) {
++    // A source close's native prompt activates its owning source. Suspend
++    // only that modal transition; the eventual answer owns restoration.
++    source_modal_suspended_ = true;
++    ++source_modal_generation_;
++    return;
++  }
+   if (!close_pending_) {
+     ScheduleClose(/*restore_source=*/false);
+   }
+ }
+ 
+ void PeekController::OnPreviewDidActivate(tabs::TabInterface* tab) {
+-  if (!close_pending_ && !closing_all_) {
++  if (!close_pending_ && !IsBrowserClosing() && !source_modal_suspended_ &&
++      !source_close_ && !source_close_restore_pending_) {
+     AttachPresentation();
+   }
+ }
+@@ -430,9 +969,8 @@ void PeekController::OnPreviewWillDetach
+     tabs::TabInterface::DetachReason reason) {
+   ClearPresentation();
+   if (reason == tabs::TabInterface::DetachReason::kDelete) {
+-    // This notification precedes the beforeunload response. Retain observation
+-    // and ownership until confirmed removal or the user's cancellation.
+-    // The model already started closing; discard a queued duplicate request.
++    // Deletion is accepted. Retain observation and ownership until removal,
++    // and discard any queued duplicate request for this same document.
+     close_pending_ = true;
+     close_scheduled_ = false;
+     return;
+@@ -445,6 +983,9 @@ void PeekController::OnPreviewWillDetach
+ void PeekController::OnPreviewWillDiscard(tabs::TabInterface* tab,
+                                           content::WebContents* old_contents,
+                                           content::WebContents* new_contents) {
++  if (!AbortSourceClose(/*restore_preview=*/false)) {
++    return;
++  }
+   ClearPresentation();
+   preview_contents_ = new_contents->GetWeakPtr();
+   Observe(new_contents);
+@@ -460,6 +1001,13 @@ void PeekController::OnTabStripModelChan
+     TabStripModel* model,
+     const TabStripModelChange& change,
+     const TabStripSelectionChange& selection) {
++  if (source_modal_suspended_ && selection.active_tab_changed() &&
++      selection.new_contents != source_contents_.get() &&
++      selection.new_contents != preview_contents_.get()) {
++    // A different selection is an ordinary dismissal, even if it arrives
++    // before the posted source-cancellation restoration.
++    ScheduleClose(/*restore_source=*/false);
++  }
+   if (change.type() == TabStripModelChange::kRemoved && preview_contents_) {
+     bool preview_removed = false;
+     bool source_removed = false;
+@@ -467,6 +1015,15 @@ void PeekController::OnTabStripModelChan
+       preview_removed |= removed.contents == preview_contents_.get();
+       source_removed |= removed.contents == source_contents_.get();
+     }
++    bool committed_source = false;
++    for (const auto& decision : approved_close_decisions_) {
++      committed_source |= decision.contents.get() == source_contents_.get() &&
++                          decision.coordinated && IsCurrentDocument(decision);
++    }
++    if ((preview_removed || source_removed) &&
++        !AbortSourceClose(/*restore_preview=*/false)) {
++      return;
++    }
+     const auto source = source_contents_;
+     const bool restore = preview_removed && restore_source_on_close_ &&
+                          !closing_all_;
+@@ -475,10 +1032,13 @@ void PeekController::OnTabStripModelChan
+       ResetPreviewState();
+     } else if (source_removed) {
+       ClearPresentation();
++      source_contents_observer_.reset();
+       source_contents_.reset();
+       source_will_detach_subscription_ = {};
+       source_will_discard_subscription_ = {};
+-      ScheduleClose(/*restore_source=*/false);
++      if (!committed_source) {
++        ScheduleClose(/*restore_source=*/false);
++      }
+     }
+     if (restore && source) {
+       const auto selected = selection.new_contents
+@@ -499,6 +1059,17 @@ void PeekController::OnTabStripModelChan
+               weak_factory_.GetWeakPtr(), source, selected));
+     }
+   }
++  if (change.type() == TabStripModelChange::kRemoved) {
++    const auto was_removed = [&](const CloseDecision& decision) {
++      return !decision.contents ||
++             std::ranges::any_of(change.GetRemove()->contents,
++                                 [&](const auto& removed) {
++                                   return removed.contents ==
++                                          decision.contents.get();
++                                 });
++    };
++    std::erase_if(approved_close_decisions_, was_removed);
++  }
+   if (change.type() == TabStripModelChange::kReplaced && preview_contents_ &&
+       change.GetReplace()->new_contents == preview_contents_.get() &&
+       !close_pending_ && !closing_all_) {
+@@ -516,11 +1087,16 @@ void PeekController::OnTabStripModelChan
+ void PeekController::OnSourceWillDetach(
+     tabs::TabInterface* tab,
+     tabs::TabInterface::DetachReason reason) {
+-  ClearPresentation();
+   if (reason == tabs::TabInterface::DetachReason::kDelete) {
+-    // A close attempt can be cancelled. Close Peek after actual removal.
++    // Accepted deletion clears the presentation in the removal notification
++    // before the source is destroyed. Do not mutate the model mid-detach.
++    return;
++  }
++  if (!AbortSourceClose(/*restore_preview=*/false)) {
+     return;
+   }
++  ClearPresentation();
++  source_contents_observer_.reset();
+   source_contents_.reset();
+   ScheduleClose(/*restore_source=*/false);
+ }
+@@ -528,7 +1104,11 @@ void PeekController::OnSourceWillDetach(
+ void PeekController::OnSourceWillDiscard(tabs::TabInterface* tab,
+                                          content::WebContents* old_contents,
+                                          content::WebContents* new_contents) {
++  if (!AbortSourceClose(/*restore_preview=*/false)) {
++    return;
++  }
+   ClearPresentation();
++  source_contents_observer_.reset();
+   source_contents_.reset();
+   ScheduleClose(/*restore_source=*/false);
+ }
+@@ -544,7 +1124,17 @@ void PeekController::OnTabCloseCancelled
+ }
+ 
+ void PeekController::BeforeUnloadFired(bool proceed) {
+-  if (!proceed && close_pending_) {
++  if (IsCoordinatingClose(preview_contents_.get())) {
++    return;
++  }
++  if (proceed) {
++    return;
++  }
++  // External model operations can dispatch unload without entering Close().
++  // The marker still exists here; Browser clears it after this observer runs.
++  AdoptPendingPreviewClose();
++  if (close_pending_) {
++    close_scheduled_ = false;
+     // Observe actual renderer cancellation. The model's close-cancel signal
+     // covers only oracle rejection, not the beforeunload dialog's answer.
+     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+@@ -554,6 +1144,70 @@ void PeekController::BeforeUnloadFired(b
+   }
+ }
+ 
++void PeekController::OnSourceBeforeUnloadFired(
++    base::WeakPtr<content::WebContents> expected_source,
++    bool proceed) {
++  if (expected_source.get() != source_contents_.get() ||
++      IsCoordinatingClose(expected_source.get())) {
++    return;
++  }
++  if (proceed) {
++    source_modal_suspended_ = false;
++    return;
++  }
++  if (!source_modal_suspended_ || !preview_contents_) {
++    return;
++  }
++  // The renderer answer precedes the browser's close bookkeeping. Restore
++  // after that callback has unwound, guarded by both live document identities.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(&PeekController::RestoreAfterSourceCloseCancelled,
++                     weak_factory_.GetWeakPtr(), expected_source,
++                     preview_contents_, source_modal_generation_));
++}
++
++void PeekController::RestoreAfterSourceCloseCancelled(
++    base::WeakPtr<content::WebContents> expected_source,
++    base::WeakPtr<content::WebContents> expected_preview,
++    uint64_t suspension_generation) {
++  if (!expected_source || !expected_preview || !source_modal_suspended_ ||
++      suspension_generation != source_modal_generation_ ||
++      expected_source.get() != source_contents_.get() ||
++      expected_preview.get() != preview_contents_.get() || !tab_strip_model_ ||
++      close_pending_ || closing_all_ || tab_strip_model_->closing_all() ||
++      !IsPeekEnabled(browser_view_->browser()->profile()) ||
++      tab_strip_model_->GetIndexOfWebContents(expected_source.get()) ==
++          TabStripModel::kNoTab) {
++    return;
++  }
++  // Another source close can start before this posted task, while the source
++  // is already active. Its own answer must finish before restoring the card.
++  const auto* dialog =
++      javascript_dialogs::AppModalDialogQueue::GetInstance()->active_dialog();
++  if (TabCloseTypesData::FromWebContents(expected_source.get()) ||
++      (dialog && dialog->is_before_unload_dialog() &&
++       dialog->web_contents() == expected_source.get())) {
++    return;
++  }
++  const int preview_index =
++      tab_strip_model_->GetIndexOfWebContents(expected_preview.get());
++  if (preview_index == TabStripModel::kNoTab) {
++    return;
++  }
++  source_modal_suspended_ = false;
++  content::WebContents* active = tab_strip_model_->GetActiveWebContents();
++  if (active != expected_source.get() && active != expected_preview.get()) {
++    ScheduleClose(/*restore_source=*/false);
++    return;
++  }
++  tab_strip_model_->ActivateTabAt(preview_index);
++  if (expected_source.get() == source_contents_.get() &&
++      expected_preview.get() == preview_contents_.get() && !close_pending_) {
++    AttachPresentation();
++  }
++}
++
+ void PeekController::HandlePreviewCloseCancelled(
+     base::WeakPtr<content::WebContents> expected_contents) {
+   if (!expected_contents ||
+@@ -563,6 +1217,11 @@ void PeekController::HandlePreviewCloseC
+           TabStripModel::kNoTab) {
+     return;
+   }
++  if (TabCloseTypesData::FromWebContents(expected_contents.get())) {
++    // A later close attempt owns this same document now. Its answer must
++    // finish before the earlier cancellation can restore or promote it.
++    return;
++  }
+   closing_all_ = false;
+   close_pending_ = false;
+   close_scheduled_ = false;
+@@ -583,6 +1242,8 @@ void PeekController::HandlePreviewCloseC
+ }
+ 
+ void PeekController::WillCloseAllTabs(TabStripModel* model) {
++  AbandonSourceClose();
++  source_modal_suspended_ = false;
+   closing_all_ = true;
+   ClearPresentation();
+ }
+@@ -592,7 +1253,8 @@ void PeekController::CloseAllTabsStopped
+   closing_all_ = false;
+   if (!preview_contents_) {
+     ResetPreviewState();
+-  } else if (reason == kCloseAllCanceled && !close_pending_) {
++  } else if (reason == kCloseAllCanceled && !AdoptPendingPreviewClose() &&
++             !close_pending_) {
+     // This also fires when closing pauses for a beforeunload response. Actual
+     // cancellation is handled by BeforeUnloadFired after the user's answer.
+     AttachPresentation();
+@@ -600,6 +1262,7 @@ void PeekController::CloseAllTabsStopped
+ }
+ 
+ void PeekController::OnTabStripModelDestroyed(TabStripModel* model) {
++  AbandonSourceClose();
+   ClearPresentation();
+   ResetPreviewState();
+   tab_strip_model_ = nullptr;
+@@ -615,16 +1278,24 @@ void PeekController::OpenInTab() {
+   if (!preview_contents_) {
+     return;
+   }
+-  content::WebContents* const contents = preview_contents_.get();
++  const auto controller = weak_factory_.GetWeakPtr();
++  const auto contents = preview_contents_;
+   ClearPresentation();
+   ResetPreviewState();
+-  tabs::TemporaryTab::FromWebContents(contents)->Promote();
++  if (controller && contents && !contents->IsBeingDestroyed()) {
++    if (auto* temporary = tabs::TemporaryTab::FromWebContents(contents.get())) {
++      temporary->Promote();
++    }
++  }
+ }
+ 
+ void PeekController::OpenInSidebar() {
++  const auto controller = weak_factory_.GetWeakPtr();
+   const auto source = source_contents_;
+   OpenInTab();
+-  RestoreSourceFocus(source);
++  if (controller) {
++    controller->RestoreSourceFocus(source);
++  }
+ }
+ 
+ }  // namespace helium
+--- a/chrome/browser/ui/views/helium/peek_controller.h
++++ b/chrome/browser/ui/views/helium/peek_controller.h
+@@ -5,17 +5,22 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_PEEK_CONTROLLER_H_
+ #define CHROME_BROWSER_UI_VIEWS_HELIUM_PEEK_CONTROLLER_H_
+ 
++#include <cstdint>
++#include <memory>
+ #include <optional>
++#include <vector>
+ 
+ #include "base/callback_list.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "chrome/browser/ui/unload_controller.h"
+ #include "components/prefs/pref_change_registrar.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/weak_document_ptr.h"
+ #include "ui/gfx/geometry/rect.h"
+ 
+ class BrowserView;
+@@ -42,7 +47,8 @@ bool ShowPeekForLink(content::WebContent
+ // use ordinary browser delegates and tab features; promotion retains the same
+ // model member and document. Peek has no dependency on Spaces or Pins.
+ class PeekController : public TabStripModelObserver,
+-                       public content::WebContentsObserver {
++                       public content::WebContentsObserver,
++                       public UnloadController::TabCloseCoordinator {
+  public:
+   explicit PeekController(BrowserView* browser_view);
+   PeekController(const PeekController&) = delete;
+@@ -62,6 +68,53 @@ class PeekController : public TabStripMo
+   views::View* overlay_view_for_testing() const { return overlay_view_; }
+ 
+  private:
++  class SourceContentsObserver;
++
++  struct CloseDecision {
++    base::WeakPtr<content::WebContents> contents;
++    content::WeakDocumentPtr document;
++    bool ready_to_remove = false;
++    bool coordinated = false;
++  };
++  struct SourceClose {
++    CloseDecision source;
++    CloseDecision preview;
++    enum class Phase { kPreview, kSource } phase = Phase::kPreview;
++    bool waiting_for_reply = false;
++    bool source_approved = false;
++    bool source_waiting_for_reply = false;
++    uint64_t generation = 0;
++  };
++
++  // UnloadController::TabCloseCoordinator:
++  bool ShouldTrackClose(content::WebContents* contents) const override;
++  bool ShouldDeferClose(content::WebContents* contents) const override;
++  std::optional<bool> DeferClose(content::WebContents* contents) override;
++  bool BeforeUnloadFired(content::WebContents* contents, bool proceed) override;
++  void OnUnloadCompleted(content::WebContents* contents) override;
++  void OnBrowserCloseStarted() override;
++  void OnBrowserCloseCancelled() override;
++  void OnCloseDecisionCancelled(content::WebContents* contents) override;
++
++  bool IsBrowserClosing() const;
++  bool IsLiveTab(content::WebContents* contents) const;
++  bool IsCurrentDocument(const CloseDecision& decision) const;
++  bool IsSourceCloseValid() const;
++  bool IsCoordinatingClose(content::WebContents* contents) const;
++  void StartSourceClose(uint64_t generation);
++  void CommitSourceClose(uint64_t generation);
++  // False means cancellation observers destroyed this controller.
++  bool AbortSourceClose(bool restore_preview);
++  void AbandonSourceClose();
++  bool CancelTabClose(content::WebContents* contents);
++  bool HandoffPendingDecision(content::WebContents* contents);
++  void RestoreAfterCoordinatedCloseCancelled(
++      base::WeakPtr<content::WebContents> source,
++      base::WeakPtr<content::WebContents> preview,
++      uint64_t generation);
++  void OnCloseDocumentChanged();
++
++  bool AdoptPendingPreviewClose();
+   bool AttachPresentation();
+   void ClearPresentation();
+   void ResetPreviewState();
+@@ -73,9 +126,18 @@ class PeekController : public TabStripMo
+   void OnPeekEnabledChanged();
+   void HandlePreviewCloseCancelled(
+       base::WeakPtr<content::WebContents> expected_contents);
++  void OnSourceBeforeUnloadFired(
++      base::WeakPtr<content::WebContents> expected_source,
++      bool proceed);
++  void RestoreAfterSourceCloseCancelled(
++      base::WeakPtr<content::WebContents> expected_source,
++      base::WeakPtr<content::WebContents> expected_preview,
++      uint64_t suspension_generation);
+ 
+   // content::WebContentsObserver:
+   void BeforeUnloadFired(bool proceed) override;
++  void PrimaryPageChanged(content::Page& page) override;
++  void WebContentsDestroyed() override;
+   void OnPreviewWillDeactivate(tabs::TabInterface* tab);
+   void OnPreviewDidActivate(tabs::TabInterface* tab);
+   void OnPreviewWillDetach(tabs::TabInterface* tab,
+@@ -107,6 +169,13 @@ class PeekController : public TabStripMo
+   raw_ptr<views::WebView> backdrop_view_ = nullptr;
+   base::WeakPtr<content::WebContents> preview_contents_;
+   base::WeakPtr<content::WebContents> source_contents_;
++  std::unique_ptr<SourceContentsObserver> source_contents_observer_;
++  std::optional<SourceClose> source_close_;
++  std::vector<CloseDecision> approved_close_decisions_;
++  uint64_t source_close_generation_ = 0;
++  bool source_close_restore_pending_ = false;
++  bool source_modal_suspended_ = false;
++  uint64_t source_modal_generation_ = 0;
+   bool close_pending_ = false;
+   bool close_scheduled_ = false;
+   bool restore_source_on_close_ = false;
+--- a/chrome/browser/ui/views/helium/peek_controller_browsertest.cc
++++ b/chrome/browser/ui/views/helium/peek_controller_browsertest.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/browser_live_tab_context.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
++#include "chrome/browser/ui/tabs/tab_close_types_data.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/contents_container_view.h"
+@@ -501,11 +502,142 @@ IN_PROC_BROWSER_TEST_F(PeekControllerBro
+ }
+ 
+ IN_PROC_BROWSER_TEST_F(PeekControllerBrowserTest,
++                       CancelledSourceCloseRetainsDirtyAttachedPeek) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  const GURL source_url = embedded_test_server()->GetURL("/empty.html");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), source_url));
++  TabStripModel* const model = browser()->tab_strip_model();
++  content::WebContents* const source = model->GetActiveWebContents();
++  ASSERT_TRUE(content::ExecJs(source, "window.sourceState = 'same source'"));
++  PeekController* const controller =
++      BrowserView::GetBrowserViewForBrowser(browser())->peek_controller();
++  const GURL target_url = embedded_test_server()->GetURL("/beforeunload.html");
++  ASSERT_TRUE(controller->Show(PeekNavigationParams(target_url), source));
++  content::WebContents* const preview = controller->web_contents_for_testing();
++  ASSERT_TRUE(content::WaitForLoadStop(preview));
++  ASSERT_TRUE(content::ExecJs(
++      preview,
++      "window.peekState = 'unsaved'; "
++      "document.body.innerHTML += '<textarea id=dirty></textarea>'; "
++      "document.getElementById('dirty').value = 'edited target';"));
++  content::PrepContentsForBeforeUnloadTest(preview);
++  const auto source_weak = source->GetWeakPtr();
++  const auto preview_weak = preview->GetWeakPtr();
++  const auto source_id = sessions::SessionTabHelper::IdForTab(source);
++  const auto preview_id = sessions::SessionTabHelper::IdForTab(preview);
++  const int source_entries = source->GetController().GetEntryCount();
++  const int preview_entries = preview->GetController().GetEntryCount();
++  const int tab_count = model->count();
++
++  model->ExecuteContextMenuCommand(model->GetIndexOfWebContents(source),
++                                   TabStripModel::CommandCloseTab);
++  auto* const dialog = ui_test_utils::WaitForAppModalDialog();
++  ASSERT_TRUE(dialog->is_before_unload_dialog());
++  EXPECT_EQ(preview, dialog->web_contents());
++  EXPECT_TRUE(source_weak);
++  dialog->view()->CancelAppModalDialog();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return !source_weak || !preview_weak || !controller->is_showing() ||
++           (model->GetActiveWebContents() == preview &&
++            controller->overlay_view_for_testing() &&
++            !TabCloseTypesData::FromWebContents(source) &&
++            !TabCloseTypesData::FromWebContents(preview));
++  }));
++  // Clear the real page handler before fatal assertions/fixture teardown.
++  if (preview_weak) {
++    EXPECT_TRUE(content::ExecJs(preview, "window.onbeforeunload = null"));
++  }
++  ASSERT_TRUE(source_weak);
++  ASSERT_TRUE(preview_weak);
++  ASSERT_EQ(preview, controller->web_contents_for_testing());
++  ASSERT_TRUE(controller->overlay_view_for_testing());
++  EXPECT_TRUE(controller->overlay_view_for_testing()->GetVisible());
++  EXPECT_EQ(tab_count, model->count());
++  EXPECT_NE(TabStripModel::kNoTab, model->GetIndexOfWebContents(source));
++  EXPECT_NE(TabStripModel::kNoTab, model->GetIndexOfWebContents(preview));
++  EXPECT_EQ(source_id, sessions::SessionTabHelper::IdForTab(source));
++  EXPECT_EQ(preview_id, sessions::SessionTabHelper::IdForTab(preview));
++  EXPECT_EQ(source_url, source->GetLastCommittedURL());
++  EXPECT_EQ(target_url, preview->GetLastCommittedURL());
++  EXPECT_EQ(source_entries, source->GetController().GetEntryCount());
++  EXPECT_EQ(preview_entries, preview->GetController().GetEntryCount());
++  EXPECT_TRUE(tabs::TemporaryTab::IsTemporary(preview));
++  EXPECT_TRUE(source->ShouldIgnoreInputEventsForTesting());
++  EXPECT_EQ("same source", content::EvalJs(source, "window.sourceState"));
++  EXPECT_EQ("unsaved", content::EvalJs(preview, "window.peekState"));
++  EXPECT_EQ("edited target",
++            content::EvalJs(preview, "document.getElementById('dirty').value"));
++  ASSERT_TRUE(content::ExecJs(source, "document.title = 'Source retained'"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    TabView* view = SidebarTabViewFor(source);
++    return view && view->data().title == u"Source retained";
++  }));
++  controller->Close();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return !controller->is_showing() &&
++           model->GetActiveWebContents() == source;
++  }));
++}
++
++IN_PROC_BROWSER_TEST_F(PeekControllerBrowserTest,
+                        CyclingAndSourceRemovalReleaseBackdrop) {
+   ASSERT_TRUE(embedded_test_server()->Start());
+   const GURL url = embedded_test_server()->GetURL("/empty.html");
+   TabStripModel* const model = browser()->tab_strip_model();
+   content::WebContents* const source = model->GetActiveWebContents();
++  // Close the inactive source through the production tab-context command.
++  // Native beforeunload creation activates that source before Cancel arrives.
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
++  ASSERT_TRUE(content::ExecJs(source,
++                              "window.sourceState = 'source unsaved'; "
++                              "window.onbeforeunload = () => 'stay';"));
++  content::PrepContentsForBeforeUnloadTest(source);
++  PeekController* const source_close_controller =
++      BrowserView::GetBrowserViewForBrowser(browser())->peek_controller();
++  ASSERT_TRUE(source_close_controller->Show(PeekNavigationParams(url), source));
++  content::WebContents* const retained_preview =
++      source_close_controller->web_contents_for_testing();
++  ASSERT_TRUE(content::WaitForLoadStop(retained_preview));
++  ASSERT_TRUE(
++      content::ExecJs(retained_preview,
++                      "window.peekState = 'preview retained through Cancel'"));
++  const auto source_before_cancel = source->GetWeakPtr();
++  model->ExecuteContextMenuCommand(model->GetIndexOfWebContents(source),
++                                   TabStripModel::CommandCloseTab);
++  auto* const source_dialog = ui_test_utils::WaitForAppModalDialog();
++  ASSERT_TRUE(source_dialog->is_before_unload_dialog());
++  ASSERT_EQ(source, source_dialog->web_contents());
++  EXPECT_EQ(source, model->GetActiveWebContents());
++  EXPECT_EQ(retained_preview,
++            source_close_controller->web_contents_for_testing());
++  EXPECT_FALSE(source_close_controller->overlay_view_for_testing());
++  source_dialog->view()->CancelAppModalDialog();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return model->GetActiveWebContents() == retained_preview &&
++           source_close_controller->overlay_view_for_testing();
++  }));
++  ASSERT_TRUE(source_before_cancel);
++  EXPECT_TRUE(
++      source_close_controller->overlay_view_for_testing()->GetVisible());
++  EXPECT_TRUE(source->ShouldIgnoreInputEventsForTesting());
++  EXPECT_TRUE(tabs::TemporaryTab::IsTemporary(retained_preview));
++  EXPECT_EQ("source unsaved", content::EvalJs(source, "window.sourceState"));
++  EXPECT_EQ("preview retained through Cancel",
++            content::EvalJs(retained_preview, "window.peekState"));
++  EXPECT_EQ(2, model->count());
++  // The ordinary source's metadata subscriptions must survive Cancel too.
++  ASSERT_TRUE(
++      content::ExecJs(source, "document.title = 'Source still observed'"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    TabView* view = SidebarTabViewFor(source);
++    return view && view->data().title == u"Source still observed";
++  }));
++  ASSERT_TRUE(content::ExecJs(source, "window.onbeforeunload = null"));
++  source_close_controller->Close();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return model->count() == 1 && model->GetActiveWebContents() == source;
++  }));
++
+   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+       browser(), url, WindowOpenDisposition::NEW_BACKGROUND_TAB,
+       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+@@ -530,8 +662,9 @@ IN_PROC_BROWSER_TEST_F(PeekControllerBro
+                               "window.onbeforeunload = () => 'stay';"));
+   content::PrepContentsForBeforeUnloadTest(preview);
+   const auto source_weak = source->GetWeakPtr();
+-  model->CloseWebContentsAt(model->GetIndexOfWebContents(source),
+-                            TabCloseTypes::CLOSE_NONE);
++  // Exercise actual source destruction independently of a cancellable close.
++  // A retained dirty preview must remain reachable after its host is gone.
++  model->DetachAndDeleteWebContentsAt(model->GetIndexOfWebContents(source));
+   auto* const dialog = ui_test_utils::WaitForAppModalDialog();
+   ASSERT_TRUE(dialog->is_before_unload_dialog());
+   EXPECT_FALSE(source_weak);
+@@ -542,6 +675,42 @@ IN_PROC_BROWSER_TEST_F(PeekControllerBro
+   EXPECT_EQ("source gone", content::EvalJs(preview, "window.peekState"));
+   EXPECT_EQ(2, browser()->GetFeatures().live_tab_context()->GetTabCount());
+   ASSERT_TRUE(content::ExecJs(preview, "window.onbeforeunload = null"));
++
++  // A real bulk close owns the preview's pending unload, even though no
++  // accepted WillDetach notification has fired for that preview yet.
++  model->ActivateTabAt(model->GetIndexOfWebContents(other));
++  ASSERT_TRUE(controller->Show(PeekNavigationParams(url), other));
++  content::WebContents* const bulk_preview =
++      controller->web_contents_for_testing();
++  ASSERT_TRUE(content::WaitForLoadStop(bulk_preview));
++  ASSERT_TRUE(content::ExecJs(bulk_preview,
++                              "window.peekState = 'bulk retained'; "
++                              "window.onbeforeunload = () => 'stay';"));
++  content::PrepContentsForBeforeUnloadTest(bulk_preview);
++  const auto other_before_bulk = other->GetWeakPtr();
++  model->CloseAllTabs();
++  auto* const bulk_dialog = ui_test_utils::WaitForAppModalDialog();
++  ASSERT_TRUE(bulk_dialog->is_before_unload_dialog());
++  ASSERT_EQ(bulk_preview, bulk_dialog->web_contents());
++  EXPECT_FALSE(other_before_bulk);
++  EXPECT_FALSE(controller->overlay_view_for_testing());
++  bulk_dialog->view()->CancelAppModalDialog();
++  ASSERT_TRUE(base::test::RunUntil([&] { return !controller->is_showing(); }));
++  EXPECT_EQ(1, model->count());
++  EXPECT_EQ(bulk_preview, model->GetActiveWebContents());
++  EXPECT_FALSE(tabs::TemporaryTab::IsTemporary(bulk_preview));
++  EXPECT_EQ("bulk retained", content::EvalJs(bulk_preview, "window.peekState"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    TabView* view = SidebarTabViewFor(bulk_preview);
++    return view && view->GetVisible() && !view->data().is_temporary;
++  }));
++  ASSERT_TRUE(content::ExecJs(bulk_preview,
++                              "document.title = 'Bulk Cancel still observed'"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    TabView* view = SidebarTabViewFor(bulk_preview);
++    return view && view->data().title == u"Bulk Cancel still observed";
++  }));
++  ASSERT_TRUE(content::ExecJs(bulk_preview, "window.onbeforeunload = null"));
+ }
+ 
+ }  // namespace helium

@@ -1,0 +1,289 @@
+--- a/chrome/test/data/webui/settings/about_page_test.ts
++++ b/chrome/test/data/webui/settings/about_page_test.ts
+@@ -83,6 +83,16 @@ suite('AllBuilds', function() {
+   // <if expr="not is_chromeos">
+   const SPINNER_ICON: string = 'chrome://resources/images/throbber_small.svg';
+ 
++  function getUpdateStatusMessageElement(): HTMLElement|null {
++    return page.shadowRoot.querySelector<HTMLElement>(
++        '#updateStatusMessage');
++  }
++
++  function getDeprecationWarningElement(): HTMLElement|null {
++    return page.shadowRoot.querySelector<HTMLElement>(
++        '#deprecationWarning');
++  }
++
+   async function assertSpinnerVisible(visible: boolean) {
+     const img = page.shadowRoot.querySelector<HTMLImageElement>(
+         `img[src='${SPINNER_ICON}']`);
+@@ -191,30 +201,30 @@ suite('AllBuilds', function() {
+     await initNewPage();
+     const icon = page.shadowRoot.querySelector('cr-icon')!;
+     assertTrue(!!icon);
+-    assertTrue(!!page.$.updateStatusMessage);
+-    assertTrue(!!page.$.deprecationWarning);
+-    assertFalse(page.$.deprecationWarning.hidden);
++    assertTrue(!!getUpdateStatusMessageElement());
++    assertTrue(!!getDeprecationWarningElement());
++    assertFalse(getDeprecationWarningElement()!.hidden);
+ 
+     fireStatusChanged(UpdateStatus.CHECKING);
+     await microtasksFinished();
+     await assertSpinnerVisible(true);
+     assertEquals('', icon.getAttribute('icon'));
+-    assertFalse(page.$.deprecationWarning.hidden);
+-    assertFalse(page.$.updateStatusMessage.hidden);
++    assertFalse(getDeprecationWarningElement()!.hidden);
++    assertFalse(getUpdateStatusMessageElement()!.hidden);
+ 
+     fireStatusChanged(UpdateStatus.UPDATING);
+     await microtasksFinished();
+     await assertSpinnerVisible(true);
+     assertEquals('', icon.getAttribute('icon'));
+-    assertFalse(page.$.deprecationWarning.hidden);
+-    assertFalse(page.$.updateStatusMessage.hidden);
++    assertFalse(getDeprecationWarningElement()!.hidden);
++    assertFalse(getUpdateStatusMessageElement()!.hidden);
+ 
+     fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
+     await microtasksFinished();
+     await assertSpinnerVisible(false);
+     assertEquals('cr:check-circle', icon.icon);
+-    assertFalse(page.$.deprecationWarning.hidden);
+-    assertFalse(page.$.updateStatusMessage.hidden);
++    assertFalse(getDeprecationWarningElement()!.hidden);
++    assertFalse(getUpdateStatusMessageElement()!.hidden);
+   });
+ 
+   /**
+@@ -230,32 +240,32 @@ suite('AllBuilds', function() {
+     await initNewPage();
+     const icon = page.shadowRoot.querySelector('cr-icon')!;
+     assertTrue(!!icon);
+-    assertTrue(!!page.$.deprecationWarning);
+-    assertTrue(!!page.$.updateStatusMessage);
++    assertTrue(!!getDeprecationWarningElement());
++    assertTrue(!!getUpdateStatusMessageElement());
+ 
+-    assertFalse(page.$.deprecationWarning.hidden);
+-    assertTrue(page.$.updateStatusMessage.hidden);
++    assertFalse(getDeprecationWarningElement()!.hidden);
++    assertTrue(getUpdateStatusMessageElement()!.hidden);
+ 
+     fireStatusChanged(UpdateStatus.CHECKING);
+     await microtasksFinished();
+     await assertSpinnerVisible(false);
+     assertEquals('cr:error', icon.icon);
+-    assertFalse(page.$.deprecationWarning.hidden);
+-    assertTrue(page.$.updateStatusMessage.hidden);
++    assertFalse(getDeprecationWarningElement()!.hidden);
++    assertTrue(getUpdateStatusMessageElement()!.hidden);
+ 
+     fireStatusChanged(UpdateStatus.FAILED);
+     await microtasksFinished();
+     await assertSpinnerVisible(false);
+     assertEquals('cr:error', icon.icon);
+-    assertFalse(page.$.deprecationWarning.hidden);
+-    assertTrue(page.$.updateStatusMessage.hidden);
++    assertFalse(getDeprecationWarningElement()!.hidden);
++    assertTrue(getUpdateStatusMessageElement()!.hidden);
+ 
+     fireStatusChanged(UpdateStatus.UPDATED);
+     await microtasksFinished();
+     await assertSpinnerVisible(false);
+     assertEquals('cr:error', icon.icon);
+-    assertFalse(page.$.deprecationWarning.hidden);
+-    assertTrue(page.$.updateStatusMessage.hidden);
++    assertFalse(getDeprecationWarningElement()!.hidden);
++    assertTrue(getUpdateStatusMessageElement()!.hidden);
+   });
+ 
+   test('Relaunch', async function() {
+--- a/chrome/test/data/webui/settings/import_data_dialog_test.ts
++++ b/chrome/test/data/webui/settings/import_data_dialog_test.ts
+@@ -50,6 +50,7 @@ suite('ImportDataDialog', function() {
+       favorites: true,
+       history: true,
+       index: 0,
++      isArc: false,
+       name: 'Mozilla Firefox',
+       passwords: true,
+       profileName: '',
+@@ -60,6 +61,7 @@ suite('ImportDataDialog', function() {
+       favorites: true,
+       history: false,  // Emulate unsupported import option
+       index: 1,
++      isArc: false,
+       name: 'Mozilla Firefox',
+       passwords: true,
+       profileName: 'My profile',
+@@ -70,6 +72,7 @@ suite('ImportDataDialog', function() {
+       favorites: true,
+       history: false,
+       index: 2,
++      isArc: false,
+       name: 'Bookmarks HTML File',
+       passwords: false,
+       profileName: '',
+--- a/chrome/test/data/webui/settings/people_page_manage_profile_test.ts
++++ b/chrome/test/data/webui/settings/people_page_manage_profile_test.ts
+@@ -24,6 +24,9 @@ class TestManageProfileBrowserProxy exte
+   constructor() {
+     super([
+       'getAvailableIcons',
++      'setProfileIconToCustomAvatar',
++      'setCustomAvatarFromFile',
++      'clearCustomAvatar',
+       'setProfileIconToGaiaAvatar',
+       'setProfileIconToDefaultAvatar',
+       'setProfileName',
+@@ -44,7 +47,9 @@ class TestManageProfileBrowserProxy exte
+         url: 'fake-icon-1.png',
+         label: 'fake-icon-1',
+         index: 1,
++        isCustomAvatar: false,
+         isGaiaAvatar: false,
++        isPlaceholder: false,
+         selected: false,
+       },
+       {
+@@ -52,18 +57,34 @@ class TestManageProfileBrowserProxy exte
+         label: 'fake-icon-2',
+         index: 2,
+         selected: true,
++        isCustomAvatar: false,
+         isGaiaAvatar: false,
++        isPlaceholder: false,
+       },
+       {
+         url: 'gaia-icon.png',
+         label: 'gaia-icon',
+         index: 3,
++        isCustomAvatar: false,
+         isGaiaAvatar: true,
++        isPlaceholder: false,
+         selected: false,
+       },
+     ]);
+   }
+ 
++  setProfileIconToCustomAvatar() {
++    this.methodCalled('setProfileIconToCustomAvatar');
++  }
++
++  setCustomAvatarFromFile(dataUrl: string) {
++    this.methodCalled('setCustomAvatarFromFile', [dataUrl]);
++  }
++
++  clearCustomAvatar() {
++    this.methodCalled('clearCustomAvatar');
++  }
++
+   setProfileIconToGaiaAvatar() {
+     this.methodCalled('setProfileIconToGaiaAvatar');
+   }
+--- a/chrome/test/data/webui/settings/people_page_sync_controls_test.ts
++++ b/chrome/test/data/webui/settings/people_page_sync_controls_test.ts
+@@ -7,7 +7,6 @@ import 'chrome://settings/lazy_load.js';
+ 
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+-import type {SettingsSyncControlsElement} from 'chrome://settings/lazy_load.js';
+ import type {CrRadioButtonElement, CrToggleElement, SyncPrefs} from 'chrome://settings/settings.js';
+ import {loadTimeData, Router, resetRouterForTesting, SignedInState, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+ import {assertEquals, assertDeepEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+@@ -27,6 +26,9 @@ import {TestBatchUploadPromoProxy} from
+ 
+ // clang-format on
+ 
++type SettingsSyncControlsElement =
++    HTMLElementTagNameMap['settings-sync-controls'];
++
+ suite('SyncControlsTest', function() {
+   let syncControls: SettingsSyncControlsElement;
+   let browserProxy: TestSyncBrowserProxy;
+--- a/chrome/test/data/webui/settings/people_page_sync_page_interactive_test.ts
++++ b/chrome/test/data/webui/settings/people_page_sync_page_interactive_test.ts
+@@ -7,7 +7,7 @@ import 'chrome://settings/lazy_load.js';
+ 
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+-import type {CrInputElement, SettingsSyncPageElement} from 'chrome://settings/lazy_load.js';
++import type {CrInputElement} from 'chrome://settings/lazy_load.js';
+ import {Router, SignedInState, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+ import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+ 
+@@ -15,6 +15,9 @@ import {TestSyncBrowserProxy} from './te
+ 
+ // clang-format on
+ 
++type SettingsSyncPageElement =
++    HTMLElementTagNameMap['settings-sync-page'];
++
+ suite('sync-page-test', function() {
+   let syncPage: SettingsSyncPageElement;
+ 
+--- a/chrome/test/data/webui/settings/people_page_sync_page_test.ts
++++ b/chrome/test/data/webui/settings/people_page_sync_page_test.ts
+@@ -7,7 +7,7 @@ import 'chrome://settings/lazy_load.js';
+ 
+ import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+ import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+-import type {CrExpandButtonElement, CrInputElement, SettingsSyncEncryptionOptionsElement, SettingsSyncPageElement} from 'chrome://settings/lazy_load.js';
++import type {CrExpandButtonElement, CrInputElement, SettingsSyncEncryptionOptionsElement} from 'chrome://settings/lazy_load.js';
+ // <if expr="not is_chromeos">
+ import type {CrDialogElement} from 'chrome://settings/lazy_load.js';
+ // </if>
+@@ -30,6 +30,9 @@ import {TestSyncBrowserProxy} from './te
+ 
+ // clang-format on
+ 
++type SettingsSyncPageElement =
++    HTMLElementTagNameMap['settings-sync-page'];
++
+ suite('SyncSettings', function() {
+   let syncPage: SettingsSyncPageElement;
+   let browserProxy: TestSyncBrowserProxy;
+@@ -313,7 +316,7 @@ suite('SyncSettings', function() {
+     link.href = '#';
+     // Prevent the link from triggering a page navigation when tapped.
+     // Breaks the test in Vulcanized mode.
+-    link.addEventListener('click', e => e.preventDefault());
++    link.addEventListener('click', (e: Event) => e.preventDefault());
+     link.click();
+     assertTrue(encryptionCollapse.opened);
+   });
+--- a/chrome/test/data/webui/settings/system_page_test.ts
++++ b/chrome/test/data/webui/settings/system_page_test.ts
+@@ -35,7 +35,11 @@ const HARDWARE_ACCELERATION_AT_STARTUP:
+ class TestSystemPageBrowserProxy extends TestBrowserProxy implements
+     SystemPageBrowserProxy {
+   constructor() {
+-    super(['showProxySettings']);
++    super(['openKeyboardShortcutsSettings', 'showProxySettings']);
++  }
++
++  openKeyboardShortcutsSettings() {
++    this.methodCalled('openKeyboardShortcutsSettings');
+   }
+ 
+   showProxySettings() {
+--- a/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
++++ b/chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts
+@@ -142,6 +142,7 @@ export function createSampleSearchEngine
+         keyword: 'google.com',
+         name: 'Google',
+         shouldConfirmRemoval: false,
++        suggestionsUrl: 'https://search.foo.com/suggest?q=%s',
+         url: 'https://search.foo.com/search?p=%s',
+         urlLocked: false,
+       },
+@@ -174,6 +175,7 @@ export function createSampleOmniboxExten
+         keyword: 'oe',
+         name: 'Omnibox extension',
+         shouldConfirmRemoval: false,
++        suggestionsUrl: '',
+         url: 'chrome-extension://dummyextensionid/?q=%s',
+         urlLocked: false,
+       },

@@ -1,0 +1,17 @@
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -308,10 +308,12 @@
+   if (UsesFavoriteGridLayout() &&
+       collapse_state == tabs::VerticalTabStripCollapseState::kExpanded) {
+     const float min_rows = std::min(1.0f, static_cast<float>(num_children));
++    // The minimum is one grid row, regardless of how many Favorites share
++    // it. Adding a gap for the second tile makes the minimum taller than a
++    // single row's preferred height and steals space from ordinary tabs.
+     const int min_height =
+         base::ClampCeil(arcium::ScaleChromeDip(this, kFavoriteTileHeight) *
+-                        min_rows) +
+-        (num_children > 1 ? arcium::ScaleChromeDip(this, kTabPadding) : 0);
++                        min_rows);
+     return gfx::Size(arcium::ScaleChromeDip(this, kFavoriteTileMinWidth),
+                      min_height);
+   }

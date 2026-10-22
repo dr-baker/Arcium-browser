@@ -1,0 +1,167 @@
+# Requires arcium-pins, arcium-last-tab-recovery and arcium-shortcut-presets.
+# Keep native component fixtures explicit and use test WebUI for NTP semantics.
+--- a/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions_unittest.cc
++++ b/chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions_unittest.cc
+@@ -7,6 +7,7 @@
+ #include <string>
+ 
+ #include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_tab_actions.h"
+ #include "chrome/browser/ui/browser.h"
+@@ -14,8 +15,11 @@
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/webui_url_constants.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "content/public/test/scoped_web_ui_controller_factory_registration.h"
++#include "content/public/test/web_ui_browsertest_util.h"
+ 
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+@@ -55,6 +59,16 @@ class ArciumShortcutTabActionsBrowserTes
+  protected:
+   void SetUp() override {
+     BrowserWithTestWindowTest::SetUp();
++    // Keep both NTP origins and URL rewriting while using test controllers
++    // for this tab-model fixture. NTP controllers are owned by WebUIConfigMap.
++    new_tab_registration_ =
++        std::make_unique<content::ScopedWebUIConfigRegistration>(
++            std::make_unique<content::TestWebUIConfig>(
++                chrome::kChromeUINewTabHost));
++    new_tab_page_registration_ =
++        std::make_unique<content::ScopedWebUIConfigRegistration>(
++            std::make_unique<content::TestWebUIConfig>(
++                chrome::kChromeUINewTabPageHost));
+     service_ = helium::HeliumSpaceServiceFactory::GetInstance()
+                    ->SetTestingSubclassFactoryAndUse(
+                        profile(),
+@@ -74,6 +88,11 @@ class ArciumShortcutTabActionsBrowserTes
+         target->tab_strip_model()->GetActiveWebContents());
+   }
+ 
++  // Registrations outlive BrowserWithTestWindowTest::TearDown, including its
++  // tab close and pending-task cleanup. Each restores the production config.
++  std::unique_ptr<content::ScopedWebUIConfigRegistration> new_tab_registration_;
++  std::unique_ptr<content::ScopedWebUIConfigRegistration>
++      new_tab_page_registration_;
+   helium::HeliumSpaceService* service_ = nullptr;
+   helium::HeliumSpace* space_ = nullptr;
+ };
+@@ -105,6 +124,12 @@ TEST_F(ArciumShortcutTabActionsBrowserTe
+   std::unique_ptr<Browser> other_browser =
+       CreateBrowser(profile(), Browser::TYPE_NORMAL, /*hosted_app=*/false);
+   ASSERT_TRUE(other_browser);
++  // TestBrowserWindow does not complete the window-close callback. Close tabs
++  // before the owned Browser destructor so it notifies browser collections.
++  // Keep cleanup active for fatal assertion exits after tab creation as well.
++  base::ScopedClosureRunner close_other_browser_tabs(base::BindOnce(
++      [](Browser* browser) { browser->tab_strip_model()->CloseAllTabs(); },
++      other_browser.get()));
+   service_->SetSpaceForBrowser(other_browser.get(), other_space->id());
+   tabs::TabInterface* other_tab =
+       AddTabTo(other_browser.get(), "https://other.example.test/");
+--- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+@@ -35,6 +35,7 @@
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
++#include "chrome/browser/ui/helium/helium_favorites_and_pins.h"
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_close_types_data.h"
+@@ -49,6 +50,7 @@
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/webui_url_constants.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/prefs/pref_service.h"
+@@ -71,8 +73,10 @@
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "content/public/test/navigation_simulator.h"
++#include "content/public/test/scoped_web_ui_controller_factory_registration.h"
+ #include "content/public/test/test_renderer_host.h"
+ #include "content/public/test/web_contents_tester.h"
++#include "content/public/test/web_ui_browsertest_util.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/models/list_selection_model.h"
+@@ -459,7 +463,10 @@ class TabStripModelTest : public testing
+   TabStripModelTest& operator=(const TabStripModelTest&) = delete;
+ 
+   void SetUp() override {
+-    scoped_feature_list_.InitWithFeatures({features::kTabGroupsFocusing}, {});
++    // This browserless fixture exercises native model pinning. Durable Pins
++    // require a normal BrowserWindow and are covered by the product fixtures.
++    scoped_feature_list_.InitWithFeatures({features::kTabGroupsFocusing},
++                                          {helium::kHeliumFavoritesAndPins});
+ 
+     tabstrip_ = std::make_unique<TabStripModel>(delegate(), profile());
+     tabstrip()->AddObserver(observer());
+@@ -3983,6 +3990,14 @@ TEST_F(TabStripModelTest, NavigationForg
+ // end of the tab strip, do one search, and then close the tab to get back to
+ // where they were.
+ TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
++  // Keep both NTP origins and URL rewriting while testing opener and
++  // selection behavior. Scoped configs replace the actual NTP controller owner
++  // and remain installed until CloseAllTabs below has destroyed the contents.
++  content::ScopedWebUIConfigRegistration new_tab_registration(
++      std::make_unique<content::TestWebUIConfig>(chrome::kChromeUINewTabHost));
++  content::ScopedWebUIConfigRegistration new_tab_page_registration(
++      std::make_unique<content::TestWebUIConfig>(chrome::kChromeUINewTabPageHost));
++
+   // Open a tab and several tabs from it, then select one of the tabs that was
+   // opened.
+   tabstrip()->AddWebContents(CreateWebContents(), -1,
+@@ -6137,16 +6152,30 @@ TEST_F(TabStripModelTest, DiscontinuousN
+ }
+ 
+ TEST_F(TabStripModelTest, CreateGroupSetsVisualData) {
+-  tab_groups::ColorLabelMap all_colors = tab_groups::GetTabGroupColorLabelMap();
+-  PrepareTabs(tabstrip(), all_colors.size() + 1);
++  base::test::ScopedFeatureList feature_list;
++  feature_list.InitAndEnableFeature(features::kTabGroupColorRefresh);
++  constexpr std::array expected_colors = {
++      tab_groups::TabGroupColorId::kBlue,
++      tab_groups::TabGroupColorId::kPurple,
++      tab_groups::TabGroupColorId::kPink,
++      tab_groups::TabGroupColorId::kRed,
++      tab_groups::TabGroupColorId::kOrange,
++      tab_groups::TabGroupColorId::kYellow,
++      tab_groups::TabGroupColorId::kGreen,
++      tab_groups::TabGroupColorId::kCyan,
++      tab_groups::TabGroupColorId::kGrey,
++  };
++  ASSERT_EQ(expected_colors.size(),
++            tab_groups::GetTabGroupColorLabelMap().size());
++  PrepareTabs(tabstrip(), expected_colors.size() + 1);
+ 
+-  // Expect groups to cycle through the available color set.
++  // Expect groups to cycle through the designed refreshed palette.
+   int index = 0;
+-  for (const auto& color_pair : all_colors) {
++  for (const auto color : expected_colors) {
+     const tab_groups::TabGroupId group = tabstrip()->AddToNewGroup({index});
+     EXPECT_EQ(
+         tabstrip()->group_model()->GetTabGroup(group)->visual_data()->color(),
+-        color_pair.first);
++        color);
+     ++index;
+   }
+ 
+@@ -6154,7 +6183,7 @@ TEST_F(TabStripModelTest, CreateGroupSet
+   const tab_groups::TabGroupId group = tabstrip()->AddToNewGroup({index});
+   EXPECT_EQ(
+       tabstrip()->group_model()->GetTabGroup(group)->visual_data()->color(),
+-      all_colors.begin()->first);
++      expected_colors.front());
+ 
+   tabstrip()->CloseAllTabs();
+ }

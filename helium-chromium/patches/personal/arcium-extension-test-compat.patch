@@ -1,0 +1,340 @@
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -2012,7 +2012,6 @@
+     "initial_external_extension_loader_unittest.cc",
+     "install_verifier_unittest.cc",
+     "installed_loader_unittest.cc",
+-    "omaha_attributes_handler_unittest.cc",
+     "pack_extension_unittest.cc",
+     "permission_message_combinations_unittest.cc",
+     "permission_messages_unittest.cc",
+@@ -2153,17 +2152,22 @@
+       "api/socket/udp_socket_unittest.cc",
+       "api/sockets_tcp_server/sockets_tcp_server_api_unittest.cc",
+       "app_tab_helper_unittest.cc",
+-      "blocklist_states_interaction_unittest.cc",
+       "chrome_app_icon_unittest.cc",
+       "chrome_app_sorting_unittest.cc",
+       "extension_error_ui_default_unittest.cc",
+       "manifest_v2_handler_unittest.cc",
+       "menu_manager_unittest.cc",
+       "mv2_deprecation_impact_checker_unittest.cc",
+-      "safe_browsing_verdict_handler_unittest.cc",
+       "update_install_gate_unittest.cc",
+       "warning_badge_service_unittest.cc",
+     ]
++
++    if (safe_browsing_mode != 0) {
++      sources += [
++        "blocklist_states_interaction_unittest.cc",
++        "safe_browsing_verdict_handler_unittest.cc",
++      ]
++    }
+ 
+     deps += [
+       "//chrome/browser/affiliations",
+@@ -2652,8 +2656,6 @@
+       "//chrome/browser/controlled_frame/scoped_test_driver_proxy.cc",
+       "//chrome/browser/controlled_frame/scoped_test_driver_proxy.h",
+       "//chrome/browser/notifications/notification_permission_context_apitest.cc",
+-      "//chrome/browser/page_load_metrics/observers/serp_page_load_metrics_observer_browsertest.cc",
+-      "//chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service_browsertest.cc",
+       "//chrome/browser/ui/views/autofill/popup/custom_cursor_suppressor_browsertest.cc",
+       "//chrome/browser/ui/views/user_education/recent_session_observer_impl_browsertest.cc",
+       "//chrome/browser/web_applications/isolated_web_apps/window_management/isolated_web_apps_close_window_browsertest.cc",
+@@ -2775,6 +2777,13 @@
+       ]
+     }
+ 
++    if (safe_browsing_mode != 0) {
++      sources += [
++        "//chrome/browser/page_load_metrics/observers/serp_page_load_metrics_observer_browsertest.cc",
++        "//chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service_browsertest.cc",
++      ]
++    }
++
+     sources += [
+       # TODO(crbug.com/424013924): Move
+       # settings_overridden_dialog_browsertest.cc to
+--- a/chrome/browser/extensions/api/webstore_private/webstore_private_apitest.cc
++++ b/chrome/browser/extensions/api/webstore_private/webstore_private_apitest.cc
+@@ -38,6 +38,7 @@
+ #include "components/supervised_user/core/common/features.h"
+ #include "components/supervised_user/core/common/pref_names.h"
+ #include "components/supervised_user/core/common/supervised_user_constants.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "content/public/browser/gpu_data_manager.h"
+ #include "content/public/test/browser_test.h"
+ #include "extensions/browser/allowlist_state.h"
+@@ -1215,6 +1216,7 @@
+   base::test::ScopedFeatureList feature_list_;
+ };
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiAllowlistEnforcementTest,
+                        EnhancedSafeBrowsingNotAllowlisted) {
+   safe_browsing::SetSafeBrowsingState(
+@@ -1252,6 +1254,7 @@
+   EXPECT_EQ(ALLOWLIST_UNDEFINED,
+             GetAllowlist()->GetExtensionAllowlistState(kExtensionId));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ class WebstorePrivateEnterprisePromotionApiTest
+--- a/chrome/browser/extensions/extension_allowlist_unittest.cc
++++ b/chrome/browser/extensions/extension_allowlist_unittest.cc
+@@ -10,6 +10,7 @@
+ #include "chrome/browser/extensions/extension_service_test_base.h"
+ #include "chrome/browser/policy/policy_test_utils.h"
+ #include "chrome/test/base/testing_profile.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "extensions/browser/allowlist_state.h"
+@@ -18,7 +19,9 @@
+ #include "extensions/browser/disable_reason.h"
+ #include "extensions/browser/extension_registrar.h"
+ #include "extensions/browser/extension_registry.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "extensions/browser/test_blocklist.h"
++#endif
+ #include "extensions/common/extension_builder.h"
+ #include "extensions/common/extension_features.h"
+ #include "extensions/common/extension_id.h"
+@@ -350,6 +353,7 @@
+   EXPECT_TRUE(IsEnabled(kExtensionId2));
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(ExtensionAllowlistUnitTest, ExtensionsNotAllowlistedThenBlocklisted) {
+   // Created with 3 installed extensions.
+   CreateExtensionService(/*enhanced_protection_enabled=*/true);
+@@ -470,6 +474,8 @@
+       testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_ALLOWLISTED));
+   EXPECT_TRUE(IsDisabled(kExtensionId1));
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(ExtensionAllowlistUnitTest, MissingAttributeAreIgnored) {
+   // Created with 3 installed extensions.
+--- a/chrome/browser/extensions/extension_service_unittest.cc
++++ b/chrome/browser/extensions/extension_service_unittest.cc
+@@ -47,6 +47,7 @@
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
++#include "chrome/browser/extensions/blocklist_factory.h"
+ #include "chrome/browser/extensions/chrome_extension_cookies.h"
+ #include "chrome/browser/extensions/chrome_test_extension_loader.h"
+ #include "chrome/browser/extensions/chrome_zipfile_installer.h"
+@@ -118,7 +119,9 @@
+ #include "extensions/browser/extension_util.h"
+ #include "extensions/browser/external_install_info.h"
+ #include "extensions/browser/external_provider_interface.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "extensions/browser/fake_safe_browsing_database_manager.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "extensions/browser/install_flag.h"
+ #include "extensions/browser/load_error_reporter.h"
+ #include "extensions/browser/managed_installation_mode.h"
+@@ -126,11 +129,13 @@
+ #include "extensions/browser/mock_external_provider.h"
+ #include "extensions/browser/pending_extension_info.h"
+ #include "extensions/browser/pending_extension_manager.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#include "extensions/browser/scoped_database_manager_for_test.h"
++#include "extensions/browser/test_blocklist.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "extensions/browser/permissions/permissions_test_util.h"
+ #include "extensions/browser/permissions/permissions_updater.h"
+ #include "extensions/browser/pref_names.h"
+-#include "extensions/browser/scoped_database_manager_for_test.h"
+-#include "extensions/browser/test_blocklist.h"
+ #include "extensions/browser/test_extension_registry_observer.h"
+ #include "extensions/browser/test_management_policy.h"
+ #include "extensions/browser/uninstall_reason.h"
+@@ -196,7 +201,8 @@
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
+ // The blocklist tests rely on the safe-browsing database.
+-#if BUILDFLAG(SAFE_BROWSING_DB_LOCAL)
++#if BUILDFLAG(SAFE_BROWSING_DB_LOCAL) && \
++    BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #define ENABLE_BLOCKLIST_TESTS
+ #endif
+ 
+@@ -5070,8 +5076,22 @@
+   EXPECT_EQ(0u, registry()->blocklisted_extensions().size());
+ }
+ 
++#if !BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++TEST_F(ExtensionServiceTest,
++       SafeBrowsingUnavailableBlocklistQueryReturnsNotBlocklisted) {
++  InitializeEmptyExtensionService();
++  service()->Init();
++
++  base::test::TestFuture<BlocklistState> result;
++  BlocklistFactory::GetForBrowserContext(profile())
++      ->IsBlocklisted(kGood0, result.GetCallback());
++  EXPECT_EQ(NOT_BLOCKLISTED, result.Get());
++}
++#endif  // !BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+ // Omaha updates are tested directly in OmahaAttributesHandlerUnitTest.
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(ExtensionServiceTest, CanAddDisableReasonToBlocklistedExtension) {
+   InitializeGoodInstalledExtensionService();
+   TestBlocklist blocklist;
+@@ -5115,6 +5135,7 @@
+   EXPECT_TRUE(
+       prefs()->HasDisableReason(kGood1, disable_reason::DISABLE_USER_ACTION));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Tests the Extension Telemetry service verdict to remotely disable an
+ // extension for malware.
+--- a/chrome/browser/extensions/sync/extension_sync_service_unittest.cc
++++ b/chrome/browser/extensions/sync/extension_sync_service_unittest.cc
+@@ -40,6 +40,7 @@
+ #include "chrome/common/extensions/sync_helper.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "components/crx_file/id_util.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/signin/public/base/signin_pref_names.h"
+ #include "components/signin/public/identity_manager/identity_test_environment.h"
+ #include "components/sync/base/features.h"
+@@ -61,7 +62,9 @@
+ #include "extensions/browser/extension_util.h"
+ #include "extensions/browser/management_policy.h"
+ #include "extensions/browser/pending_extension_manager.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "extensions/browser/test_blocklist.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/extension_builder.h"
+ #include "extensions/common/extension_urls.h"
+@@ -2059,6 +2062,7 @@
+   EXPECT_TRUE(apps_processor.data().empty());
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ class BlocklistedExtensionSyncServiceTest : public ExtensionSyncServiceTest {
+  public:
+   BlocklistedExtensionSyncServiceTest() = default;
+@@ -2199,6 +2203,8 @@
+       ExtensionPrefs::Get(profile())->GetDisableReasons(extension_id).empty());
+   EXPECT_TRUE(processor()->changes().empty());
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Users should not be able to sign into transport mode on ChromeOS.
+ #if !BUILDFLAG(IS_CHROMEOS)
+--- a/chrome/browser/ui/global_error/global_error_browsertest.cc
++++ b/chrome/browser/ui/global_error/global_error_browsertest.cc
+@@ -31,6 +31,7 @@
+ #include "chrome/common/chrome_paths.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/crx_file/crx_verifier.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/test/browser_test.h"
+@@ -42,7 +43,10 @@
+ #include "extensions/browser/extension_system.h"
+ #include "extensions/browser/mock_external_provider.h"
+ #include "extensions/browser/sandboxed_unpacker.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++#include "extensions/browser/blocklist.h"
+ #include "extensions/browser/test_blocklist.h"
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "extensions/common/api/extension_action/action_info.h"
+ #include "extensions/common/extension_builder.h"
+ #include "extensions/common/feature_switch.h"
+@@ -126,8 +130,10 @@
+ 
+ void GlobalErrorBubbleTest::ShowUi(const std::string& name) {
+   Profile* profile = browser()->profile();
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   extensions::ExtensionRegistry* extension_registry =
+       extensions::ExtensionRegistry::Get(profile);
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   extensions::ExtensionBuilder builder("Browser Action");
+   builder.SetAction(extensions::ActionInfo::Type::kBrowser);
+@@ -159,6 +165,7 @@
+     extensions::AddExtensionDisabledError(profile, test_extension.get(), true);
+     waiter.Wait();
+     ShowPendingError(browser());
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   } else if (name == "ExtensionGlobalError") {
+     extensions::TestBlocklist test_blocklist(
+         extensions::BlocklistFactory::GetForBrowserContext(profile));
+@@ -189,6 +196,7 @@
+     // not persistent, so events from the OS can also cause the bubble to close
+     // in the following call.
+     base::RunLoop().RunUntilIdle();
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   } else if (name == "ExternalInstallBubbleAlert") {
+     // To trigger a bubble alert (rather than a menu alert), the extension must
+     // come from the webstore, which needs the update to come from a signed crx.
+@@ -236,10 +244,12 @@
+ // This shows a non-persistent dialog during a RunLoop::RunUntilIdle(), so it's
+ // not possible to guarantee that events to dismiss the dialog are not processed
+ // as well. Disable by default to prevent flakiness in browser_tests.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(GlobalErrorBubbleTest,
+                        DISABLED_InvokeUi_ExtensionGlobalError) {
+   ShowAndVerifyUi();
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(GlobalErrorBubbleTest,
+                        InvokeUi_ExternalInstallBubbleAlert) {
+--- a/extensions/browser/BUILD.gn
++++ b/extensions/browser/BUILD.gn
+@@ -966,8 +966,6 @@
+     "script_result_queue.h",
+     "service_worker/service_worker_test_utils.cc",
+     "service_worker/service_worker_test_utils.h",
+-    "test_blocklist.cc",
+-    "test_blocklist.h",
+     "test_blocklist_state_fetcher.cc",
+     "test_blocklist_state_fetcher.h",
+     "test_event_router_observer.cc",
+@@ -981,6 +979,13 @@
+     "updater/extension_downloader_test_helper.cc",
+     "updater/extension_downloader_test_helper.h",
+   ]
++
++  if (safe_browsing_mode == 1 || safe_browsing_mode == 2) {
++    sources += [
++      "test_blocklist.cc",
++      "test_blocklist.h",
++    ]
++  }
+ 
+   deps = [
+     "//base",
+@@ -1081,7 +1086,6 @@
+     "api/web_request/web_request_info_unittest.cc",
+     "api/web_request/web_request_permissions_unittest.cc",
+     "api/web_request/web_request_time_tracker_unittest.cc",
+-    "blocklist_check_unittest.cc",
+     "blocklist_extension_prefs_unittest.cc",
+     "blocklist_state_fetcher_unittest.cc",
+     "browser_frame_context_data_unittest.cc",
+@@ -1283,6 +1287,10 @@
+     ]
+   }
+ 
++  if (safe_browsing_mode == 1 || safe_browsing_mode == 2) {
++    sources += [ "blocklist_check_unittest.cc" ]
++  }
++
+   if (safe_browsing_mode == 1) {
+     sources += [ "../browser/blocklist_unittest.cc" ]
+     deps +=

@@ -1,0 +1,442 @@
+--- a/chrome/browser/download/chrome_download_manager_delegate_unittest.cc
++++ b/chrome/browser/download/chrome_download_manager_delegate_unittest.cc
+@@ -666,6 +666,7 @@
+   }
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(ChromeDownloadManagerDelegateTest, DragAndDropDangerous) {
+ #if BUILDFLAG(ENABLE_PLUGINS)
+   content::PluginService::GetInstance()->Init();
+@@ -693,6 +694,7 @@
+   EXPECT_EQ(DownloadFileType::DANGEROUS,
+             DownloadItemModel(download_item.get()).GetDangerLevel());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(ChromeDownloadManagerDelegateTest, BlockedByPolicy) {
+   const GURL kUrl("http://example.com/foo");
+--- a/chrome/browser/download/download_browsertest.cc
++++ b/chrome/browser/download/download_browsertest.cc
+@@ -3373,6 +3373,7 @@
+ 
+ // Test that we show a dangerous downloads warning for a dangerous file
+ // downloaded through a blob: URL.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadDangerousBlobData) {
+   safe_browsing::FileTypePoliciesTestOverlay scoped_dangerous =
+       safe_browsing::ScopedMarkAllFilesDangerousForTesting();
+@@ -3399,6 +3400,7 @@
+   EXPECT_EQ(1u, observer->NumDownloadsSeenInState(DownloadItem::COMPLETE));
+   EXPECT_EQ(1u, observer->NumDangerousDownloadsSeen());
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ IN_PROC_BROWSER_TEST_F(DownloadTest, OverrideLocalFileUrlAsNotDangerous) {
+   // We must override the mime type logic to a consistent, platform-independent
+--- a/chrome/browser/download/download_prefs_unittest.cc
++++ b/chrome/browser/download/download_prefs_unittest.cc
+@@ -10,6 +10,7 @@
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "build/build_config.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "chrome/browser/download/download_prompt_status.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/pref_names.h"
+@@ -45,10 +46,13 @@
+ #include "chrome/browser/flags/android/chrome_feature_list.h"
+ #endif
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ using safe_browsing::FileTypePolicies;
++#endif
+ 
+ namespace {
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST(DownloadPrefsTest, Prerequisites) {
+   // Most of the tests below are based on the assumption that .swf files are not
+   // allowed to open automatically, and that .txt files are allowed. If this
+@@ -58,6 +62,7 @@
+   ASSERT_TRUE(FileTypePolicies::GetInstance()->IsAllowedToOpenAutomatically(
+       base::FilePath(FILE_PATH_LITERAL("a.txt"))));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // Verifies prefs are registered correctly.
+ TEST(DownloadPrefsTest, RegisterPrefs) {
+@@ -79,6 +84,7 @@
+ #endif  // BUILDFLAG(IS_ANDROID)
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST(DownloadPrefsTest, NoAutoOpenByUserForDisallowedFileTypes) {
+   const base::FilePath kDangerousFilePath(FILE_PATH_LITERAL("/b/very-bad.swf"));
+   const GURL kURL("http://basic.com");
+@@ -90,6 +96,21 @@
+   EXPECT_FALSE(prefs.EnableAutoOpenByUserBasedOnExtension(kDangerousFilePath));
+   EXPECT_FALSE(prefs.IsAutoOpenEnabled(kURL, kDangerousFilePath));
+ }
++#else
++TEST(DownloadPrefsTest, AutoOpenByUserDoesNotHaveSafeBrowsingFileTypePolicy) {
++  const base::FilePath kFilePath(FILE_PATH_LITERAL("/b/very-bad.swf"));
++  const GURL kURL("http://basic.com");
++
++  content::BrowserTaskEnvironment task_environment_;
++  TestingProfile profile;
++  DownloadPrefs prefs(&profile);
++
++  // Builds without Safe Browsing do not have the file-type allowlist that
++  // filters user auto-open preferences.
++  EXPECT_TRUE(prefs.EnableAutoOpenByUserBasedOnExtension(kFilePath));
++  EXPECT_TRUE(prefs.IsAutoOpenEnabled(kURL, kFilePath));
++}
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST(DownloadPrefsTest, NoAutoOpenByUserForFilesWithNoExtension) {
+   const base::FilePath kFileWithNoExtension(FILE_PATH_LITERAL("abcd"));
+@@ -120,7 +141,7 @@
+   EXPECT_TRUE(prefs.IsAutoOpenEnabled(kURL, kAnotherSafeFilePath));
+ }
+ 
+-TEST(DownloadPrefsTest, AutoOpenPrefSkipsDangerousFileTypesInPrefs) {
++TEST(DownloadPrefsTest, AutoOpenPreferencesRespectFileTypePolicy) {
+   const base::FilePath kDangerousFilePath(FILE_PATH_LITERAL("/b/very-bad.swf"));
+   const base::FilePath kSafeFilePath(
+       FILE_PATH_LITERAL("/good/nothing-wrong.txt"));
+@@ -132,7 +153,11 @@
+   profile.GetPrefs()->SetString(prefs::kDownloadExtensionsToOpen, "swf:txt");
+   DownloadPrefs prefs(&profile);
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(prefs.IsAutoOpenEnabled(kURL, kDangerousFilePath));
++#else
++  EXPECT_TRUE(prefs.IsAutoOpenEnabled(kURL, kDangerousFilePath));
++#endif
+   EXPECT_TRUE(prefs.IsAutoOpenEnabled(kURL, kSafeFilePath));
+ }
+ 
+@@ -147,20 +172,31 @@
+   prefs.DisableAutoOpenByUserBasedOnExtension(
+       base::FilePath(FILE_PATH_LITERAL("x.baz")));
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   EXPECT_FALSE(prefs.IsAutoOpenEnabled(
+       kURL, base::FilePath(FILE_PATH_LITERAL("x.swf"))));
++#else
++  EXPECT_TRUE(prefs.IsAutoOpenEnabled(
++      kURL, base::FilePath(FILE_PATH_LITERAL("x.swf"))));
++#endif
+   EXPECT_TRUE(prefs.IsAutoOpenEnabled(
+       kURL, base::FilePath(FILE_PATH_LITERAL("x.txt"))));
+   EXPECT_FALSE(prefs.IsAutoOpenEnabled(
+       kURL, base::FilePath(FILE_PATH_LITERAL("x.foo"))));
+ 
+-  // .swf is skipped because it's not an allowed auto-open file type.
+   // The empty entry and .foo are skipped because they are malformed.
+   // "baz" is removed by the DisableAutoOpenByUserBasedOnExtension() call.
+-  // The only entry that should be remaining is 'txt'.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++  // Safe Browsing's allowlist also removes .swf.
+   EXPECT_STREQ(
+       "txt",
+       profile.GetPrefs()->GetString(prefs::kDownloadExtensionsToOpen).c_str());
++#else
++  // Without Safe Browsing's allowlist, both recognized extensions remain.
++  EXPECT_STREQ(
++      "swf:txt",
++      profile.GetPrefs()->GetString(prefs::kDownloadExtensionsToOpen).c_str());
++#endif
+ }
+ 
+ TEST(DownloadPrefsTest, AutoOpenCheckIsCaseInsensitive) {
+--- a/chrome/browser/download/download_target_determiner_unittest.cc
++++ b/chrome/browser/download/download_target_determiner_unittest.cc
+@@ -46,8 +46,11 @@
+ #include "components/history/core/browser/history_types.h"
+ #include "components/policy/core/common/policy_pref_names.h"
+ #include "components/prefs/pref_service.h"
++#include "components/safe_browsing/buildflags.h"
+ #include "components/safe_browsing/content/common/file_type_policies.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "components/safe_browsing/content/common/file_type_policies_test_util.h"
++#endif
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "components/user_manager/scoped_user_manager.h"
+ #include "content/public/browser/download_item_utils.h"
+@@ -99,7 +102,9 @@
+ using ::testing::WithArg;
+ using ConflictAction = DownloadPathReservationTracker::FilenameConflictAction;
+ using safe_browsing::DownloadFileType;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ using safe_browsing::FileTypePolicies;
++#endif
+ 
+ namespace {
+ 
+@@ -401,14 +406,18 @@
+   }
+ 
+  private:
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void SetUpFileTypePolicies();
++#endif
+ 
+   base::FilePath test_download_dir_;
+   std::unique_ptr<DownloadPrefs> download_prefs_;
+   ::testing::NiceMock<MockDownloadTargetDeterminerDelegate> delegate_;
+   NullWebContentsDelegate web_contents_delegate_;
+   base::FilePath test_virtual_dir_;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   safe_browsing::FileTypePoliciesTestOverlay file_type_configuration_;
++#endif
+ };
+ 
+ void DownloadTargetDeterminerTest::SetUp() {
+@@ -423,7 +432,9 @@
+   web_contents()->SetDelegate(&web_contents_delegate_);
+   test_virtual_dir_ = test_download_dir().Append(FILE_PATH_LITERAL("virtual"));
+   delegate_.SetupDefaults();
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   SetUpFileTypePolicies();
++#endif
+ #if BUILDFLAG(IS_ANDROID)
+   profile()->GetTestingPrefService()->SetInteger(
+       prefs::kPromptForDownloadAndroid,
+@@ -612,6 +623,7 @@
+   }
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ void DownloadTargetDeterminerTest::SetUpFileTypePolicies() {
+   std::unique_ptr<safe_browsing::DownloadFileTypeConfig> fake_file_type_config =
+       std::make_unique<safe_browsing::DownloadFileTypeConfig>();
+@@ -638,6 +650,8 @@
+ 
+   file_type_configuration_.SwapConfig(fake_file_type_config);
+ }
++
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ // static
+ void MockDownloadTargetDeterminerDelegate::NullPromptUser(
+@@ -693,6 +707,7 @@
+ 
+        EXPECT_CRDOWNLOAD},
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       {// Automatic Dangerous
+        AUTOMATIC, download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE,
+        DownloadFileType::ALLOW_ON_USER_GESTURE,
+@@ -702,6 +717,7 @@
+        DownloadItem::TARGET_DISPOSITION_OVERWRITE,
+ 
+        EXPECT_UNCONFIRMED},
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+       {// Forced Safe
+        FORCED, download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+@@ -714,12 +730,14 @@
+        EXPECT_LOCAL_PATH},
+   };
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // The test assumes that .kindabad files have a danger level of
+   // ALLOW_ON_USER_GESTURE.
+   ASSERT_EQ(
+       DownloadFileType::ALLOW_ON_USER_GESTURE,
+       safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
+           base::FilePath(FILE_PATH_LITERAL("foo.kindabad")), GURL{}, nullptr));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   RunTestCasesWithActiveItem(kBasicTestCases);
+ }
+ 
+@@ -810,6 +828,7 @@
+ 
+ // The SafeBrowsing check is performed early. Make sure that a download item
+ // that has been marked as MAYBE_DANGEROUS_CONTENT behaves correctly.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(DownloadTargetDeterminerTest, MaybeDangerousContent) {
+   const DownloadTestCase kSafeBrowsingTestCases[] = {
+       {// 0: Automatic Maybe dangerous content
+@@ -863,7 +882,9 @@
+           download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT)));
+   RunTestCasesWithActiveItem(kSafeBrowsingTestCases);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(DownloadTargetDeterminerTest,
+        MaybeDangerousContent_DownloadRestrictions) {
+   // Setting the "DownloadRestrictions" policy to 1 or 2 should result in the
+@@ -929,6 +950,8 @@
+ }
+ 
+ // Test whether the last saved directory is used for 'Save As' downloads.
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+ TEST_F(DownloadTargetDeterminerTest, LastSavePath) {
+   const DownloadTestCase kLastSavePathTestCasesPre[] = {
+       {// 0: If the last save path is empty, then the default download directory
+@@ -1386,6 +1409,7 @@
+ // Downloads that have a danger level of ALLOW_ON_USER_GESTURE should be marked
+ // as safe depending on whether there was a user gesture associated with the
+ // download and whether the referrer was visited prior to today.
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(DownloadTargetDeterminerTest, VisitedReferrer) {
+   const DownloadTestCase kVisitedReferrerCases[] = {
+       // http://visited.example.com/ is added to the history as a visit that
+@@ -1452,7 +1476,9 @@
+ 
+   RunTestCasesWithActiveItem(kVisitedReferrerCases);
+ }
+-
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(DownloadTargetDeterminerTest, TransitionType) {
+   const DownloadTestCase kSafeFile = {
+       AUTOMATIC,
+@@ -1579,6 +1605,8 @@
+ 
+ // These test cases are run with "Prompt for download" user preference set to
+ // true.
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
+ TEST_F(DownloadTargetDeterminerTest, PromptAlways_SafeAutomatic) {
+   const DownloadTestCase kSafeAutomatic = {
+       // 0: Safe Automatic - Should prompt because of "Prompt for download"
+@@ -2188,6 +2216,7 @@
+ 
+        EXPECT_CRDOWNLOAD},
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       {// 2: Automatic Dangerous: Initial path is ignored since the user hasn't
+        // been prompted before.
+        AUTOMATIC, download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE,
+@@ -2198,8 +2227,9 @@
+        DownloadItem::TARGET_DISPOSITION_OVERWRITE,
+ 
+        EXPECT_UNCONFIRMED},
+-
+-      {// 3: Forced Safe: Initial path is ignored due to the forced path.
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++      {// Forced Safe: Initial path is ignored due to the forced path.
+        FORCED, download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+        DownloadFileType::NOT_DANGEROUS, "http://example.com/foo.txt", "",
+        FILE_PATH_LITERAL("forced-foo.txt"),
+@@ -2210,12 +2240,14 @@
+        EXPECT_LOCAL_PATH},
+   });
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // The test assumes that .kindabad files have a danger level of
+   // ALLOW_ON_USER_GESTURE.
+   ASSERT_EQ(
+       DownloadFileType::ALLOW_ON_USER_GESTURE,
+       safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
+           base::FilePath(FILE_PATH_LITERAL("foo.kindabad")), GURL{}, nullptr));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   for (size_t i = 0; i < std::size(kResumedTestCases); ++i) {
+     SCOPED_TRACE(testing::Message() << "Running test case " << i);
+     const DownloadTestCase& test_case = kResumedTestCases[i];
+@@ -2305,6 +2337,7 @@
+ 
+        EXPECT_CRDOWNLOAD},
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       {
+           // 2: Automatic Dangerous
+           AUTOMATIC,
+@@ -2332,12 +2365,15 @@
+           DownloadItem::TARGET_DISPOSITION_PROMPT,
+           EXPECT_CRDOWNLOAD,
+       },
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   });
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   ASSERT_EQ(
+       DownloadFileType::ALLOW_ON_USER_GESTURE,
+       safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
+           base::FilePath(FILE_PATH_LITERAL("foo.kindabad")), GURL{}, nullptr));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   for (size_t i = 0; i < std::size(kResumedTestCases); ++i) {
+     SCOPED_TRACE(testing::Message() << "Running test case " << i);
+     download_prefs()->SetSaveFilePath(test_download_dir());
+@@ -2403,6 +2439,7 @@
+        FILE_PATH_LITERAL("foo.txt.crdownload"),
+        FILE_PATH_LITERAL("some_path/bar.txt.crdownload")},
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+       {{// 2: Automatic Dangerous
+         AUTOMATIC, download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE,
+         DownloadFileType::ALLOW_ON_USER_GESTURE,
+@@ -2430,8 +2467,9 @@
+        // should be generated for this case since the initial intermediate path
+        // is in the wrong directory.
+        FILE_PATH_LITERAL("")},
+-
+-      {{// 3: Forced Safe: Initial path is ignored due to the forced path.
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
++
++      {{// Forced Safe: Initial path is ignored due to the forced path.
+         FORCED, download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+         DownloadFileType::NOT_DANGEROUS, "http://example.com/foo.txt", "",
+         FILE_PATH_LITERAL("forced-foo.txt"),
+@@ -2444,12 +2482,14 @@
+        FILE_PATH_LITERAL("forced-foo.txt")},
+   });
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   // The test assumes that .kindabad files have a danger level of
+   // ALLOW_ON_USER_GESTURE.
+   ASSERT_EQ(
+       DownloadFileType::ALLOW_ON_USER_GESTURE,
+       safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
+           base::FilePath(FILE_PATH_LITERAL("foo.kindabad")), GURL{}, nullptr));
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+   for (size_t i = 0; i < std::size(kIntermediateNameTestCases); ++i) {
+     SCOPED_TRACE(testing::Message() << "Running test case " << i);
+@@ -2477,6 +2517,7 @@
+ }
+ 
+ // Test MIME type determination based on the target filename.
++
+ TEST_F(DownloadTargetDeterminerTest, MIMETypeDetermination) {
+   // All test cases run with GetPathInDownloadDir(kInitialPath) as the initial
+   // path.
+--- a/chrome/browser/download/download_warning_desktop_hats_utils_unittest.cc
++++ b/chrome/browser/download/download_warning_desktop_hats_utils_unittest.cc
+@@ -212,6 +212,7 @@
+   raw_ptr<MockHatsService> mock_hats_service_ = nullptr;
+ };
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ TEST_F(DownloadWarningDesktopHatsUtilsTest,
+        ProductSpecificData_NoSafeBrowsing) {
+   safe_browsing::SetSafeBrowsingState(
+@@ -321,6 +322,7 @@
+   EXPECT_THAT(psd, BitsDataMatches(Fields::kPartialViewInteraction, true));
+   EXPECT_THAT(psd, Not(StringDataMatches(Fields::kNumPageWarnings, _)));
+ }
++#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ 
+ TEST_F(DownloadWarningDesktopHatsUtilsTest,
+        DelayedDownloadWarningHatsLauncher_LaunchesSurvey) {
+@@ -357,9 +359,11 @@
+ 
+ TEST_F(DownloadWarningDesktopHatsUtilsTest,
+        DelayedDownloadWarningHatsLauncher_MultipleSurveys) {
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   safe_browsing::SetSafeBrowsingState(
+       profile_->GetPrefs(),
+       safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
++#endif
+ 
+   base::test::ScopedFeatureList features;
+   features.InitAndEnableFeatureWithParameters(

@@ -1,0 +1,70 @@
+--- a/content/browser/interest_group/trusted_signals_fetcher_unittest.cc
++++ b/content/browser/interest_group/trusted_signals_fetcher_unittest.cc
+@@ -28,6 +28,7 @@
+ #include "base/strings/stringprintf.h"
+ #include "base/synchronization/lock.h"
+ #include "base/test/bind.h"
++#include "base/test/scoped_command_line.h"
+ #include "base/test/scoped_feature_list.h"
+ #include "base/test/task_environment.h"
+ #include "base/thread_annotations.h"
+@@ -59,6 +60,7 @@
+ #include "services/network/public/cpp/cross_origin_embedder_policy.h"
+ #include "services/network/public/cpp/document_isolation_policy.h"
+ #include "services/network/public/cpp/features.h"
++#include "services/network/public/cpp/ip_address_space_util.h"
+ #include "services/network/public/cpp/network_switches.h"
+ #include "services/network/public/mojom/client_security_state.mojom.h"
+ #include "services/network/public/mojom/cookie_manager.mojom.h"
+@@ -113,6 +115,23 @@
+   out.ttl = ttl;
+   return out;
+ }
++
++// Keep the command line and its lazily parsed network cache in sync across tests.
++class ScopedPublicServerAddressSpace {
++ public:
++  explicit ScopedPublicServerAddressSpace(const std::string& host_port) {
++    command_line_.GetProcessCommandLine()->AppendSwitchASCII(
++        network::switches::kIpAddressSpaceOverrides, host_port + "=public");
++    network::IPAddressSpaceOverrides::GetInstance().ResetForTesting();
++  }
++
++  ~ScopedPublicServerAddressSpace() {
++    network::IPAddressSpaceOverrides::GetInstance().ResetForTesting();
++  }
++
++ private:
++  base::test::ScopedCommandLine command_line_;
++};
+ 
+ // Shared test fixture for bidding and scoring signals. Note that scoring
+ // signals tests focus on request body generation, with little coverage of
+@@ -2423,11 +2442,8 @@
+ TEST_F(TrustedSignalsFetcherTest, BiddingSignalsCrossOriginNotLNASuccess) {
+   // Treat all requests for signals as coming to a server in
+   // IPAddressSpace::kPublic, so it shouldn't be considered an LNA request.
+-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+-      network::switches::kIpAddressSpaceOverrides,
+-      base::StringPrintf(
+-          "%s=public",
+-          embedded_test_server_.host_port_pair().ToString().c_str()));
++  ScopedPublicServerAddressSpace public_server(
++      embedded_test_server_.host_port_pair().ToString());
+ 
+   SetResponseBodyAndAddHeader(auction_worklet::test::ToKVv2ResponseCborString(
+       R"({
+@@ -2504,11 +2520,8 @@
+ TEST_F(TrustedSignalsFetcherTest, ScoringSignalsCrossOriginNotLNASuccess) {
+   // Treat all requests for signals as coming to a server in
+   // IPAddressSpace::kPublic, so it shouldn't be considered an LNA request.
+-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+-      network::switches::kIpAddressSpaceOverrides,
+-      base::StringPrintf(
+-          "%s=public",
+-          embedded_test_server_.host_port_pair().ToString().c_str()));
++  ScopedPublicServerAddressSpace public_server(
++      embedded_test_server_.host_port_pair().ToString());
+   SetResponseBodyAndAddHeader(auction_worklet::test::ToKVv2ResponseCborString(
+       R"({
+         "compressionGroups": [

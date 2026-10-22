@@ -1,0 +1,234 @@
+diff --git a/chrome/common/pref_names.h b/chrome/common/pref_names.h
+--- src.orig/chrome/common/pref_names.h
++++ src/chrome/common/pref_names.h
+@@ -654,6 +654,11 @@
+ // instead of inserting a tab into the current window. ⌘O promotes to a tab.
+ inline constexpr char kHeliumLittleArcExternalLinks[] =
+     "helium.little_arc.external_links";
++
++// Whether Chromium may enter Picture-in-Picture automatically.
++// User-initiated Picture-in-Picture requests are unaffected.
++inline constexpr char kArciumAutoPictureInPictureEnabled[] =
++    "arcium.auto_picture_in_picture_enabled";
+ 
+ // A boolean pref set to true if the minimal location bar should be used.
+ inline constexpr char kHeliumMinimalLocationBar[] =
+diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
+--- src.orig/chrome/browser/ui/browser_ui_prefs.cc
++++ src/chrome/browser/ui/browser_ui_prefs.cc
+@@ -156,6 +156,8 @@
+   registry->RegisterBooleanPref(prefs::kHeliumMinimalLocationBar, false);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumLittleArcExternalLinks, false);
++  registry->RegisterBooleanPref(prefs::kArciumAutoPictureInPictureEnabled,
++                                true);
+ 
+   registry->RegisterBooleanPref(prefs::kHomePageIsNewTabPage, true,
+                                 pref_registration_flags);
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -305,6 +305,8 @@
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHeliumRoundedFrame] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[::prefs::kArciumAutoPictureInPictureEnabled] =
++      settings_api::PrefType::kBoolean;
+ 
+   (*s_allowlist)[::prefs::kShowHomeButton] = settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kShowForwardButton] =
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util_unittest.cc b/chrome/browser/extensions/api/settings_private/prefs_util_unittest.cc
+--- a/chrome/browser/extensions/api/settings_private/prefs_util_unittest.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util_unittest.cc
+@@ -100,6 +100,25 @@
+             settings_private::SetPrefResult::PREF_TYPE_MISMATCH);
+ }
+ 
++TEST_F(PrefsUtilTest, ArciumAutoPictureInPicturePrefIsAllowlisted) {
++  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(
++      ::prefs::kArciumAutoPictureInPictureEnabled));
++
++  base::Value value(false);
++  EXPECT_EQ(
++      prefs_util_->SetPref(::prefs::kArciumAutoPictureInPictureEnabled, &value),
++      settings_private::SetPrefResult::SUCCESS);
++  EXPECT_FALSE(profile_->GetPrefs()->GetBoolean(
++      ::prefs::kArciumAutoPictureInPictureEnabled));
++
++  std::optional<api::settings_private::PrefObject> pref =
++      prefs_util_->GetPref(::prefs::kArciumAutoPictureInPictureEnabled);
++  ASSERT_TRUE(pref.has_value());
++  EXPECT_EQ(pref->type, api::settings_private::PrefType::kBoolean);
++  ASSERT_TRUE(pref->value);
++  EXPECT_FALSE(pref->value->GetBool());
++}
++
+ // Regression test for http://crash/browse?q=reportid=%273b8cc7a091742d56%27.
+ TEST_F(PrefsUtilTest, SetPref_FixesUpValidUrl) {
+   base::Value value("example.com");
+diff --git a/content/public/browser/content_browser_client.h b/content/public/browser/content_browser_client.h
+--- a/content/public/browser/content_browser_client.h
++++ b/content/public/browser/content_browser_client.h
+@@ -2576,6 +2576,11 @@
+   virtual media::PictureInPictureEventsInfo::AutoPipInfo GetAutoPipInfo(
+       const WebContents& web_contents) const;
+ 
++  // Returns whether browser-initiated automatic Picture-in-Picture is
++  // enabled for this tab. User-initiated requests are unaffected.
++  virtual bool IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++      WebContents& web_contents) const;
++
+   // Registers the watcher to observe updates in RendererPreferences.
+   virtual void RegisterRendererPreferenceWatcher(
+       BrowserContext* browser_context,
+diff --git a/content/public/browser/content_browser_client.cc b/content/public/browser/content_browser_client.cc
+--- a/content/public/browser/content_browser_client.cc
++++ b/content/public/browser/content_browser_client.cc
+@@ -1416,6 +1416,11 @@
+   return media::PictureInPictureEventsInfo::AutoPipInfo();
+ }
+ 
++bool ContentBrowserClient::IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++    WebContents& /*web_contents*/) const {
++  return true;
++}
++
+ void ContentBrowserClient::RegisterRendererPreferenceWatcher(
+     BrowserContext* browser_context,
+     mojo::PendingRemote<blink::mojom::RendererPreferenceWatcher> watcher) {
+diff --git a/content/browser/media/session/media_session_impl.cc b/content/browser/media/session/media_session_impl.cc
+--- a/content/browser/media/session/media_session_impl.cc
++++ b/content/browser/media/session/media_session_impl.cc
+@@ -2273,6 +2273,13 @@
+     return false;
+   }
+ 
++  if (!GetContentClient()
++           ->browser()
++           ->IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++               *web_contents())) {
++    return false;
++  }
++
+   // Preserve website-owned automatic PiP unless the browser-initiated feature
+   // explicitly asks Chromium to select the active video itself.
+   if (!base::FeatureList::IsEnabled(
+diff --git a/content/browser/media/session/media_session_impl_unittest.cc b/content/browser/media/session/media_session_impl_unittest.cc
+--- a/content/browser/media/session/media_session_impl_unittest.cc
++++ b/content/browser/media/session/media_session_impl_unittest.cc
+@@ -107,6 +107,13 @@
+               GetAutoPipInfo,
+               (const WebContents& web_contents),
+               (const, override));
++
++  bool IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++      WebContents& /*web_contents*/) const override {
++    return browser_initiated_auto_pip_enabled;
++  }
++
++  bool browser_initiated_auto_pip_enabled = true;
+ };
+ 
+ }  // anonymous namespace
+@@ -1388,6 +1395,41 @@
+ }
+ 
+ TEST_F(MediaSessionImplTest,
++       BrowserInitiatedAutoPipPrefIsRecheckedAndDoesNotBlockManualPip) {
++  MockContentBrowserClient mock_client;
++  ContentBrowserClient* old_client = SetBrowserClientForTesting(&mock_client);
++
++  MockMediaSessionMojoObserver observer(*GetMediaSession());
++  int player = player_observer_->StartNewPlayer();
++  player_observer_->SetIsPictureInPictureAvailable(player, true);
++  GetMediaSession()->AddPlayer(player_observer_.get(), player);
++  FlushForTesting(GetMediaSession());
++
++  EXPECT_TRUE(observer.actions().contains(
++      MediaSessionAction::kEnterAutoPictureInPicture));
++  EXPECT_TRUE(media_session::test::GetMediaSessionInfoSync(GetMediaSession())
++                  ->can_enter_browser_initiated_autopip);
++
++  // The action list is stale until the next session update, so the entry check
++  // must re-read the browser policy before entering PiP.
++  mock_client.browser_initiated_auto_pip_enabled = false;
++  EXPECT_TRUE(observer.actions().contains(
++      MediaSessionAction::kEnterAutoPictureInPicture));
++  GetMediaSession()->EnterAutoPictureInPicture();
++  EXPECT_EQ(0, player_observer_->received_enter_picture_in_picture_calls());
++
++  mock_client.browser_initiated_auto_pip_enabled = true;
++  GetMediaSession()->EnterAutoPictureInPicture();
++  EXPECT_EQ(1, player_observer_->received_enter_picture_in_picture_calls());
++
++  mock_client.browser_initiated_auto_pip_enabled = false;
++  GetMediaSession()->EnterPictureInPicture();
++  EXPECT_EQ(2, player_observer_->received_enter_picture_in_picture_calls());
++
++  SetBrowserClientForTesting(old_client);
++}
++
++TEST_F(MediaSessionImplTest,
+        ReportAutoPictureInPictureInfoChanged_Deduplicates) {
+   int player = player_observer_->StartNewPlayer();
+   GetMediaSession()->AddPlayer(player_observer_.get(), player);
+diff --git a/chrome/browser/chrome_content_browser_client.h b/chrome/browser/chrome_content_browser_client.h
+--- a/chrome/browser/chrome_content_browser_client.h
++++ b/chrome/browser/chrome_content_browser_client.h
+@@ -859,6 +859,8 @@
+       content::WebContents* web_contents) override;
+   media::PictureInPictureEventsInfo::AutoPipInfo GetAutoPipInfo(
+       const content::WebContents& web_contents) const override;
++  bool IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++      content::WebContents& web_contents) const override;
+   void RegisterRendererPreferenceWatcher(
+       content::BrowserContext* browser_context,
+       mojo::PendingRemote<blink::mojom::RendererPreferenceWatcher> watcher)
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -7419,6 +7419,15 @@
+   return base::ScopedClosureRunner();
+ }
+ 
++bool ChromeContentBrowserClient::
++    IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++        content::WebContents& web_contents) const {
++  Profile* profile =
++      Profile::FromBrowserContext(web_contents.GetBrowserContext());
++  return !profile || profile->GetPrefs()->GetBoolean(
++                         prefs::kArciumAutoPictureInPictureEnabled);
++}
++
+ media::PictureInPictureEventsInfo::AutoPipInfo
+ ChromeContentBrowserClient::GetAutoPipInfo(
+     const content::WebContents& web_contents) const {
+diff --git a/chrome/browser/chrome_content_browser_client_unittest.cc b/chrome/browser/chrome_content_browser_client_unittest.cc
+--- a/chrome/browser/chrome_content_browser_client_unittest.cc
++++ b/chrome/browser/chrome_content_browser_client_unittest.cc
+@@ -510,7 +510,25 @@
+ }
+ 
+ TEST_F(ChromeContentBrowserClientTestWithWebContents,
++       IsBrowserInitiatedAutomaticPictureInPictureEnabled_UsesProfilePref) {
++  ChromeContentBrowserClient client;
++
++  EXPECT_TRUE(client.IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++      *web_contents()));
++
++  profile()->GetPrefs()->SetBoolean(prefs::kArciumAutoPictureInPictureEnabled,
++                                    false);
++  EXPECT_FALSE(client.IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++      *web_contents()));
++
++  profile()->GetPrefs()->SetBoolean(prefs::kArciumAutoPictureInPictureEnabled,
++                                    true);
++  EXPECT_TRUE(client.IsBrowserInitiatedAutomaticPictureInPictureEnabled(
++      *web_contents()));
++}
++
++TEST_F(ChromeContentBrowserClientTestWithWebContents,
+        GetAutoPipInfo_AutoPipReason) {
+   ChromeContentBrowserClient client;
+ 
+   AutoPictureInPictureTabHelper::CreateForWebContents(web_contents());

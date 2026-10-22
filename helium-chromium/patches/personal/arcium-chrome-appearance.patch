@@ -1,0 +1,1556 @@
+Index: src/chrome/browser/ui/BUILD.gn
+===================================================================
+--- src.orig/chrome/browser/ui/BUILD.gn
++++ src/chrome/browser/ui/BUILD.gn
+@@ -173,6 +173,22 @@ source_set("simple_message_box_internal"
+   sources = [ "simple_message_box_internal.cc" ]
+ }
+ 
++if (toolkit_views) {
++  source_set("glass_surface_configuration") {
++    public = [
++      "views/helium/glass_surface.h",
++      "views/helium/glass_surface_configuration.h",
++    ]
++    sources = [ "views/helium/glass_surface_configuration.cc" ]
++    deps = [
++      "//base",
++      "//components/prefs",
++      "//skia",
++      "//ui/views",
++    ]
++  }
++}
++
+ source_set("incognito_allowed_url") {
+   public = [ "incognito_allowed_url.h" ]
+   sources = [ "incognito_allowed_url.cc" ]
+@@ -205,6 +221,9 @@ source_set("browser_ui_prefs") {
+   if (is_win && is_chrome_branded) {
+     deps += [ "//chrome/browser/win/installer_downloader:prefs" ]
+   }
++  if (toolkit_views) {
++    deps += [ ":glass_surface_configuration" ]
++  }
+ }
+ 
+ source_set("browser_otr_state") {
+@@ -3802,6 +3821,7 @@ static_library("ui") {
+   }
+ 
+   if (toolkit_views) {
++    deps += [ ":glass_surface_configuration" ]
+     sources += [
+       "bubble_anchor_util.h",
+       "toolbar_controller_util.cc",
+Index: src/chrome/browser/ui/browser_ui_prefs.cc
+===================================================================
+--- src.orig/chrome/browser/ui/browser_ui_prefs.cc
++++ src/chrome/browser/ui/browser_ui_prefs.cc
+@@ -12,6 +12,9 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/ui_features.h"
++#if defined(TOOLKIT_VIEWS)
++#include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
++#endif
+ #include "chrome/browser/upgrade_detector/upgrade_detector.h"
+ #include "chrome/common/buildflags.h"
+ #include "chrome/common/pref_names.h"
+@@ -130,6 +133,13 @@ void RegisterBrowserUserPrefs(user_prefs
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
+ 
++#if defined(TOOLKIT_VIEWS)
++  registry->RegisterDictionaryPref(
++      helium::kArciumChromeAppearancePref,
++      helium::SerializeGlassSurfaceConfiguration(
++          helium::DefaultGlassSurfaceConfiguration()));
++#endif  // defined(TOOLKIT_VIEWS)
++
+   registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumMinimalLocationBar, false);
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration.cc
+@@ -0,0 +1,642 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
++
++#include <algorithm>
++#include <cmath>
++#include <optional>
++#include <string_view>
++#include <utility>
++
++#include "base/strings/stringprintf.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#include "components/prefs/pref_service.h"
++
++namespace helium {
++
++namespace {
++
++constexpr double kDefaultPointRadius = 0.5;
++constexpr double kMinimumPointRadius = 0.1;
++constexpr double kMaximumPointRadius = 1.5;
++constexpr double kMaximumGrain = 0.3;
++constexpr double kMinimumGrainScale = 0.5;
++constexpr double kMaximumGrainScale = 2.0;
++
++std::optional<double> FindNumber(const base::DictValue& dict,
++                                 std::string_view key) {
++  return dict.FindDouble(key);
++}
++
++double ReadClampedNumber(const base::DictValue& dict,
++                         std::string_view key,
++                         double default_value,
++                         double minimum,
++                         double maximum) {
++  std::optional<double> number = FindNumber(dict, key);
++  if (!number || !std::isfinite(*number)) {
++    return default_value;
++  }
++  return std::clamp(*number, minimum, maximum);
++}
++
++int HexDigit(char value) {
++  if (value >= '0' && value <= '9') {
++    return value - '0';
++  }
++  if (value >= 'a' && value <= 'f') {
++    return value - 'a' + 10;
++  }
++  if (value >= 'A' && value <= 'F') {
++    return value - 'A' + 10;
++  }
++  return -1;
++}
++
++bool ParseRgbColor(std::string_view value, SkColor4f* color) {
++  if (value.size() != 7 || value[0] != '#') {
++    return false;
++  }
++
++  int channels[3] = {};
++  for (size_t channel = 0; channel < 3; ++channel) {
++    const int high = HexDigit(value[1 + channel * 2]);
++    const int low = HexDigit(value[2 + channel * 2]);
++    if (high < 0 || low < 0) {
++      return false;
++    }
++    channels[channel] = high * 16 + low;
++  }
++
++  *color = {channels[0] / 255.0f, channels[1] / 255.0f, channels[2] / 255.0f,
++            1.0f};
++  return true;
++}
++
++GlassSurfaceMaterial ParseMaterial(std::string_view value,
++                                   GlassSurfaceMaterial fallback) {
++  if (value == kGlassAppearanceAuto) {
++    return GlassSurfaceMaterial::kAuto;
++  }
++  if (value == kGlassAppearanceLiquidGlass) {
++    return GlassSurfaceMaterial::kLiquidGlass;
++  }
++  if (value == kGlassAppearanceFrosted) {
++    return GlassSurfaceMaterial::kFrosted;
++  }
++  if (value == kGlassAppearanceSolid) {
++    return GlassSurfaceMaterial::kSolid;
++  }
++  return fallback;
++}
++
++std::optional<GlassSurfaceMaterial> ParseMaterialStrict(
++    std::string_view value) {
++  if (value == kGlassAppearanceAuto) {
++    return GlassSurfaceMaterial::kAuto;
++  }
++  if (value == kGlassAppearanceLiquidGlass) {
++    return GlassSurfaceMaterial::kLiquidGlass;
++  }
++  if (value == kGlassAppearanceFrosted) {
++    return GlassSurfaceMaterial::kFrosted;
++  }
++  if (value == kGlassAppearanceSolid) {
++    return GlassSurfaceMaterial::kSolid;
++  }
++  return std::nullopt;
++}
++
++GlassSurfaceGlassStyle ParseGlassStyle(std::string_view value) {
++  if (value == kGlassAppearanceGlassStyleClear) {
++    return GlassSurfaceGlassStyle::kClear;
++  }
++  return GlassSurfaceGlassStyle::kRegular;
++}
++
++std::optional<GlassSurfaceGlassStyle> ParseGlassStyleStrict(
++    std::string_view value) {
++  if (value == kGlassAppearanceGlassStyleRegular) {
++    return GlassSurfaceGlassStyle::kRegular;
++  }
++  if (value == kGlassAppearanceGlassStyleClear) {
++    return GlassSurfaceGlassStyle::kClear;
++  }
++  return std::nullopt;
++}
++
++const char* GlassStyleString(GlassSurfaceGlassStyle style) {
++  switch (style) {
++    case GlassSurfaceGlassStyle::kRegular:
++      return kGlassAppearanceGlassStyleRegular;
++    case GlassSurfaceGlassStyle::kClear:
++      return kGlassAppearanceGlassStyleClear;
++  }
++  return kGlassAppearanceGlassStyleRegular;
++}
++
++GlassSurfaceFrostedStyle ParseFrostedStyle(std::string_view value) {
++  if (value == kGlassAppearanceFrostedStyleSidebar) {
++    return GlassSurfaceFrostedStyle::kSidebar;
++  }
++  if (value == kGlassAppearanceFrostedStyleMenu) {
++    return GlassSurfaceFrostedStyle::kMenu;
++  }
++  if (value == kGlassAppearanceFrostedStylePopover) {
++    return GlassSurfaceFrostedStyle::kPopover;
++  }
++  if (value == kGlassAppearanceFrostedStyleHud) {
++    return GlassSurfaceFrostedStyle::kHud;
++  }
++  return GlassSurfaceFrostedStyle::kAutomatic;
++}
++
++std::optional<GlassSurfaceFrostedStyle> ParseFrostedStyleStrict(
++    std::string_view value) {
++  if (value == kGlassAppearanceFrostedStyleAutomatic) {
++    return GlassSurfaceFrostedStyle::kAutomatic;
++  }
++  if (value == kGlassAppearanceFrostedStyleSidebar) {
++    return GlassSurfaceFrostedStyle::kSidebar;
++  }
++  if (value == kGlassAppearanceFrostedStyleMenu) {
++    return GlassSurfaceFrostedStyle::kMenu;
++  }
++  if (value == kGlassAppearanceFrostedStylePopover) {
++    return GlassSurfaceFrostedStyle::kPopover;
++  }
++  if (value == kGlassAppearanceFrostedStyleHud) {
++    return GlassSurfaceFrostedStyle::kHud;
++  }
++  return std::nullopt;
++}
++
++const char* FrostedStyleString(GlassSurfaceFrostedStyle style) {
++  switch (style) {
++    case GlassSurfaceFrostedStyle::kAutomatic:
++      return kGlassAppearanceFrostedStyleAutomatic;
++    case GlassSurfaceFrostedStyle::kSidebar:
++      return kGlassAppearanceFrostedStyleSidebar;
++    case GlassSurfaceFrostedStyle::kMenu:
++      return kGlassAppearanceFrostedStyleMenu;
++    case GlassSurfaceFrostedStyle::kPopover:
++      return kGlassAppearanceFrostedStylePopover;
++    case GlassSurfaceFrostedStyle::kHud:
++      return kGlassAppearanceFrostedStyleHud;
++  }
++  return kGlassAppearanceFrostedStyleAutomatic;
++}
++
++const char* MaterialString(GlassSurfaceMaterial material) {
++  switch (material) {
++    case GlassSurfaceMaterial::kAuto:
++      return kGlassAppearanceAuto;
++    case GlassSurfaceMaterial::kLiquidGlass:
++      return kGlassAppearanceLiquidGlass;
++    case GlassSurfaceMaterial::kFrosted:
++      return kGlassAppearanceFrosted;
++    case GlassSurfaceMaterial::kSolid:
++      return kGlassAppearanceSolid;
++  }
++  return kGlassAppearanceAuto;
++}
++
++bool IsKnownTopLevelKey(std::string_view key) {
++  return key == kGlassAppearanceEnabledKey ||
++         key == kGlassAppearanceMaterialKey ||
++         key == kGlassAppearanceMaterialOpacityKey ||
++         key == kGlassAppearanceGlassTintOpacityKey ||
++         key == kGlassAppearanceGlassStyleKey ||
++         key == kGlassAppearanceFrostedStyleKey ||
++         key == kGlassAppearanceFrostedTintStrengthKey ||
++         key == kGlassAppearanceTintStrengthKey ||
++         key == kGlassAppearanceGrainKey ||
++         key == kGlassAppearanceGrainScaleKey ||
++         key == kGlassAppearancePointsKey ||
++         key == kGlassAppearanceMatchColorAdjustmentsKey;
++}
++
++bool IsKnownPointKey(std::string_view key) {
++  return key == kGlassPointIdKey || key == kGlassPointColorKey ||
++         key == kGlassPointXKey || key == kGlassPointYKey ||
++         key == kGlassPointRadiusKey || key == kGlassPointOpacityKey;
++}
++
++bool HasPointId(const GlassSurfaceConfiguration& configuration,
++                std::string_view id) {
++  for (size_t i = 0; i < configuration.point_count; ++i) {
++    if (configuration.points[i].id == id) {
++      return true;
++    }
++  }
++  return false;
++}
++
++bool HasFiniteNumberInRange(const base::DictValue& dict,
++                            std::string_view key,
++                            double minimum,
++                            double maximum,
++                            double* output) {
++  const std::optional<double> number = dict.FindDouble(key);
++  if (!number || !std::isfinite(*number) || *number < minimum ||
++      *number > maximum) {
++    return false;
++  }
++  *output = *number;
++  return true;
++}
++
++int ColorByte(float component) {
++  if (!std::isfinite(component)) {
++    return 0;
++  }
++  return static_cast<int>(
++      std::lround(std::clamp(component, 0.0f, 1.0f) * 255.0f));
++}
++
++std::string ColorString(const SkColor4f& color) {
++  return base::StringPrintf("#%02X%02X%02X", ColorByte(color.fR),
++                            ColorByte(color.fG), ColorByte(color.fB));
++}
++
++double CanonicalNumber(double value, double minimum, double maximum) {
++  if (!std::isfinite(value)) {
++    return minimum;
++  }
++  return std::clamp(value, minimum, maximum);
++}
++
++}  // namespace
++
++GlassSurfaceConfiguration DefaultGlassSurfaceConfiguration() {
++  GlassSurfaceConfiguration configuration;
++  configuration.tint_strength = 0.4;
++  configuration.grain = 0.06;
++  configuration.points[0] = {.id = "yellow",
++                             .color = {0.937255f, 0.780392f, 0.4f, 1.0f},
++                             .x = 0.18,
++                             .y = 0.2,
++                             .radius = 0.8,
++                             .opacity = 0.5};
++  configuration.points[1] = {.id = "blue",
++                             .color = {0.411765f, 0.576471f, 0.929412f, 1.0f},
++                             .x = 0.8,
++                             .y = 0.65,
++                             .radius = 0.9,
++                             .opacity = 0.4};
++  configuration.point_count = 2;
++  return configuration;
++}
++
++GlassSurfaceConfiguration ParseGlassSurfaceConfiguration(
++    const base::DictValue& dict) {
++  GlassSurfaceConfiguration configuration = DefaultGlassSurfaceConfiguration();
++
++  configuration.enabled =
++      dict.FindBool(kGlassAppearanceEnabledKey).value_or(configuration.enabled);
++  configuration.match_color_adjustments =
++      dict.FindBool(kGlassAppearanceMatchColorAdjustmentsKey).value_or(false);
++  if (const std::string* material =
++          dict.FindString(kGlassAppearanceMaterialKey)) {
++    configuration.material = ParseMaterial(*material, configuration.material);
++  }
++  configuration.material_opacity =
++      ReadClampedNumber(dict, kGlassAppearanceMaterialOpacityKey,
++                        configuration.material_opacity, 0.0, 1.0);
++  configuration.glass_tint_opacity =
++      ReadClampedNumber(dict, kGlassAppearanceGlassTintOpacityKey,
++                        configuration.glass_tint_opacity, 0.0, 1.0);
++  if (const std::string* glass_style =
++          dict.FindString(kGlassAppearanceGlassStyleKey)) {
++    configuration.glass_style = ParseGlassStyle(*glass_style);
++  }
++  if (const std::string* frosted_style =
++          dict.FindString(kGlassAppearanceFrostedStyleKey)) {
++    configuration.frosted_style = ParseFrostedStyle(*frosted_style);
++  }
++  configuration.frosted_tint_strength =
++      ReadClampedNumber(dict, kGlassAppearanceFrostedTintStrengthKey,
++                        configuration.frosted_tint_strength, 0.0, 2.0);
++  configuration.tint_strength =
++      ReadClampedNumber(dict, kGlassAppearanceTintStrengthKey,
++                        configuration.tint_strength, 0.0, 1.0);
++  configuration.grain = ReadClampedNumber(
++      dict, kGlassAppearanceGrainKey, configuration.grain, 0.0, kMaximumGrain);
++  configuration.grain_scale = ReadClampedNumber(
++      dict, kGlassAppearanceGrainScaleKey, configuration.grain_scale,
++      kMinimumGrainScale, kMaximumGrainScale);
++
++  const base::ListValue* points = dict.FindList(kGlassAppearancePointsKey);
++  if (!points) {
++    return configuration;
++  }
++
++  configuration.point_count = 0;
++  for (const base::Value& value : *points) {
++    if (configuration.point_count == kMaxGlassColorPoints) {
++      break;
++    }
++    const base::DictValue* point_dict = value.GetIfDict();
++    if (!point_dict) {
++      continue;
++    }
++    const std::string* id = point_dict->FindString(kGlassPointIdKey);
++    if (!id || id->empty() || HasPointId(configuration, *id)) {
++      continue;
++    }
++    const std::string* color_string =
++        point_dict->FindString(kGlassPointColorKey);
++    GlassColorPoint point;
++    if (!color_string || !ParseRgbColor(*color_string, &point.color)) {
++      continue;
++    }
++    point.id = *id;
++    point.x = ReadClampedNumber(*point_dict, kGlassPointXKey, 0.5, 0.0, 1.0);
++    point.y = ReadClampedNumber(*point_dict, kGlassPointYKey, 0.5, 0.0, 1.0);
++    point.radius = ReadClampedNumber(*point_dict, kGlassPointRadiusKey,
++                                     kDefaultPointRadius, kMinimumPointRadius,
++                                     kMaximumPointRadius);
++    point.opacity =
++        ReadClampedNumber(*point_dict, kGlassPointOpacityKey, 0.0, 0.0, 1.0);
++    configuration.points[configuration.point_count++] = std::move(point);
++  }
++
++  return configuration;
++}
++
++std::optional<GlassSurfaceConfiguration> ParseGlassSurfaceConfigurationStrict(
++    const base::DictValue& dict) {
++  if (dict.size() != 12) {
++    return std::nullopt;
++  }
++  for (const auto item : dict) {
++    if (!IsKnownTopLevelKey(item.first)) {
++      return std::nullopt;
++    }
++  }
++
++  const std::optional<bool> enabled = dict.FindBool(kGlassAppearanceEnabledKey);
++  const std::optional<bool> match_color_adjustments =
++      dict.FindBool(kGlassAppearanceMatchColorAdjustmentsKey);
++  const std::string* material_string =
++      dict.FindString(kGlassAppearanceMaterialKey);
++  const std::optional<GlassSurfaceMaterial> material =
++      material_string ? ParseMaterialStrict(*material_string) : std::nullopt;
++  const std::string* glass_style_string =
++      dict.FindString(kGlassAppearanceGlassStyleKey);
++  const std::optional<GlassSurfaceGlassStyle> glass_style =
++      glass_style_string ? ParseGlassStyleStrict(*glass_style_string)
++                         : std::nullopt;
++  const std::string* frosted_style_string =
++      dict.FindString(kGlassAppearanceFrostedStyleKey);
++  const std::optional<GlassSurfaceFrostedStyle> frosted_style =
++      frosted_style_string ? ParseFrostedStyleStrict(*frosted_style_string)
++                           : std::nullopt;
++  if (!enabled || !match_color_adjustments || !material || !glass_style ||
++      !frosted_style) {
++    return std::nullopt;
++  }
++
++  GlassSurfaceConfiguration configuration;
++  configuration.enabled = *enabled;
++  configuration.match_color_adjustments = *match_color_adjustments;
++  configuration.material = *material;
++  configuration.glass_style = *glass_style;
++  configuration.frosted_style = *frosted_style;
++  if (!HasFiniteNumberInRange(dict, kGlassAppearanceMaterialOpacityKey, 0.0,
++                              1.0, &configuration.material_opacity) ||
++      !HasFiniteNumberInRange(dict, kGlassAppearanceGlassTintOpacityKey, 0.0,
++                              1.0, &configuration.glass_tint_opacity) ||
++      !HasFiniteNumberInRange(dict, kGlassAppearanceFrostedTintStrengthKey, 0.0,
++                              2.0, &configuration.frosted_tint_strength) ||
++      !HasFiniteNumberInRange(dict, kGlassAppearanceTintStrengthKey, 0.0, 1.0,
++                              &configuration.tint_strength) ||
++      !HasFiniteNumberInRange(dict, kGlassAppearanceGrainKey, 0.0,
++                              kMaximumGrain, &configuration.grain) ||
++      !HasFiniteNumberInRange(dict, kGlassAppearanceGrainScaleKey,
++                              kMinimumGrainScale, kMaximumGrainScale,
++                              &configuration.grain_scale)) {
++    return std::nullopt;
++  }
++
++  const base::ListValue* points = dict.FindList(kGlassAppearancePointsKey);
++  if (!points || points->size() > kMaxGlassColorPoints) {
++    return std::nullopt;
++  }
++
++  for (const base::Value& value : *points) {
++    const base::DictValue* point_dict = value.GetIfDict();
++    if (!point_dict || point_dict->size() != 6) {
++      return std::nullopt;
++    }
++    for (const auto item : *point_dict) {
++      if (!IsKnownPointKey(item.first)) {
++        return std::nullopt;
++      }
++    }
++
++    const std::string* id = point_dict->FindString(kGlassPointIdKey);
++    const std::string* color_string =
++        point_dict->FindString(kGlassPointColorKey);
++    GlassColorPoint point;
++    if (!id || id->empty() || HasPointId(configuration, *id) || !color_string ||
++        !ParseRgbColor(*color_string, &point.color) ||
++        !HasFiniteNumberInRange(*point_dict, kGlassPointXKey, 0.0, 1.0,
++                                &point.x) ||
++        !HasFiniteNumberInRange(*point_dict, kGlassPointYKey, 0.0, 1.0,
++                                &point.y) ||
++        !HasFiniteNumberInRange(*point_dict, kGlassPointRadiusKey,
++                                kMinimumPointRadius, kMaximumPointRadius,
++                                &point.radius) ||
++        !HasFiniteNumberInRange(*point_dict, kGlassPointOpacityKey, 0.0, 1.0,
++                                &point.opacity)) {
++      return std::nullopt;
++    }
++    point.id = *id;
++    configuration.points[configuration.point_count++] = std::move(point);
++  }
++
++  return configuration;
++}
++
++base::DictValue SerializeGlassSurfaceConfiguration(
++    const GlassSurfaceConfiguration& configuration) {
++  base::ListValue points = base::ListValue::with_capacity(
++      std::min(configuration.point_count, kMaxGlassColorPoints));
++  std::array<std::string, kMaxGlassColorPoints> point_ids;
++  size_t point_count = 0;
++  for (size_t i = 0;
++       i < std::min(configuration.point_count, kMaxGlassColorPoints); ++i) {
++    const GlassColorPoint& point = configuration.points[i];
++    if (point.id.empty() ||
++        std::find(point_ids.begin(), point_ids.begin() + point_count,
++                  point.id) != point_ids.begin() + point_count) {
++      continue;
++    }
++    point_ids[point_count++] = point.id;
++    base::DictValue serialized_point;
++    serialized_point.Set(kGlassPointIdKey, point.id);
++    serialized_point.Set(kGlassPointColorKey, ColorString(point.color));
++    serialized_point.Set(kGlassPointXKey, CanonicalNumber(point.x, 0.0, 1.0));
++    serialized_point.Set(kGlassPointYKey, CanonicalNumber(point.y, 0.0, 1.0));
++    serialized_point.Set(kGlassPointRadiusKey,
++                         CanonicalNumber(point.radius, kMinimumPointRadius,
++                                         kMaximumPointRadius));
++    serialized_point.Set(kGlassPointOpacityKey,
++                         CanonicalNumber(point.opacity, 0.0, 1.0));
++    points.Append(std::move(serialized_point));
++  }
++
++  base::DictValue result;
++  result.Set(kGlassAppearanceEnabledKey, configuration.enabled);
++  result.Set(kGlassAppearanceMatchColorAdjustmentsKey,
++             configuration.match_color_adjustments);
++  result.Set(kGlassAppearanceMaterialKey,
++             MaterialString(configuration.material));
++  result.Set(kGlassAppearanceMaterialOpacityKey,
++             CanonicalNumber(configuration.material_opacity, 0.0, 1.0));
++  result.Set(kGlassAppearanceGlassTintOpacityKey,
++             CanonicalNumber(configuration.glass_tint_opacity, 0.0, 1.0));
++  result.Set(kGlassAppearanceGlassStyleKey,
++             GlassStyleString(configuration.glass_style));
++  result.Set(kGlassAppearanceFrostedStyleKey,
++             FrostedStyleString(configuration.frosted_style));
++  result.Set(kGlassAppearanceFrostedTintStrengthKey,
++             CanonicalNumber(configuration.frosted_tint_strength, 0.0, 2.0));
++  result.Set(kGlassAppearanceTintStrengthKey,
++             CanonicalNumber(configuration.tint_strength, 0.0, 1.0));
++  result.Set(kGlassAppearanceGrainKey,
++             CanonicalNumber(configuration.grain, 0.0, kMaximumGrain));
++  result.Set(kGlassAppearanceGrainScaleKey,
++             CanonicalNumber(configuration.grain_scale, kMinimumGrainScale,
++                             kMaximumGrainScale));
++  result.Set(kGlassAppearancePointsKey, std::move(points));
++  return result;
++}
++
++base::DictValue CompleteGlassSurfaceConfigurationForEditing(
++    const base::DictValue& saved) {
++  base::DictValue complete =
++      SerializeGlassSurfaceConfiguration(DefaultGlassSurfaceConfiguration());
++  complete.Merge(saved.Clone());
++  return complete;
++}
++
++GlassSurfaceConfiguration ReadGlassSurfaceConfiguration(
++    const PrefService* prefs) {
++  if (!prefs) {
++    return DefaultGlassSurfaceConfiguration();
++  }
++  return ParseGlassSurfaceConfiguration(
++      prefs->GetDict(kArciumChromeAppearancePref));
++}
++
++GlassSurfaceResolution ResolveGlassSurfaceConfiguration(
++    const GlassSurfaceConfiguration& configuration,
++    GlassBackend requested,
++    bool native_liquid_glass,
++    bool native_frosted,
++    bool reduce_transparency) {
++  GlassSurfaceResolution resolution;
++  resolution.enabled = configuration.enabled;
++  resolution.configured = configuration.material;
++  resolution.active = configuration.material;
++  resolution.fallback_reason = "none";
++
++  if (!configuration.enabled) {
++    resolution.fallback_reason = "disabled";
++    return resolution;
++  }
++
++  // These are process-wide safety/diagnostic overrides. They suppress the
++  // transparent Chrome Views gates too; otherwise the custom surface would be
++  // covered by the opaque frame while the settings page claimed it was active.
++  if (reduce_transparency) {
++    resolution.active = GlassSurfaceMaterial::kSolid;
++    resolution.fallback_reason = "reduce-transparency";
++    return resolution;
++  }
++
++  if (requested == GlassBackend::kOpaque) {
++    resolution.active = GlassSurfaceMaterial::kSolid;
++    resolution.fallback_reason = "command-line-opaque";
++    return resolution;
++  }
++  if (requested == GlassBackend::kChromium) {
++    resolution.active = GlassSurfaceMaterial::kSolid;
++    resolution.fallback_reason = "command-line-chromium-unsupported";
++    return resolution;
++  }
++
++  if (requested == GlassBackend::kNativeLiquidGlass) {
++    if (native_liquid_glass) {
++      resolution.active = GlassSurfaceMaterial::kLiquidGlass;
++      if (configuration.material != GlassSurfaceMaterial::kLiquidGlass) {
++        resolution.fallback_reason = "command-line-override";
++      }
++    } else if (native_frosted) {
++      resolution.active = GlassSurfaceMaterial::kFrosted;
++      resolution.fallback_reason = "command-line-liquid-glass-unavailable";
++    } else {
++      resolution.active = GlassSurfaceMaterial::kSolid;
++      resolution.fallback_reason = "command-line-liquid-glass-unavailable";
++    }
++  } else if (requested == GlassBackend::kNativeMaterial) {
++    if (native_frosted) {
++      resolution.active = GlassSurfaceMaterial::kFrosted;
++      if (configuration.material != GlassSurfaceMaterial::kFrosted) {
++        resolution.fallback_reason = "command-line-override";
++      }
++    } else {
++      resolution.active = GlassSurfaceMaterial::kSolid;
++      resolution.fallback_reason = "command-line-frosted-unavailable";
++    }
++  } else {
++    switch (configuration.material) {
++      case GlassSurfaceMaterial::kAuto:
++        if (native_liquid_glass) {
++          resolution.active = GlassSurfaceMaterial::kLiquidGlass;
++        } else if (native_frosted) {
++          resolution.active = GlassSurfaceMaterial::kFrosted;
++        } else {
++          resolution.active = GlassSurfaceMaterial::kSolid;
++          resolution.fallback_reason = "no-supported-renderer";
++        }
++        break;
++      case GlassSurfaceMaterial::kLiquidGlass:
++        if (native_liquid_glass) {
++          resolution.active = GlassSurfaceMaterial::kLiquidGlass;
++        } else if (native_frosted) {
++          resolution.active = GlassSurfaceMaterial::kFrosted;
++          resolution.fallback_reason = "liquid-glass-unavailable";
++        } else {
++          resolution.active = GlassSurfaceMaterial::kSolid;
++          resolution.fallback_reason = "liquid-glass-unavailable";
++        }
++        break;
++      case GlassSurfaceMaterial::kFrosted:
++        if (!native_frosted) {
++          resolution.active = GlassSurfaceMaterial::kSolid;
++          resolution.fallback_reason = "frosted-unavailable";
++        }
++        break;
++      case GlassSurfaceMaterial::kSolid:
++        break;
++    }
++  }
++
++  resolution.uses_translucent_native_base =
++      resolution.active == GlassSurfaceMaterial::kLiquidGlass ||
++      resolution.active == GlassSurfaceMaterial::kFrosted;
++  // A solid profile surface still needs transparent Chrome Views so its color
++  // points and grain can be seen through the browser frame. The window itself
++  // stays on the stable translucent initialization path while this profile
++  // setting is enabled; a solid base covers the surface when transparency is
++  // unavailable.
++  resolution.paints_chrome_transparent = true;
++  return resolution;
++}
++
++}  // namespace helium
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration.h
+@@ -0,0 +1,194 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_CONFIGURATION_H_
++#define CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_CONFIGURATION_H_
++
++#include <array>
++#include <cstddef>
++#include <optional>
++#include <string>
++
++#include "base/values.h"
++#include "third_party/skia/include/core/SkColor.h"
++
++class PrefService;
++
++namespace helium {
++
++enum class GlassBackend;
++
++// Profile-owned appearance settings for the main browser chrome. The
++// preference is deliberately a dictionary so future fields can be added
++// without changing the profile preference type.
++inline constexpr char kArciumChromeAppearancePref[] =
++    "arcium.chrome.appearance";
++
++inline constexpr char kGlassAppearanceEnabledKey[] = "enabled";
++inline constexpr char kGlassAppearanceMaterialKey[] = "material";
++inline constexpr char kGlassAppearanceMaterialOpacityKey[] = "materialOpacity";
++inline constexpr char kGlassAppearanceGlassTintOpacityKey[] =
++    "glassTintOpacity";
++inline constexpr char kGlassAppearanceGlassStyleKey[] = "glassStyle";
++inline constexpr char kGlassAppearanceFrostedStyleKey[] = "frostedStyle";
++inline constexpr char kGlassAppearanceFrostedTintStrengthKey[] =
++    "frostedTintStrength";
++inline constexpr char kGlassAppearanceTintStrengthKey[] = "tintStrength";
++inline constexpr char kGlassAppearanceGrainKey[] = "grain";
++inline constexpr char kGlassAppearanceGrainScaleKey[] = "grainScale";
++inline constexpr char kGlassAppearancePointsKey[] = "points";
++inline constexpr char kGlassAppearanceMatchColorAdjustmentsKey[] =
++    "matchColorAdjustments";
++
++inline constexpr char kGlassAppearanceAuto[] = "auto";
++inline constexpr char kGlassAppearanceLiquidGlass[] = "liquidGlass";
++inline constexpr char kGlassAppearanceFrosted[] = "frosted";
++inline constexpr char kGlassAppearanceSolid[] = "solid";
++inline constexpr char kGlassAppearanceGlassStyleRegular[] = "regular";
++inline constexpr char kGlassAppearanceGlassStyleClear[] = "clear";
++inline constexpr char kGlassAppearanceFrostedStyleAutomatic[] = "automatic";
++inline constexpr char kGlassAppearanceFrostedStyleSidebar[] = "sidebar";
++inline constexpr char kGlassAppearanceFrostedStyleMenu[] = "menu";
++inline constexpr char kGlassAppearanceFrostedStylePopover[] = "popover";
++inline constexpr char kGlassAppearanceFrostedStyleHud[] = "hud";
++
++inline constexpr char kGlassPointIdKey[] = "id";
++inline constexpr char kGlassPointColorKey[] = "color";
++inline constexpr char kGlassPointXKey[] = "x";
++inline constexpr char kGlassPointYKey[] = "y";
++inline constexpr char kGlassPointRadiusKey[] = "radius";
++inline constexpr char kGlassPointOpacityKey[] = "opacity";
++
++inline constexpr size_t kMaxGlassColorPoints = 4;
++
++enum class GlassSurfaceMaterial {
++  kAuto,
++  kLiquidGlass,
++  kFrosted,
++  kSolid,
++};
++
++enum class GlassSurfaceGlassStyle {
++  kRegular,
++  kClear,
++};
++
++enum class GlassSurfaceFrostedStyle {
++  kAutomatic,
++  kSidebar,
++  kMenu,
++  kPopover,
++  kHud,
++};
++
++struct GlassColorPoint {
++  std::string id;
++  SkColor4f color = {1.0f, 1.0f, 1.0f, 1.0f};
++  double x = 0.5;
++  double y = 0.5;
++  double radius = 0.5;
++  double opacity = 0.0;
++
++  bool operator==(const GlassColorPoint& other) const {
++    return id == other.id && color == other.color && x == other.x &&
++           y == other.y && radius == other.radius && opacity == other.opacity;
++  }
++};
++
++struct GlassSurfaceConfiguration {
++  // false means that the existing command-line glass policy remains in
++  // control. The editable default enables the Liquid Glass surface.
++  bool enabled = true;
++  GlassSurfaceMaterial material = GlassSurfaceMaterial::kLiquidGlass;
++  double material_opacity = 0.95;
++  double glass_tint_opacity = 0.7;
++  GlassSurfaceGlassStyle glass_style = GlassSurfaceGlassStyle::kRegular;
++  GlassSurfaceFrostedStyle frosted_style = GlassSurfaceFrostedStyle::kAutomatic;
++  // Multiplies the existing frosted theme tint; one preserves it.
++  double frosted_tint_strength = 1.0;
++  double tint_strength = 0.0;
++  double grain = 0.0;
++  double grain_scale = 0.5;
++  bool match_color_adjustments = false;
++  std::array<GlassColorPoint, kMaxGlassColorPoints> points;
++  size_t point_count = 0;
++
++  bool operator==(const GlassSurfaceConfiguration& other) const {
++    if (enabled != other.enabled || material != other.material ||
++        material_opacity != other.material_opacity ||
++        glass_tint_opacity != other.glass_tint_opacity ||
++        glass_style != other.glass_style ||
++        frosted_style != other.frosted_style ||
++        frosted_tint_strength != other.frosted_tint_strength ||
++        tint_strength != other.tint_strength || grain != other.grain ||
++        grain_scale != other.grain_scale ||
++        match_color_adjustments != other.match_color_adjustments ||
++        point_count != other.point_count) {
++      return false;
++    }
++    for (size_t i = 0; i < point_count; ++i) {
++      if (!(points[i] == other.points[i])) {
++        return false;
++      }
++    }
++    return true;
++  }
++};
++
++// The public UI material is intentionally smaller than the internal renderer
++// backend enum. Native availability and accessibility settings are resolved
++// separately so the UI can report what was requested and what is active.
++struct GlassSurfaceResolution {
++  bool enabled = false;
++  GlassSurfaceMaterial configured = GlassSurfaceMaterial::kAuto;
++  GlassSurfaceMaterial active = GlassSurfaceMaterial::kAuto;
++  bool uses_translucent_native_base = false;
++  bool paints_chrome_transparent = false;
++  const char* fallback_reason = "disabled";
++};
++
++GlassSurfaceConfiguration DefaultGlassSurfaceConfiguration();
++
++// Parses and clamps untrusted profile data. Missing or malformed fields use
++// the defaults above; non-finite numbers never reach AppKit.
++GlassSurfaceConfiguration ParseGlassSurfaceConfiguration(
++    const base::DictValue& dict);
++
++// Parses the dictionary exchanged with the native SettingsUI bridge. Every
++// field is required, unknown fields are rejected, and all values must be
++// finite and within the renderer's supported ranges. This keeps Foundation
++// input from reaching the profile preference or AppKit renderer unchecked.
++std::optional<GlassSurfaceConfiguration> ParseGlassSurfaceConfigurationStrict(
++    const base::DictValue& dict);
++
++// Emits the complete canonical bridge representation. The output always has
++// every top-level appearance field and points, including when the profile
++// preference is unset or has no color points.
++base::DictValue SerializeGlassSurfaceConfiguration(
++    const GlassSurfaceConfiguration& configuration);
++
++// Fills missing profile fields with canonical defaults for a SettingsUI
++// snapshot while preserving saved values, including malformed or unknown
++// fields for the strict bridge decoder to reject.
++base::DictValue CompleteGlassSurfaceConfigurationForEditing(
++    const base::DictValue& saved);
++
++GlassSurfaceConfiguration ReadGlassSurfaceConfiguration(
++    const PrefService* prefs);
++
++// `native_liquid_glass` is true only when the NSGlassEffectView API is
++// available. Frosted is the NSVisualEffectView fallback. Reduce Transparency
++// and a command-line opaque/chromium override suppress transparent Chrome
++// Views, so the UI can disable decorative controls rather than claiming that
++// an opaque frame displays them.
++GlassSurfaceResolution ResolveGlassSurfaceConfiguration(
++    const GlassSurfaceConfiguration& configuration,
++    GlassBackend requested_backend,
++    bool native_liquid_glass,
++    bool native_frosted,
++    bool reduce_transparency);
++
++}  // namespace helium
++
++#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_CONFIGURATION_H_
+Index: src/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface_configuration_unittest.cc
+@@ -0,0 +1,446 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
++
++#include <optional>
++#include <utility>
++
++#include "base/values.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace helium {
++
++TEST(GlassSurfaceConfigurationTest, DefaultsAreCanonicalEditableValues) {
++  const GlassSurfaceConfiguration configuration =
++      DefaultGlassSurfaceConfiguration();
++
++  EXPECT_TRUE(configuration.enabled);
++  EXPECT_EQ(configuration.material, GlassSurfaceMaterial::kLiquidGlass);
++  EXPECT_DOUBLE_EQ(configuration.material_opacity, 0.95);
++  EXPECT_DOUBLE_EQ(configuration.glass_tint_opacity, 0.7);
++  EXPECT_EQ(configuration.glass_style, GlassSurfaceGlassStyle::kRegular);
++  EXPECT_EQ(configuration.frosted_style, GlassSurfaceFrostedStyle::kAutomatic);
++  EXPECT_DOUBLE_EQ(configuration.frosted_tint_strength, 1.0);
++  EXPECT_DOUBLE_EQ(configuration.tint_strength, 0.4);
++  EXPECT_DOUBLE_EQ(configuration.grain, 0.06);
++  EXPECT_DOUBLE_EQ(configuration.grain_scale, 0.5);
++  ASSERT_EQ(configuration.point_count, 2u);
++  EXPECT_EQ(configuration.points[0].id, "yellow");
++  EXPECT_EQ(configuration.points[1].id, "blue");
++
++  const base::DictValue serialized =
++      SerializeGlassSurfaceConfiguration(configuration);
++  ASSERT_NE(serialized.FindBool(kGlassAppearanceEnabledKey), std::nullopt);
++  EXPECT_TRUE(*serialized.FindBool(kGlassAppearanceEnabledKey));
++  ASSERT_NE(serialized.FindString(kGlassAppearanceMaterialKey), nullptr);
++  EXPECT_STREQ(serialized.FindString(kGlassAppearanceMaterialKey)->c_str(),
++               kGlassAppearanceLiquidGlass);
++  EXPECT_DOUBLE_EQ(*serialized.FindDouble(kGlassAppearanceMaterialOpacityKey),
++                   0.95);
++  EXPECT_DOUBLE_EQ(*serialized.FindDouble(kGlassAppearanceGlassTintOpacityKey),
++                   0.7);
++  EXPECT_DOUBLE_EQ(*serialized.FindDouble(kGlassAppearanceGrainScaleKey), 0.5);
++}
++
++TEST(GlassSurfaceConfigurationTest, EmptyDictionaryUsesCanonicalDefaults) {
++  const GlassSurfaceConfiguration configuration =
++      ParseGlassSurfaceConfiguration(base::DictValue());
++  EXPECT_EQ(configuration, DefaultGlassSurfaceConfiguration());
++}
++
++TEST(GlassSurfaceConfigurationTest,
++     OldSavedDictionaryPreservesNewFieldDefaults) {
++  base::DictValue legacy;
++  legacy.Set(kGlassAppearanceEnabledKey, true);
++  legacy.Set(kGlassAppearanceMaterialKey, kGlassAppearanceSolid);
++  legacy.Set(kGlassAppearanceTintStrengthKey, 0.2);
++  legacy.Set(kGlassAppearanceGrainKey, 0.1);
++  legacy.Set(kGlassAppearancePointsKey, base::ListValue());
++
++  const GlassSurfaceConfiguration configuration =
++      ParseGlassSurfaceConfiguration(legacy);
++  EXPECT_TRUE(configuration.enabled);
++  EXPECT_EQ(configuration.material, GlassSurfaceMaterial::kSolid);
++  EXPECT_DOUBLE_EQ(configuration.tint_strength, 0.2);
++  EXPECT_DOUBLE_EQ(configuration.grain, 0.1);
++  EXPECT_DOUBLE_EQ(configuration.material_opacity, 0.95);
++  EXPECT_DOUBLE_EQ(configuration.glass_tint_opacity, 0.7);
++  EXPECT_EQ(configuration.glass_style, GlassSurfaceGlassStyle::kRegular);
++  EXPECT_EQ(configuration.frosted_style, GlassSurfaceFrostedStyle::kAutomatic);
++  EXPECT_DOUBLE_EQ(configuration.frosted_tint_strength, 1.0);
++  EXPECT_DOUBLE_EQ(configuration.grain_scale, 0.5);
++  EXPECT_EQ(configuration.point_count, 0u);
++}
++
++TEST(GlassSurfaceConfigurationTest, EqualityIncludesNewFields) {
++  const GlassSurfaceConfiguration baseline = DefaultGlassSurfaceConfiguration();
++
++  GlassSurfaceConfiguration changed = baseline;
++  changed.material_opacity = 0.5;
++  EXPECT_NE(changed, baseline);
++  changed = baseline;
++  changed.glass_tint_opacity = 0.5;
++  EXPECT_NE(changed, baseline);
++  changed = baseline;
++  changed.glass_style = GlassSurfaceGlassStyle::kClear;
++  EXPECT_NE(changed, baseline);
++  changed = baseline;
++  changed.frosted_style = GlassSurfaceFrostedStyle::kHud;
++  EXPECT_NE(changed, baseline);
++  changed = baseline;
++  changed.frosted_tint_strength = 1.5;
++  EXPECT_NE(changed, baseline);
++  changed = baseline;
++  changed.grain_scale = 2.0;
++  EXPECT_NE(changed, baseline);
++}
++
++TEST(GlassSurfaceConfigurationTest,
++     CompletesLegacyDictionaryForEditingWithoutMutatingSavedValue) {
++  base::DictValue legacy;
++  legacy.Set(kGlassAppearanceEnabledKey, true);
++  legacy.Set(kGlassAppearanceMaterialKey, kGlassAppearanceSolid);
++  legacy.Set(kGlassAppearanceTintStrengthKey, 0.2);
++  legacy.Set(kGlassAppearanceGrainKey, 0.1);
++  legacy.Set(kGlassAppearancePointsKey, base::ListValue());
++  const base::DictValue original = legacy.Clone();
++
++  base::DictValue complete =
++      CompleteGlassSurfaceConfigurationForEditing(legacy);
++  EXPECT_EQ(legacy, original);
++  EXPECT_EQ(complete.size(), 12u);
++  EXPECT_TRUE(ParseGlassSurfaceConfigurationStrict(complete));
++  EXPECT_TRUE(*complete.FindBool(kGlassAppearanceEnabledKey));
++  EXPECT_STREQ(complete.FindString(kGlassAppearanceMaterialKey)->c_str(),
++               kGlassAppearanceSolid);
++  EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceTintStrengthKey), 0.2);
++  EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceGrainKey), 0.1);
++  EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceMaterialOpacityKey),
++                   0.95);
++  EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceGlassTintOpacityKey),
++                   0.7);
++  EXPECT_STREQ(complete.FindString(kGlassAppearanceGlassStyleKey)->c_str(),
++               kGlassAppearanceGlassStyleRegular);
++  EXPECT_STREQ(complete.FindString(kGlassAppearanceFrostedStyleKey)->c_str(),
++               kGlassAppearanceFrostedStyleAutomatic);
++  EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceFrostedTintStrengthKey),
++                   1.0);
++  EXPECT_DOUBLE_EQ(*complete.FindDouble(kGlassAppearanceGrainScaleKey), 0.5);
++}
++
++TEST(GlassSurfaceConfigurationTest,
++     EditingCompletionPreservesInvalidValuesForStrictRejection) {
++  base::DictValue malformed;
++  malformed.Set(kGlassAppearanceGlassTintOpacityKey, "NaN");
++  const base::DictValue malformed_original = malformed.Clone();
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(
++      CompleteGlassSurfaceConfigurationForEditing(malformed)));
++  EXPECT_EQ(malformed, malformed_original);
++
++  base::DictValue unknown;
++  unknown.Set("futureField", true);
++  const base::DictValue unknown_original = unknown.Clone();
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(
++      CompleteGlassSurfaceConfigurationForEditing(unknown)));
++  EXPECT_EQ(unknown, unknown_original);
++}
++
++TEST(GlassSurfaceConfigurationTest, ClampsInvalidNumbersAndSkipsBadColors) {
++  base::DictValue dict;
++  dict.Set(kGlassAppearanceEnabledKey, true);
++  dict.Set(kGlassAppearanceMaterialOpacityKey, -1.0);
++  dict.Set(kGlassAppearanceGlassTintOpacityKey, 2.0);
++  dict.Set(kGlassAppearanceMaterialKey, "unrecognized");
++  dict.Set(kGlassAppearanceGlassStyleKey, "unrecognized");
++  dict.Set(kGlassAppearanceFrostedStyleKey, "unrecognized");
++  dict.Set(kGlassAppearanceFrostedTintStrengthKey, 3.0);
++  dict.Set(kGlassAppearanceTintStrengthKey, 4.0);
++  // Values saved with the previous 3.0 maximum are clamped to the new bound.
++  dict.Set(kGlassAppearanceGrainScaleKey, 3.0);
++  // base::Value normalizes nonfinite doubles at construction time, so use a
++  // wrong-type persisted value here. The parser still keeps a defensive
++  // isfinite check for dictionaries originating outside base::Value.
++  dict.Set(kGlassAppearanceGrainKey, "NaN");
++
++  base::ListValue points;
++  base::DictValue invalid_color;
++  invalid_color.Set(kGlassPointIdKey, "invalid");
++  invalid_color.Set(kGlassPointColorKey, "#not-a-color");
++  points.Append(std::move(invalid_color));
++
++  base::DictValue clamped;
++  clamped.Set(kGlassPointIdKey, "clamped");
++  clamped.Set(kGlassPointColorKey, "#123456");
++  clamped.Set(kGlassPointXKey, -1.0);
++  clamped.Set(kGlassPointYKey, 2.0);
++  clamped.Set(kGlassPointRadiusKey, 9.0);
++  clamped.Set(kGlassPointOpacityKey, -1.0);
++  points.Append(std::move(clamped));
++  dict.Set(kGlassAppearancePointsKey, std::move(points));
++
++  const GlassSurfaceConfiguration configuration =
++      ParseGlassSurfaceConfiguration(dict);
++  EXPECT_TRUE(configuration.enabled);
++  EXPECT_EQ(configuration.material, GlassSurfaceMaterial::kLiquidGlass);
++  EXPECT_DOUBLE_EQ(configuration.material_opacity, 0.0);
++  EXPECT_DOUBLE_EQ(configuration.glass_tint_opacity, 1.0);
++  EXPECT_EQ(configuration.glass_style, GlassSurfaceGlassStyle::kRegular);
++  EXPECT_EQ(configuration.frosted_style, GlassSurfaceFrostedStyle::kAutomatic);
++  EXPECT_DOUBLE_EQ(configuration.frosted_tint_strength, 2.0);
++  EXPECT_DOUBLE_EQ(configuration.tint_strength, 1.0);
++  EXPECT_DOUBLE_EQ(configuration.grain, 0.06);
++  EXPECT_DOUBLE_EQ(configuration.grain_scale, 2.0);
++  ASSERT_EQ(configuration.point_count, 1u);
++  EXPECT_DOUBLE_EQ(configuration.points[0].x, 0.0);
++  EXPECT_DOUBLE_EQ(configuration.points[0].y, 1.0);
++  EXPECT_DOUBLE_EQ(configuration.points[0].radius, 1.5);
++  EXPECT_DOUBLE_EQ(configuration.points[0].opacity, 0.0);
++
++  dict.Set(kGlassAppearanceMaterialKey, kGlassAppearanceAuto);
++  EXPECT_EQ(ParseGlassSurfaceConfiguration(dict).material,
++            GlassSurfaceMaterial::kAuto);
++}
++
++TEST(GlassSurfaceConfigurationTest,
++     PermissiveParserUsesDefaultsForMalformedNewFields) {
++  base::DictValue dict;
++  dict.Set(kGlassAppearanceMaterialOpacityKey, "NaN");
++  dict.Set(kGlassAppearanceGlassTintOpacityKey, "NaN");
++  dict.Set(kGlassAppearanceFrostedTintStrengthKey, "NaN");
++  dict.Set(kGlassAppearanceGrainScaleKey, "NaN");
++
++  const GlassSurfaceConfiguration configuration =
++      ParseGlassSurfaceConfiguration(dict);
++  EXPECT_DOUBLE_EQ(configuration.material_opacity, 0.95);
++  EXPECT_DOUBLE_EQ(configuration.glass_tint_opacity, 0.7);
++  EXPECT_DOUBLE_EQ(configuration.frosted_tint_strength, 1.0);
++  EXPECT_DOUBLE_EQ(configuration.grain_scale, 0.5);
++}
++
++TEST(GlassSurfaceConfigurationTest, EmptyPointsListClearsCanonicalPoints) {
++  base::DictValue dict;
++  dict.Set(kGlassAppearancePointsKey, base::ListValue());
++
++  const GlassSurfaceConfiguration configuration =
++      ParseGlassSurfaceConfiguration(dict);
++  EXPECT_EQ(configuration.point_count, 0u);
++}
++
++TEST(GlassSurfaceConfigurationTest, ResolvesSolidForReducedTransparency) {
++  GlassSurfaceConfiguration configuration = DefaultGlassSurfaceConfiguration();
++  configuration.enabled = true;
++  configuration.material = GlassSurfaceMaterial::kLiquidGlass;
++
++  const GlassSurfaceResolution resolution = ResolveGlassSurfaceConfiguration(
++      configuration, GlassBackend::kAuto, true, true, true);
++  EXPECT_EQ(resolution.configured, GlassSurfaceMaterial::kLiquidGlass);
++  EXPECT_EQ(resolution.active, GlassSurfaceMaterial::kSolid);
++  EXPECT_FALSE(resolution.paints_chrome_transparent);
++  EXPECT_STREQ(resolution.fallback_reason, "reduce-transparency");
++}
++
++TEST(GlassSurfaceConfigurationTest, SolidKeepsChromeTransparent) {
++  GlassSurfaceConfiguration configuration = DefaultGlassSurfaceConfiguration();
++  configuration.enabled = true;
++  configuration.material = GlassSurfaceMaterial::kSolid;
++
++  const GlassSurfaceResolution resolution = ResolveGlassSurfaceConfiguration(
++      configuration, GlassBackend::kAuto, true, true, false);
++  EXPECT_EQ(resolution.active, GlassSurfaceMaterial::kSolid);
++  EXPECT_TRUE(resolution.paints_chrome_transparent);
++}
++
++TEST(GlassSurfaceConfigurationTest, StrictSerializerRoundTripsCanonicalValue) {
++  GlassSurfaceConfiguration configuration = DefaultGlassSurfaceConfiguration();
++  configuration.enabled = true;
++  configuration.material = GlassSurfaceMaterial::kSolid;
++  configuration.material_opacity = 0.25;
++  configuration.glass_tint_opacity = 0.75;
++  configuration.glass_style = GlassSurfaceGlassStyle::kClear;
++  configuration.frosted_style = GlassSurfaceFrostedStyle::kHud;
++  configuration.frosted_tint_strength = 1.8;
++  configuration.grain_scale = 2.25;
++
++  base::DictValue serialized =
++      SerializeGlassSurfaceConfiguration(configuration);
++  std::optional<GlassSurfaceConfiguration> parsed =
++      ParseGlassSurfaceConfigurationStrict(serialized);
++  ASSERT_TRUE(parsed);
++
++  base::DictValue canonical_again = SerializeGlassSurfaceConfiguration(*parsed);
++  EXPECT_EQ(serialized, canonical_again);
++  EXPECT_EQ(serialized.size(), 12u);
++  ASSERT_NE(serialized.FindString(kGlassAppearanceMaterialKey), nullptr);
++  EXPECT_STREQ(serialized.FindString(kGlassAppearanceMaterialKey)->c_str(),
++               "solid");
++  ASSERT_NE(serialized.FindString(kGlassAppearanceGlassStyleKey), nullptr);
++  EXPECT_STREQ(serialized.FindString(kGlassAppearanceGlassStyleKey)->c_str(),
++               "clear");
++  ASSERT_NE(serialized.FindString(kGlassAppearanceFrostedStyleKey), nullptr);
++  EXPECT_STREQ(serialized.FindString(kGlassAppearanceFrostedStyleKey)->c_str(),
++               "hud");
++  EXPECT_DOUBLE_EQ(parsed->material_opacity, 0.25);
++  EXPECT_DOUBLE_EQ(parsed->glass_tint_opacity, 0.75);
++  EXPECT_EQ(parsed->glass_style, GlassSurfaceGlassStyle::kClear);
++  EXPECT_EQ(parsed->frosted_style, GlassSurfaceFrostedStyle::kHud);
++  EXPECT_DOUBLE_EQ(parsed->frosted_tint_strength, 1.8);
++  EXPECT_DOUBLE_EQ(parsed->grain_scale, 2.0);
++  EXPECT_DOUBLE_EQ(*serialized.FindDouble(kGlassAppearanceGrainScaleKey), 2.0);
++}
++
++TEST(GlassSurfaceConfigurationTest, StrictParserRejectsMalformedValues) {
++  const base::DictValue valid =
++      SerializeGlassSurfaceConfiguration(DefaultGlassSurfaceConfiguration());
++
++  base::DictValue unknown_key = valid.Clone();
++  unknown_key.Set("futureField", true);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(unknown_key));
++
++  base::DictValue nonfinite = valid.Clone();
++  nonfinite.Set(kGlassAppearanceGrainKey, "not-a-number");
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(nonfinite));
++
++  base::DictValue out_of_range = valid.Clone();
++  out_of_range.Set(kGlassAppearanceTintStrengthKey, -0.01);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(out_of_range));
++
++  base::DictValue new_field_out_of_range = valid.Clone();
++  new_field_out_of_range.Set(kGlassAppearanceMaterialOpacityKey, 1.01);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(new_field_out_of_range));
++
++  new_field_out_of_range = valid.Clone();
++  new_field_out_of_range.Set(kGlassAppearanceGlassTintOpacityKey, -0.01);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(new_field_out_of_range));
++
++  new_field_out_of_range = valid.Clone();
++  new_field_out_of_range.Set(kGlassAppearanceGrainScaleKey, 0.49);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(new_field_out_of_range));
++
++  new_field_out_of_range = valid.Clone();
++  new_field_out_of_range.Set(kGlassAppearanceGrainScaleKey, 2.01);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(new_field_out_of_range));
++
++  new_field_out_of_range = valid.Clone();
++  new_field_out_of_range.Set(kGlassAppearanceFrostedTintStrengthKey, 2.01);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(new_field_out_of_range));
++
++  base::DictValue nonfinite_new_field = valid.Clone();
++  nonfinite_new_field.Set(kGlassAppearanceMaterialOpacityKey, "NaN");
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(nonfinite_new_field));
++
++  base::DictValue unknown_style = valid.Clone();
++  unknown_style.Set(kGlassAppearanceGlassStyleKey, "unrecognized");
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(unknown_style));
++
++  unknown_style = valid.Clone();
++  unknown_style.Set(kGlassAppearanceFrostedStyleKey, "unrecognized");
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(unknown_style));
++
++  base::DictValue duplicate_ids = valid.Clone();
++  base::ListValue* points = duplicate_ids.FindList(kGlassAppearancePointsKey);
++  ASSERT_NE(points, nullptr);
++  ASSERT_GE(points->size(), 2u);
++  base::DictValue* second_point = (*points)[1].GetIfDict();
++  ASSERT_NE(second_point, nullptr);
++  second_point->Set(kGlassPointIdKey, "yellow");
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(duplicate_ids));
++
++  const char* required_keys[] = {
++      kGlassAppearanceEnabledKey,
++      kGlassAppearanceMaterialKey,
++      kGlassAppearanceMaterialOpacityKey,
++      kGlassAppearanceGlassTintOpacityKey,
++      kGlassAppearanceGlassStyleKey,
++      kGlassAppearanceFrostedStyleKey,
++      kGlassAppearanceFrostedTintStrengthKey,
++      kGlassAppearanceTintStrengthKey,
++      kGlassAppearanceGrainKey,
++      kGlassAppearanceGrainScaleKey,
++      kGlassAppearancePointsKey,
++  };
++  for (const char* key : required_keys) {
++    base::DictValue missing_field = valid.Clone();
++    EXPECT_TRUE(missing_field.Remove(key));
++    EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(missing_field));
++  }
++}
++
++TEST(GlassSurfaceConfigurationTest, StrictParserAcceptsExactBoundariesAndInts) {
++  base::DictValue boundary =
++      SerializeGlassSurfaceConfiguration(DefaultGlassSurfaceConfiguration());
++  boundary.Set(kGlassAppearanceTintStrengthKey, 1);
++  boundary.Set(kGlassAppearanceGrainKey, 0.3);
++  boundary.Set(kGlassAppearanceMaterialOpacityKey, 0);
++  boundary.Set(kGlassAppearanceGlassTintOpacityKey, 1);
++  boundary.Set(kGlassAppearanceFrostedTintStrengthKey, 2);
++  boundary.Set(kGlassAppearanceGrainScaleKey, 2.0);
++
++  base::ListValue* points = boundary.FindList(kGlassAppearancePointsKey);
++  ASSERT_NE(points, nullptr);
++  ASSERT_FALSE(points->empty());
++  base::DictValue* point = (*points)[0].GetIfDict();
++  ASSERT_NE(point, nullptr);
++  point->Set(kGlassPointXKey, 0);
++  point->Set(kGlassPointYKey, 1);
++  point->Set(kGlassPointRadiusKey, 0.1);
++  point->Set(kGlassPointOpacityKey, 1);
++
++  std::optional<GlassSurfaceConfiguration> parsed =
++      ParseGlassSurfaceConfigurationStrict(boundary);
++  ASSERT_TRUE(parsed);
++  EXPECT_DOUBLE_EQ(parsed->tint_strength, 1.0);
++  EXPECT_DOUBLE_EQ(parsed->grain, 0.3);
++  EXPECT_DOUBLE_EQ(parsed->material_opacity, 0.0);
++  EXPECT_DOUBLE_EQ(parsed->glass_tint_opacity, 1.0);
++  EXPECT_DOUBLE_EQ(parsed->frosted_tint_strength, 2.0);
++  EXPECT_DOUBLE_EQ(parsed->grain_scale, 2.0);
++
++  base::DictValue lower_boundary = boundary.Clone();
++  lower_boundary.Set(kGlassAppearanceGrainScaleKey, 0.5);
++  std::optional<GlassSurfaceConfiguration> lower_parsed =
++      ParseGlassSurfaceConfigurationStrict(lower_boundary);
++  ASSERT_TRUE(lower_parsed);
++  EXPECT_DOUBLE_EQ(lower_parsed->grain_scale, 0.5);
++  EXPECT_DOUBLE_EQ(parsed->points[0].x, 0.0);
++  EXPECT_DOUBLE_EQ(parsed->points[0].y, 1.0);
++  EXPECT_DOUBLE_EQ(parsed->points[0].radius, 0.1);
++  EXPECT_DOUBLE_EQ(parsed->points[0].opacity, 1.0);
++
++  base::DictValue canonical = SerializeGlassSurfaceConfiguration(*parsed);
++  ASSERT_NE(canonical.FindDouble(kGlassAppearanceGrainKey), std::nullopt);
++  EXPECT_DOUBLE_EQ(*canonical.FindDouble(kGlassAppearanceGrainKey), 0.3);
++  base::ListValue* canonical_points =
++      canonical.FindList(kGlassAppearancePointsKey);
++  ASSERT_NE(canonical_points, nullptr);
++  base::DictValue* canonical_point = (*canonical_points)[0].GetIfDict();
++  ASSERT_NE(canonical_point, nullptr);
++  ASSERT_NE(canonical_point->FindDouble(kGlassPointRadiusKey), std::nullopt);
++  EXPECT_DOUBLE_EQ(*canonical_point->FindDouble(kGlassPointRadiusKey), 0.1);
++}
++
++TEST(GlassSurfaceConfigurationTest, PersistsMatchedColorAdjustments) {
++  auto configuration = DefaultGlassSurfaceConfiguration();
++  EXPECT_FALSE(configuration.match_color_adjustments);
++  configuration.match_color_adjustments = true;
++  auto serialized = SerializeGlassSurfaceConfiguration(configuration);
++  auto parsed = ParseGlassSurfaceConfigurationStrict(serialized);
++  ASSERT_TRUE(parsed);
++  EXPECT_TRUE(parsed->match_color_adjustments);
++  serialized.Set(kGlassAppearanceMatchColorAdjustmentsKey, 1);
++  EXPECT_FALSE(ParseGlassSurfaceConfigurationStrict(serialized));
++}
++
++TEST(GlassSurfaceConfigurationTest, CompletesOlderColorLinkSetting) {
++  auto saved =
++      SerializeGlassSurfaceConfiguration(DefaultGlassSurfaceConfiguration());
++  saved.Remove(kGlassAppearanceMatchColorAdjustmentsKey);
++  auto complete = CompleteGlassSurfaceConfigurationForEditing(saved);
++  auto parsed = ParseGlassSurfaceConfigurationStrict(complete);
++  ASSERT_TRUE(parsed);
++  EXPECT_FALSE(parsed->match_color_adjustments);
++}
++
++}  // namespace helium
+Index: src/chrome/browser/ui/views/helium/native_frame_materials.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/native_frame_materials.cc
++++ src/chrome/browser/ui/views/helium/native_frame_materials.cc
+@@ -5,35 +5,92 @@
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ 
+ #include "build/build_config.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#include "components/prefs/pref_service.h"
+ #include "ui/views/view.h"
+ #include "ui/views/widget/widget.h"
+ 
+-#if BUILDFLAG(IS_MAC)
+-#include "chrome/browser/ui/views/helium/glass_surface.h"
+-#endif
+-
+ namespace helium {
++namespace {
++
++const PrefService* ChromeAppearancePrefs(const BrowserView* browser_view) {
++  if (!browser_view || !browser_view->GetIsNormalType() ||
++      !browser_view->GetProfile()) {
++    return nullptr;
++  }
++  return browser_view->GetProfile()->GetOriginalProfile()->GetPrefs();
++}
++
++// Paint predicates only need material selection. Avoid decoding color points
++// and allocating their identifiers during every Chrome Views paint.
++GlassSurfaceConfiguration ReadMaterialSelection(const PrefService* prefs) {
++  GlassSurfaceConfiguration selection;
++  if (!prefs || !prefs->FindPreference(kArciumChromeAppearancePref)) {
++    return selection;
++  }
++  const base::DictValue& value = prefs->GetDict(kArciumChromeAppearancePref);
++  selection.enabled =
++      value.FindBool(kGlassAppearanceEnabledKey).value_or(false);
++  if (const std::string* material =
++          value.FindString(kGlassAppearanceMaterialKey)) {
++    if (*material == kGlassAppearanceLiquidGlass) {
++      selection.material = GlassSurfaceMaterial::kLiquidGlass;
++    } else if (*material == kGlassAppearanceFrosted) {
++      selection.material = GlassSurfaceMaterial::kFrosted;
++    } else if (*material == kGlassAppearanceSolid) {
++      selection.material = GlassSurfaceMaterial::kSolid;
++    }
++  }
++  return selection;
++}
++
++GlassSurfaceResolution ResolveNativeFrameGlass(
++    const BrowserView* browser_view,
++    const GlassBackendAvailability& availability) {
++  return ResolveGlassSurfaceConfiguration(
++      ReadMaterialSelection(ChromeAppearancePrefs(browser_view)),
++      GetRequestedGlassBackend(), availability.native_liquid_glass,
++      availability.native_material, availability.reduce_transparency);
++}
++
++}  // namespace
++
++GlassSurfaceConfiguration GetNativeFrameGlassConfiguration(
++    const BrowserView* browser_view) {
++  const PrefService* prefs = ChromeAppearancePrefs(browser_view);
++  return prefs ? ReadGlassSurfaceConfiguration(prefs)
++               : DefaultGlassSurfaceConfiguration();
++}
++
++GlassSurfaceResolution GetNativeFrameGlassResolution(
++    const BrowserView* browser_view) {
++  return ResolveNativeFrameGlass(browser_view,
++                                 GetNativeFrameGlassAvailability());
++}
+ 
+ bool ShouldUseNativeFrameGlass(const BrowserView* browser_view) {
+-#if BUILDFLAG(IS_MAC)
+-  if (!browser_view) {
++  if (!browser_view || browser_view->GetIsWebAppType()) {
+     return false;
+   }
+-
+-  // Web app windows use their app-defined frame appearance.
+-  if (browser_view->GetIsWebAppType()) {
++  const GlassBackendAvailability availability =
++      GetNativeFrameGlassAvailability();
++  if (!availability.native_liquid_glass && !availability.native_material) {
+     return false;
+   }
+-
++  const GlassSurfaceResolution resolution =
++      ResolveNativeFrameGlass(browser_view, availability);
++  if (resolution.enabled) {
++    return resolution.paints_chrome_transparent;
++  }
++  // Uncustomized windows, including Little Arc and other popups, keep the
++  // existing native material policy.
+   const GlassBackend backend =
+       ResolveGlassSurface(GlassHost::kNativeFrame).resolved;
+   return backend == GlassBackend::kNativeLiquidGlass ||
+          backend == GlassBackend::kNativeMaterial;
+-#else
+-  return false;
+-#endif
+ }
+ 
+ bool ShouldUseNativeFrameGlass(const BrowserWindowInterface* browser) {
+@@ -49,4 +106,10 @@ bool ShouldUseNativeFrameGlass(const vie
+              : nullptr);
+ }
+ 
++bool ShouldUseTranslucentNativeFrameWindow(const BrowserView* browser_view) {
++  // Solid custom chrome fills its native background completely, while keeping
++  // the window initialized for live switching to a translucent material.
++  return ShouldUseNativeFrameGlass(browser_view);
++}
++
+ }  // namespace helium
+Index: src/chrome/browser/ui/views/helium/native_frame_materials.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/native_frame_materials.h
++++ src/chrome/browser/ui/views/helium/native_frame_materials.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_NATIVE_FRAME_MATERIALS_H_
+ #define CHROME_BROWSER_UI_VIEWS_HELIUM_NATIVE_FRAME_MATERIALS_H_
+ 
++#include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
++
+ class BrowserView;
+ class BrowserWindowInterface;
+ 
+@@ -14,10 +16,24 @@ class View;
+ 
+ namespace helium {
+ 
++// Returns the profile-owned configuration and its current native resolution.
++// The returned values are snapshots and are safe to pass to AppKit on the UI
++// thread. A disabled configuration leaves the legacy command-line resolver in
++// control.
++GlassSurfaceConfiguration GetNativeFrameGlassConfiguration(
++    const BrowserView* browser_view);
++GlassSurfaceResolution GetNativeFrameGlassResolution(
++    const BrowserView* browser_view);
++
++// Whether Chrome Views leave their frame fills transparent for the native
++// background. A solid custom background also needs transparent view fills.
+ bool ShouldUseNativeFrameGlass(const BrowserView* browser_view);
+ bool ShouldUseNativeFrameGlass(const BrowserWindowInterface* browser);
+ bool ShouldUseNativeFrameGlass(const views::View* view);
+ 
++// Initialize the window for live switching between native materials.
++bool ShouldUseTranslucentNativeFrameWindow(const BrowserView* browser_view);
++
+ }  // namespace helium
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_NATIVE_FRAME_MATERIALS_H_
+Index: src/chrome/test/BUILD.gn
+===================================================================
+--- src.orig/chrome/test/BUILD.gn
++++ src/chrome/test/BUILD.gn
+@@ -11360,3 +11360,22 @@ test("captcha_provider_fuzztests") {
+     "//url",
+   ]
+ }
++
++if (toolkit_views) {
++  test("arcium_glass_surface_configuration_unittests") {
++    sources = [
++      "../browser/ui/views/helium/glass_surface_configuration_unittest.cc",
++    ]
++
++    deps = [
++      "//base",
++      "//base/test:run_all_unittests",
++      "//base/test:test_support",
++      "//chrome/browser/ui:glass_surface_configuration",
++      "//components/prefs",
++      "//skia",
++      "//testing/gtest",
++      "//ui/views",
++    ]
++  }
++}

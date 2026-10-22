@@ -1,0 +1,70 @@
+Used by the keyboard shortcuts settings page to direct the user to macOS settings
+
+--- a/base/mac/mac_util.h
++++ b/base/mac/mac_util.h
+@@ -108,6 +108,9 @@ enum class SystemSettingsPane {
+   // General > Login Items & Extensions > Extensions > Sharing
+   kGeneral_LoginItems_Extensions_Sharing,
+ 
++  // Keyboard > Keyboard Shortcuts
++  kKeyboardShortcuts,
++
+   // Network > Proxies
+   kNetwork_Proxies,
+ 
+--- a/base/mac/mac_util.mm
++++ b/base/mac/mac_util.mm
+@@ -474,6 +474,16 @@ void OpenSystemSettingsPane(SystemSettin
+               @"Sharing";
+       }
+       break;
++    case SystemSettingsPane::kKeyboardShortcuts:
++      if (MacOSMajorVersion() >= 15) {
++        url = @"x-apple.systempreferences:com.apple.Keyboard";
++      } else if (MacOSMajorVersion() >= 13) {
++        url = @"x-apple.systempreferences:com.apple.Keyboard-Settings."
++              @"extension";
++      } else {
++        url = @"x-apple.systempreferences:com.apple.preference.keyboard";
++      }
++      break;
+     case SystemSettingsPane::kNetwork_Proxies:
+       url = @"x-apple.systempreferences:com.apple.Network-Settings.extension?"
+             @"Proxies";
+--- a/chrome/browser/ui/webui/settings/mac_system_settings_handler.cc
++++ b/chrome/browser/ui/webui/settings/mac_system_settings_handler.cc
+@@ -15,12 +15,24 @@ MacSystemSettingsHandler::~MacSystemSett
+ 
+ void MacSystemSettingsHandler::RegisterMessages() {
+   web_ui()->RegisterMessageCallback(
++      "openKeyboardShortcutsSettings",
++      base::BindRepeating(
++          &MacSystemSettingsHandler::HandleOpenKeyboardShortcutsSettings,
++          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
+       "openTrackpadGesturesSettings",
+       base::BindRepeating(
+           &MacSystemSettingsHandler::HandleOpenTrackpadGesturesSettings,
+           base::Unretained(this)));
+ }
+ 
++void MacSystemSettingsHandler::HandleOpenKeyboardShortcutsSettings(
++    const base::ListValue& args) {
++  AllowJavascript();
++  base::mac::OpenSystemSettingsPane(
++      base::mac::SystemSettingsPane::kKeyboardShortcuts);
++}
++
+ void MacSystemSettingsHandler::HandleOpenTrackpadGesturesSettings(
+     const base::ListValue& args) {
+   AllowJavascript();
+--- a/chrome/browser/ui/webui/settings/mac_system_settings_handler.h
++++ b/chrome/browser/ui/webui/settings/mac_system_settings_handler.h
+@@ -24,6 +24,7 @@ class MacSystemSettingsHandler : public
+   void OnJavascriptDisallowed() override {}
+ 
+  private:
++  void HandleOpenKeyboardShortcutsSettings(const base::ListValue& args);
+   void HandleOpenTrackpadGesturesSettings(const base::ListValue& args);
+ };
+ 

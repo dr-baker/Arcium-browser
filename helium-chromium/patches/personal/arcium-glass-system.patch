@@ -1,0 +1,1948 @@
+Index: src/chrome/browser/ui/BUILD.gn
+===================================================================
+--- src.orig/chrome/browser/ui/BUILD.gn
++++ src/chrome/browser/ui/BUILD.gn
+@@ -3583,6 +3583,8 @@ static_library("ui") {
+       "views/frame/immersive_mode_overlay_views_mac.h",
+       "views/frame/immersive_mode_overlay_views_mac.mm",
+       "views/helium/frame_corner_radius_mac.mm",
++      "views/helium/glass_surface_mac.h",
++      "views/helium/glass_surface_mac.mm",
+       "views/helium/native_frame_materials_mac.h",
+       "views/helium/native_frame_materials_mac.mm",
+       "views/tab_contents/chrome_web_contents_view_delegate_views_mac.h",
+@@ -4191,6 +4193,8 @@ static_library("ui") {
+       "views/global_error_bubble_view.h",
+       "views/helium/frame_corner_radius.cc",
+       "views/helium/frame_corner_radius.h",
++      "views/helium/glass_surface.cc",
++      "views/helium/glass_surface.h",
+       "views/helium/native_frame_materials.cc",
+       "views/helium/native_frame_materials.h",
+       "views/hung_renderer_view.cc",
+Index: src/chrome/browser/ui/views/helium/glass_surface.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface.cc
+@@ -0,0 +1,274 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++
++#include <algorithm>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/notreached.h"
++#include "base/trace_event/trace_event.h"
++#include "cc/paint/filter_operation.h"
++#include "cc/paint/filter_operations.h"
++#include "cc/paint/paint_filter.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/compositor/layer.h"
++
++namespace helium {
++
++namespace {
++
++struct MaterialTuning {
++  float blur_radius;
++  float edge_width;
++  float refraction;
++  float dispersion;
++  float tint_strength;
++  float saturation;
++  float specular;
++  float grain;
++  SkColor4f tint;
++};
++
++constexpr MaterialTuning kBasicTuning = {
++    .blur_radius = 13.0f, .edge_width = 28.0f, .refraction = 0.6f,
++    .dispersion = 0.0f, .tint_strength = 0.10f, .saturation = 1.03f,
++    .specular = 0.08f, .grain = 0.004f,
++    .tint = {0.76f, 0.84f, 1.0f, 1.0f},
++};
++
++constexpr MaterialTuning kGlassmorphicTuning = {
++    .blur_radius = 10.0f, .edge_width = 18.0f, .refraction = 7.0f,
++    .dispersion = 0.15f, .tint_strength = 0.12f, .saturation = 1.10f,
++    .specular = 0.26f, .grain = 0.008f,
++    .tint = {0.50f, 0.69f, 1.0f, 1.0f},
++};
++
++constexpr float kBackdropFilterQuality = 1.0f;
++constexpr float kMaxSampleRadius = 20.0f;
++
++const MaterialTuning& GetMaterialTuning(GlassSurfacePreset preset) {
++  switch (preset) {
++    case GlassSurfacePreset::kBasic:
++      return kBasicTuning;
++    case GlassSurfacePreset::kGlassmorphic:
++      return kGlassmorphicTuning;
++  }
++  NOTREACHED();
++}
++
++float ClampUnit(float value) {
++  return std::clamp(value, 0.0f, 1.0f);
++}
++
++}  // namespace
++
++GlassBackend GetRequestedGlassBackend() {
++  const std::string value =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++          kArciumGlassBackendSwitch);
++  if (value == "liquid-glass") {
++    return GlassBackend::kNativeLiquidGlass;
++  }
++  if (value == "material") {
++    return GlassBackend::kNativeMaterial;
++  }
++  if (value == "chromium") {
++    return GlassBackend::kChromium;
++  }
++  if (value == "opaque") {
++    return GlassBackend::kOpaque;
++  }
++  return GlassBackend::kAuto;
++}
++
++GlassBackend ResolveGlassBackend(
++    GlassBackend requested,
++    const GlassBackendAvailability& availability) {
++  if (availability.reduce_transparency || requested == GlassBackend::kOpaque) {
++    return GlassBackend::kOpaque;
++  }
++  if (requested != GlassBackend::kAuto) {
++    const bool available =
++        (requested == GlassBackend::kNativeLiquidGlass &&
++         availability.native_liquid_glass) ||
++        (requested == GlassBackend::kNativeMaterial &&
++         availability.native_material) ||
++        (requested == GlassBackend::kChromium && availability.chromium) ||
++        requested == GlassBackend::kOpaque;
++    if (available) {
++      return requested;
++    }
++  }
++  if (availability.native_liquid_glass) {
++    return GlassBackend::kNativeLiquidGlass;
++  }
++  if (availability.native_material) {
++    return GlassBackend::kNativeMaterial;
++  }
++  if (availability.chromium) {
++    return GlassBackend::kChromium;
++  }
++  return GlassBackend::kOpaque;
++}
++
++#if !BUILDFLAG(IS_MAC)
++bool GlassReduceTransparency() {
++  return false;
++}
++
++GlassBackendAvailability GetNativeFrameGlassAvailability() {
++  return {};
++}
++#endif
++
++GlassResolution ResolveGlassSurface(GlassHost host) {
++  GlassBackendAvailability availability;
++  if (host == GlassHost::kEmbedded) {
++    availability.chromium = true;
++    availability.reduce_transparency = GlassReduceTransparency();
++  } else {
++    availability = GetNativeFrameGlassAvailability();
++  }
++  const GlassBackend requested = GetRequestedGlassBackend();
++  const GlassBackend resolved = ResolveGlassBackend(requested, availability);
++  const char* reason = availability.reduce_transparency ? "reduce-transparency"
++      : requested == GlassBackend::kOpaque ? "explicit-opaque"
++      : resolved == GlassBackend::kOpaque ? "no-supported-renderer"
++      : requested != GlassBackend::kAuto && requested != resolved
++          ? "preferred-renderer-unavailable" : "none";
++  TRACE_EVENT_INSTANT("ui", "Arcium.Glass.Resolve", "requested",
++                     GlassBackendName(requested), "resolved",
++                     GlassBackendName(resolved), "host",
++                     host == GlassHost::kEmbedded ? "embedded" : "native-frame",
++                     "fallback_reason", reason);
++  return {requested, resolved, host, reason};
++}
++
++const char* GlassBackendName(GlassBackend backend) {
++  switch (backend) {
++    case GlassBackend::kAuto:
++      return "auto";
++    case GlassBackend::kNativeLiquidGlass:
++      return "liquid-glass";
++    case GlassBackend::kNativeMaterial:
++      return "material";
++    case GlassBackend::kChromium:
++      return "chromium";
++    case GlassBackend::kOpaque:
++      return "opaque";
++  }
++  NOTREACHED();
++}
++
++GlassSurfaceView::GlassSurfaceView(const GlassSurfaceParams& params)
++    : backend_(ResolveGlassSurface(GlassHost::kEmbedded).resolved),
++      preset_(params.preset),
++      tint_color_(params.tint_color),
++      tint_strength_(ClampUnit(params.tint_strength)),
++      opacity_(ClampUnit(params.opacity)),
++      opaque_color_(params.opaque_color),
++      corner_radii_(params.corner_radii) {
++  SetCanProcessEventsWithinSubtree(false);
++  // A transparent solid layer supplies drawable bounds for backdrop filtering.
++  SetPaintToLayer(ui::LAYER_SOLID_COLOR);
++  UpdateLayer();
++}
++
++GlassSurfaceView::~GlassSurfaceView() = default;
++
++void GlassSurfaceView::SetPreset(GlassSurfacePreset preset) {
++  if (preset_ == preset) {
++    return;
++  }
++  preset_ = preset;
++  UpdateLayer();
++}
++
++void GlassSurfaceView::SetTintColor(SkColor tint_color) {
++  if (tint_color_ == tint_color) {
++    return;
++  }
++  tint_color_ = tint_color;
++  UpdateLayer();
++}
++
++void GlassSurfaceView::SetTintStrength(float tint_strength) {
++  tint_strength = ClampUnit(tint_strength);
++  if (tint_strength_ == tint_strength) {
++    return;
++  }
++  tint_strength_ = tint_strength;
++  UpdateLayer();
++}
++
++void GlassSurfaceView::SetOpacity(float opacity) {
++  opacity = ClampUnit(opacity);
++  if (opacity_ == opacity) {
++    return;
++  }
++  opacity_ = opacity;
++  UpdateLayer();
++}
++
++void GlassSurfaceView::SetCornerRadii(
++    const gfx::RoundedCornersF& corner_radii) {
++  if (corner_radii_ == corner_radii) {
++    return;
++  }
++  corner_radii_ = corner_radii;
++  UpdateLayer();
++}
++
++void GlassSurfaceView::UpdateLayer() {
++  if (!layer()) {
++    return;
++  }
++
++  const MaterialTuning& tuning = GetMaterialTuning(preset_);
++  layer()->SetOpacity(1.0f);
++  layer()->SetColor(backend_ == GlassBackend::kOpaque ? opaque_color_
++                                                      : SK_ColorTRANSPARENT);
++  layer()->SetBackgroundBlur(0.0f);
++  layer()->SetBackdropFilterQuality(kBackdropFilterQuality);
++  layer()->SetRoundedCornerRadius(corner_radii_);
++  layer()->SetIsFastRoundedCorner(!corner_radii_.IsEmpty());
++  cc::FilterOperations filters;
++  const gfx::Size size = GetLocalBounds().size();
++  if (backend_ == GlassBackend::kChromium && opacity_ > 0.0f &&
++      !size.IsEmpty()) {
++    cc::GlassmorphicFilterParams params;
++    params.resolution = SkSize::Make(size.width(), size.height());
++    params.panel_size = params.resolution;
++    params.corner_radius = corner_radii_.upper_left();
++    params.blur_radius = tuning.blur_radius;
++    params.opacity = opacity_;
++    params.edge_width = tuning.edge_width;
++    params.refraction = tuning.refraction;
++    params.dispersion = tuning.dispersion;
++    params.tint_strength = ClampUnit(tuning.tint_strength + tint_strength_);
++    params.saturation = tuning.saturation;
++    params.specular = tuning.specular;
++    params.grain = tuning.grain;
++    const SkColor4f external = SkColor4f::FromColor(tint_color_);
++    params.tint = {tuning.tint.fR * external.fR,
++                   tuning.tint.fG * external.fG,
++                   tuning.tint.fB * external.fB, 1.0f};
++    const SkRect crop = SkRect::MakeWH(size.width(), size.height());
++    filters.Append(cc::FilterOperation::CreateReferenceFilter(
++        sk_make_sp<cc::GlassmorphicPaintFilter>(params, kMaxSampleRadius,
++                                                &crop)));
++  }
++  layer()->SetCustomBackdropFilters(filters);
++}
++
++void GlassSurfaceView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
++  UpdateLayer();
++}
++
++BEGIN_METADATA(GlassSurfaceView)
++END_METADATA
++
++}  // namespace helium
+Index: src/chrome/browser/ui/views/helium/glass_surface.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface.h
+@@ -0,0 +1,111 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_H_
++#define CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_H_
++
++#include "build/build_config.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/gfx/geometry/rounded_corners_f.h"
++#include "ui/views/view.h"
++
++namespace helium {
++
++inline constexpr char kArciumGlassBackendSwitch[] = "arcium-glass-backend";
++
++// The implementation used to draw a glass surface. Native backends are hosted
++// by AppKit and Chromium is drawn inside the browser compositor.
++enum class GlassBackend {
++  kAuto,
++  kNativeLiquidGlass,
++  kNativeMaterial,
++  kChromium,
++  kOpaque,
++};
++
++struct GlassBackendAvailability {
++  bool native_liquid_glass = false;
++  bool native_material = false;
++  bool chromium = false;
++  bool reduce_transparency = false;
++};
++
++enum class GlassHost { kEmbedded, kNativeFrame };
++
++struct GlassResolution {
++  GlassBackend requested;
++  GlassBackend resolved;
++  GlassHost host;
++  const char* fallback_reason;
++};
++
++GlassResolution ResolveGlassSurface(GlassHost host);
++
++GlassBackend GetRequestedGlassBackend();
++GlassBackend ResolveGlassBackend(
++    GlassBackend requested,
++    const GlassBackendAvailability& availability);
++const char* GlassBackendName(GlassBackend backend);
++
++GlassBackendAvailability GetNativeFrameGlassAvailability();
++bool GlassReduceTransparency();
++
++// Fixed, reviewed materials for browser chrome. The shader lab exposes more
++// knobs, but product code intentionally selects a material rather than
++// tuning its implementation details per component.
++enum class GlassSurfacePreset {
++  kBasic,
++  kGlassmorphic,
++};
++
++struct GlassSurfaceParams {
++  GlassSurfacePreset preset = GlassSurfacePreset::kBasic;
++  SkColor tint_color = SK_ColorWHITE;
++  float tint_strength = 0.0f;
++  float opacity = 1.0f;
++  SkColor opaque_color = SkColorSetRGB(28, 28, 30);
++  gfx::RoundedCornersF corner_radii = gfx::RoundedCornersF();
++};
++
++// A reusable embedded Views surface. Native AppKit surfaces use the same
++// backend policy through glass_surface_mac.h, while this class resolves to the
++// Chromium live-backdrop renderer or the opaque fallback.
++class GlassSurfaceView : public views::View {
++  METADATA_HEADER(GlassSurfaceView, views::View)
++
++ public:
++  explicit GlassSurfaceView(const GlassSurfaceParams& params);
++  GlassSurfaceView(const GlassSurfaceView&) = delete;
++  GlassSurfaceView& operator=(const GlassSurfaceView&) = delete;
++  ~GlassSurfaceView() override;
++
++  void SetPreset(GlassSurfacePreset preset);
++  void SetTintColor(SkColor tint_color);
++  void SetTintStrength(float tint_strength);
++  void SetOpacity(float opacity);
++  void SetCornerRadii(const gfx::RoundedCornersF& corner_radii);
++
++  bool uses_backdrop() const { return backend_ != GlassBackend::kOpaque; }
++  GlassSurfacePreset preset() const { return preset_; }
++  SkColor tint_color() const { return tint_color_; }
++  float tint_strength() const { return tint_strength_; }
++  float opacity() const { return opacity_; }
++  const gfx::RoundedCornersF& corner_radii() const { return corner_radii_; }
++
++ private:
++  void UpdateLayer();
++  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
++
++  GlassBackend backend_;
++  GlassSurfacePreset preset_;
++  SkColor tint_color_;
++  float tint_strength_;
++  float opacity_;
++  SkColor opaque_color_;
++  gfx::RoundedCornersF corner_radii_;
++};
++
++}  // namespace helium
++
++#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_H_
+Index: src/cc/paint/paint_filter.cc
+===================================================================
+--- src.orig/cc/paint/paint_filter.cc
++++ src/cc/paint/paint_filter.cc
+@@ -5,11 +5,13 @@
+ #include "cc/paint/paint_filter.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <string>
+ #include <utility>
+ #include <vector>
+ 
+ #include "base/containers/span.h"
++#include "base/logging.h"
+ #include "base/memory/values_equivalent.h"
+ #include "base/no_destructor.h"
+ #include "base/notreached.h"
+@@ -17,6 +19,7 @@
+ #include "build/build_config.h"
+ #include "cc/paint/draw_image.h"
+ #include "cc/paint/filter_operations.h"
++#include "cc/paint/glassmorphic_paint_filter.h"
+ #include "cc/paint/image_provider.h"
+ #include "cc/paint/paint_image_builder.h"
+ #include "cc/paint/paint_op_writer.h"
+@@ -73,6 +76,30 @@ sk_sp<PaintFilter> Snapshot(const sk_sp<
+   return filter->SnapshotWithImages(image_provider);
+ }
+ 
++constexpr char kGlassmorphicSkSL[] = R"SKSL(
++uniform shader backdrop;
++uniform shader softenedBackdrop;
++uniform float4 uLocalTransform;
++uniform float2 uResolution; uniform float2 uPanelOrigin; uniform float2 uPanelSize;
++uniform float uCornerRadius; uniform float uShapePower;
++uniform float uOpacity; uniform float uEdgeWidth; uniform float uRefraction;
++uniform float uBulge; uniform float uDispersion; uniform float uTintStrength;
++uniform float uSaturation; uniform float uSpecular; uniform float uGrain;
++uniform float4 uTint; uniform float2 uLightXY; uniform float uLightElevation;
++uniform float uLightIntensity;
++float roundedBoxDistance(float2 p,float2 h,float r){float2 q=abs(p)-h+r;return length(max(q,0.0))+min(max(q.x,q.y),0.0)-r;}
++float superellipseDistance(float2 p,float2 h,float power){float2 n=abs(p)/h;float x=pow(n.x,power)+pow(n.y,power)-1.0;float2 g=float2(power*pow(max(n.x,0.0001),power-1.0)/h.x,power*pow(max(n.y,0.0001),power-1.0)/h.y);return x/max(length(g),0.0001);}
++float panelDistance(float2 p,float2 h,float r){return uShapePower>1.0?superellipseDistance(p,h,uShapePower):roundedBoxDistance(p,h,r);}
++float2 panelNormal(float2 p,float2 h,float r){float2 x=float2(1,0),y=float2(0,1);float2 g=float2(panelDistance(p+x,h,r)-panelDistance(p-x,h,r),panelDistance(p+y,h,r)-panelDistance(p-y,h,r));return g/max(length(g),0.0001);}
++half4 childSample(float2 p){return backdrop.eval(p*uLocalTransform.xy+uLocalTransform.zw);}
++float3 blurBackdrop(float2 p, float2 offset) {
++  return softenedBackdrop.eval(
++      (p + offset) * uLocalTransform.xy + uLocalTransform.zw).rgb;
++}
++float grainAt(float2 p){float2 c=floor(p);return fract(sin(dot(c,float2(12.9898,78.233)))*43758.5453);}
++half4 main(float2 layerPosition){float2 position=(layerPosition-uLocalTransform.zw)/uLocalTransform.xy;float2 center=uPanelOrigin+uPanelSize*.5;float2 local=position-center;float2 halfSize=uPanelSize*.5;float d=panelDistance(local,halfSize,uCornerRadius);half4 source=childSample(position);float coverage=1-smoothstep(-1,1,d);if(coverage<=0)return source;float edge=smoothstep(-uEdgeWidth,0,d);float2 normal=panelNormal(local,halfSize,uCornerRadius);float radial=clamp(length(local/halfSize),0,1);float2 bulged=center+local*(1-pow(radial,2.2)*uBulge);float2 bend=normal*uRefraction*edge;float3 softened=blurBackdrop(bulged,bend);float2 spectralBend=bend*uDispersion;half4 rs=childSample(bulged+bend+spectralBend),gs=childSample(bulged+bend),bs=childSample(bulged+bend-spectralBend);float3 spectral=float3(rs.r,gs.g,bs.b);float3 color=mix(softened,spectral,.42+edge*.38);float luminance=dot(color,float3(.2126,.7152,.0722));color=mix(float3(luminance),color,uSaturation);color=mix(color,color*uTint.rgb+uTint.rgb*.22,uTintStrength);float3 light=normalize(float3(uLightXY,max(uLightElevation,.01)));float spec=pow(max(dot(normal,light.xy),0),4);color+=float3(.82,.92,1)*spec*uSpecular*edge*1.55*uLightIntensity;color+=uTint.rgb*edge*uSpecular*.045;color+=(grainAt(position)-.5)*uGrain;half4 complete=half4(clamp(color,0,1),source.a);return half4(mix(source.rgb,complete.rgb,clamp(uOpacity,0,1)*coverage),source.a);}
++)SKSL";
++
+ }  // namespace
+ 
+ PaintFilter::PaintFilter(Type type,
+@@ -134,6 +161,8 @@ std::string PaintFilter::TypeToString(Ty
+       return "kLightingPoint";
+     case Type::kLightingSpot:
+       return "kLightingSpot";
++    case Type::kGlassmorphic:
++      return "kGlassmorphic";
+   }
+   NOTREACHED();
+ }
+@@ -233,6 +262,8 @@ bool PaintFilter::EqualsForTesting(const
+       return AreEqualForTesting<LightingPointPaintFilter>(*this, other);
+     case Type::kLightingSpot:
+       return AreEqualForTesting<LightingSpotPaintFilter>(*this, other);
++    case Type::kGlassmorphic:
++      return AreEqualForTesting<GlassmorphicPaintFilter>(*this, other);
+   }
+   NOTREACHED();
+ }
+@@ -1471,4 +1502,101 @@ bool LightingSpotPaintFilter::EqualsForT
+          kconstant_ == other.kconstant_ && shininess_ == other.shininess_;
+ }
+ 
++GlassmorphicPaintFilter::GlassmorphicPaintFilter(
++    const GlassmorphicFilterParams& params,
++    SkScalar max_sample_radius,
++    const CropRect* crop_rect)
++    : PaintFilter(kType, crop_rect, kHasNoDiscardableImages),
++      params_(params),
++      max_sample_radius_(max_sample_radius) {
++  cached_sk_filter_ = MakeGlassmorphicImageFilter(*this, SkMatrix::I());
++}
++
++sk_sp<SkImageFilter> MakeGlassmorphicImageFilter(
++    const GlassmorphicPaintFilter& paint_filter,
++    const SkMatrix& local_matrix) {
++  if (!local_matrix.isScaleTranslate() || !local_matrix.isFinite() ||
++      local_matrix.getScaleX() == 0 || local_matrix.getScaleY() == 0) {
++    return nullptr;
++  }
++  static const base::NoDestructor<SkRuntimeEffect::Result> result(
++      SkRuntimeEffect::MakeForShader(SkString(kGlassmorphicSkSL)));
++  if (!result->effect) {
++    LOG(ERROR) << "Glassmorphic shader compilation failed: "
++               << result->errorText.c_str();
++    return nullptr;
++  }
++  SkRuntimeShaderBuilder builder(result->effect);
++  const float transform[] = {local_matrix.getScaleX(), local_matrix.getScaleY(),
++                             local_matrix.getTranslateX(),
++                             local_matrix.getTranslateY()};
++  builder.uniform("uLocalTransform").set(transform, 4);
++  const auto& params = paint_filter.params();
++  builder.uniform("uResolution") = params.resolution;
++  builder.uniform("uPanelOrigin") = params.panel_origin;
++  builder.uniform("uPanelSize") = params.panel_size;
++  builder.uniform("uCornerRadius") = params.corner_radius;
++  builder.uniform("uShapePower") = params.shape_power;
++  builder.uniform("uOpacity") = params.opacity;
++  builder.uniform("uEdgeWidth") = params.edge_width;
++  builder.uniform("uRefraction") = params.refraction;
++  builder.uniform("uBulge") = params.bulge;
++  builder.uniform("uDispersion") = params.dispersion;
++  builder.uniform("uTintStrength") = params.tint_strength;
++  builder.uniform("uSaturation") = params.saturation;
++  builder.uniform("uSpecular") = params.specular;
++  builder.uniform("uGrain") = params.grain;
++  builder.uniform("uTint") = params.tint;
++  builder.uniform("uLightXY") = params.light_xy;
++  builder.uniform("uLightElevation") = params.light_elevation;
++  builder.uniform("uLightIntensity") = params.light_intensity;
++  const float sample_scale =
++      std::max(SkScalarAbs(local_matrix.getScaleX()),
++               SkScalarAbs(local_matrix.getScaleY()));
++  // Match the variance of the lab's nine-tap kernel without its separated
++  // copies of sharp edges. Keep the raw backdrop for clear refraction and
++  // dispersion, and let Skia evaluate a continuous Gaussian for the soft part.
++  // Both children belong to this filter, preserving the glass-specific matrix
++  // handling in Viz instead of wrapping it in a generic composed filter.
++  const float sigma = std::max(0.0f, params.blur_radius) * std::sqrt(0.6f);
++  std::string_view child_names[] = {"backdrop", "softenedBackdrop"};
++  const sk_sp<SkImageFilter> inputs[] = {
++      nullptr,
++      SkImageFilters::Blur(sigma * SkScalarAbs(local_matrix.getScaleX()),
++                          sigma * SkScalarAbs(local_matrix.getScaleY()),
++                          SkTileMode::kClamp, nullptr)};
++  auto filter = SkImageFilters::RuntimeShader(
++      builder, paint_filter.max_sample_radius() * sample_scale, child_names,
++      inputs, 2);
++  if (const auto* crop_rect = paint_filter.GetCropRect(); crop_rect && filter) {
++    filter = SkImageFilters::Crop(local_matrix.mapRect(*crop_rect),
++                                  SkTileMode::kDecal, std::move(filter));
++  }
++  return filter;
++}
++
++GlassmorphicPaintFilter::~GlassmorphicPaintFilter() = default;
++
++size_t GlassmorphicPaintFilter::SerializedSize() const {
++  base::CheckedNumeric<size_t> total_size = BaseSerializedSize();
++  total_size += PaintOpWriter::SerializedSize(params_);
++  total_size += PaintOpWriter::SerializedSize(max_sample_radius_);
++  return total_size.ValueOrDefault(0u);
++}
++
++bool GlassmorphicPaintFilter::EqualsForTesting(
++    const GlassmorphicPaintFilter& other) const {
++  return params_ == other.params_ &&
++         max_sample_radius_ == other.max_sample_radius_;
++}
++
++gfx::ContentColorUsage GlassmorphicPaintFilter::GetContentColorUsage() const {
++  return gfx::ContentColorUsage::kSRGB;
++}
++
++sk_sp<PaintFilter> GlassmorphicPaintFilter::SnapshotWithImagesInternal(
++    ImageProvider* image_provider) const {
++  return sk_ref_sp<PaintFilter>(this);
++}
++
+ }  // namespace cc
+Index: src/cc/paint/paint_filter.h
+===================================================================
+--- src.orig/cc/paint/paint_filter.h
++++ src/cc/paint/paint_filter.h
+@@ -61,8 +61,9 @@ class CC_PAINT_EXPORT PaintFilter : publ
+     kLightingDistant,
+     kLightingPoint,
+     kLightingSpot,
+-    // Update the following if kLightingSpot is not the max anymore.
+-    kMaxValue = kLightingSpot
++    kGlassmorphic,
++    // Update the following if kGlassmorphic is not the max anymore.
++    kMaxValue = kGlassmorphic
+   };
+   enum class LightingType {
+     kDiffuse,
+@@ -907,6 +908,55 @@ class CC_PAINT_EXPORT LightingSpotPaintF
+   SkScalar shininess_;
+ };
+ 
++// The reviewed parameter block for Arcium's built-in glass material. The SkSL
++// source is fixed in cc/paint; only these bounded numeric values cross IPC.
++struct CC_PAINT_EXPORT GlassmorphicFilterParams {
++  SkSize resolution = {0, 0};
++  SkPoint panel_origin = {0, 0};
++  SkSize panel_size = {0, 0};
++  SkScalar corner_radius = 0;
++  SkScalar shape_power = 0;
++  SkScalar blur_radius = 10;
++  SkScalar opacity = 1;
++  SkScalar edge_width = 30;
++  SkScalar refraction = 7;
++  SkScalar bulge = 0;
++  SkScalar dispersion = 0.15f;
++  SkScalar tint_strength = 0.17f;
++  SkScalar saturation = 1.1f;
++  SkScalar specular = 0.42f;
++  SkScalar grain = 0.012f;
++  SkColor4f tint = {0.5f, 0.69f, 1.f, 1.f};
++  SkPoint light_xy = {-0.65f, -0.75f};
++  SkScalar light_elevation = 0.85f;
++  SkScalar light_intensity = 1.f;
++
++  bool operator==(const GlassmorphicFilterParams&) const = default;
++};
++
++class CC_PAINT_EXPORT GlassmorphicPaintFilter final : public PaintFilter {
++ public:
++  static constexpr Type kType = Type::kGlassmorphic;
++  GlassmorphicPaintFilter(const GlassmorphicFilterParams& params,
++                          SkScalar max_sample_radius,
++                          const CropRect* crop_rect = nullptr);
++  ~GlassmorphicPaintFilter() override;
++
++  const GlassmorphicFilterParams& params() const { return params_; }
++  SkScalar max_sample_radius() const { return max_sample_radius_; }
++  size_t SerializedSize() const override;
++  bool EqualsForTesting(const GlassmorphicPaintFilter& other) const;
++  gfx::ContentColorUsage GetContentColorUsage() const override;
++
++ protected:
++  sk_sp<PaintFilter> SnapshotWithImagesInternal(
++      ImageProvider* image_provider) const override;
++
++ private:
++  GlassmorphicFilterParams params_;
++  SkScalar max_sample_radius_;
++};
++
+ }  // namespace cc
+ 
+ #endif  // CC_PAINT_PAINT_FILTER_H_
+Index: src/cc/paint/paint_op_reader.cc
+===================================================================
+--- src.orig/cc/paint/paint_op_reader.cc
++++ src/cc/paint/paint_op_reader.cc
+@@ -1231,7 +1231,26 @@ void PaintOpReader::Read(sk_sp<PaintFilt
+     case PaintFilter::Type::kLightingSpot:
+       ReadLightingSpotPaintFilter(filter, crop_rect);
+       break;
++    case PaintFilter::Type::kGlassmorphic:
++      ReadGlassmorphicPaintFilter(filter, crop_rect);
++      break;
++  }
++}
++
++void PaintOpReader::ReadGlassmorphicPaintFilter(
++    sk_sp<PaintFilter>* filter,
++    const std::optional<PaintFilter::CropRect>& crop_rect) {
++  GlassmorphicFilterParams params;
++  SkScalar max_sample_radius = 0;
++  ReadSimple(&params);
++  ReadSimple(&max_sample_radius);
++  if (!valid_ || !SkIsFinite(max_sample_radius) || max_sample_radius < 0 ||
++      max_sample_radius > 128) {
++    SetInvalid(DeserializationError::kInvalidPaintShader);
++    return;
+   }
++  filter->reset(new GlassmorphicPaintFilter(
++      params, max_sample_radius, base::OptionalToPtr(crop_rect)));
+ }
+ 
+ void PaintOpReader::ReadColorFilterPaintFilter(
+Index: src/cc/paint/paint_op_reader.h
+===================================================================
+--- src.orig/cc/paint/paint_op_reader.h
++++ src/cc/paint/paint_op_reader.h
+@@ -358,6 +358,9 @@ class CC_PAINT_EXPORT PaintOpReader {
+   void ReadLightingSpotPaintFilter(
+       sk_sp<PaintFilter>* filter,
+       const std::optional<PaintFilter::CropRect>& crop_rect);
++  void ReadGlassmorphicPaintFilter(
++      sk_sp<PaintFilter>* filter,
++      const std::optional<PaintFilter::CropRect>& crop_rect);
+ 
+   // Returns the size of the read record, 0 if error.
+   size_t Read(std::optional<PaintRecord>* record);
+Index: src/cc/paint/paint_op_writer.cc
+===================================================================
+--- src.orig/cc/paint/paint_op_writer.cc
++++ src/cc/paint/paint_op_writer.cc
+@@ -990,6 +990,9 @@ void PaintOpWriter::Write(const PaintFil
+     case PaintFilter::Type::kLightingSpot:
+       Write(static_cast<const LightingSpotPaintFilter&>(*filter), current_ctm);
+       break;
++    case PaintFilter::Type::kGlassmorphic:
++      Write(static_cast<const GlassmorphicPaintFilter&>(*filter), current_ctm);
++      break;
+   }
+ }
+ 
+@@ -1224,6 +1227,12 @@ void PaintOpWriter::Write(const Lighting
+   Write(filter.input().get(), current_ctm);
+ }
+ 
++void PaintOpWriter::Write(const GlassmorphicPaintFilter& filter,
++                          const SkM44& current_ctm) {
++  WriteSimple(filter.params());
++  WriteSimple(filter.max_sample_radius());
++}
++
+ void PaintOpWriter::Write(const PaintRecord& record,
+                           const gfx::Rect& playback_rect,
+                           const gfx::SizeF& post_scale) {
+Index: src/cc/paint/paint_op_writer.h
+===================================================================
+--- src.orig/cc/paint/paint_op_writer.h
++++ src/cc/paint/paint_op_writer.h
+@@ -450,6 +450,7 @@ class CC_PAINT_EXPORT PaintOpWriter {
+              const SkM44& current_ctm);
+   void Write(const LightingPointPaintFilter& filter, const SkM44& current_ctm);
+   void Write(const LightingSpotPaintFilter& filter, const SkM44& current_ctm);
++  void Write(const GlassmorphicPaintFilter& filter, const SkM44& current_ctm);
+ 
+   void Write(const PaintRecord& record,
+              const gfx::Rect& playback_rect,
+Index: src/ui/compositor/layer.cc
+===================================================================
+--- src.orig/ui/compositor/layer.cc
++++ src/ui/compositor/layer.cc
+@@ -259,6 +259,7 @@ std::unique_ptr<Layer> Layer::Clone() co
+   clone->SetBackgroundBlur(background_blur_sigma_);
+   clone->SetBackgroundInverted(background_inverted_);
+   clone->SetBackgroundZoom(zoom_, zoom_inset_);
++  clone->SetCustomBackdropFilters(custom_backdrop_filters_);
+   clone->SetBackdropFilterQuality(backdrop_filter_quality_);
+   if (has_explicit_backdrop_filter_bounds_) {
+     auto backdrop_filter_bounds = cc_layer_->backdrop_filter_bounds();
+@@ -813,6 +814,10 @@ void Layer::SetLayerBackgroundFilters()
+     filters.Append(cc::FilterOperation::CreateZoomFilter(zoom_, zoom_inset_));
+   }
+ 
++  for (const auto& filter : custom_backdrop_filters_.operations()) {
++    filters.Append(filter);
++  }
++
+   cc_layer_->SetBackdropFilters(filters);
+   RecomputeBackdropFilterBounds();
+ }
+@@ -824,7 +829,8 @@ void Layer::RecomputeBackdropFilterBound
+   }
+ 
+   // Only set bounds when backdrop filters are active.
+-  if (!background_blur_sigma_ && zoom_ == 1 && !background_inverted_) {
++  if (!background_blur_sigma_ && zoom_ == 1 && !background_inverted_ &&
++      custom_backdrop_filters_.IsEmpty()) {
+     cc_layer_->ClearBackdropFilterBounds();
+     return;
+   }
+@@ -844,6 +850,14 @@ void Layer::RecomputeBackdropFilterBound
+       gfx::RRectF(gfx::RectF(gfx::SizeF(size)), 0));
+ }
+ 
++void Layer::SetCustomBackdropFilters(const cc::FilterOperations& filters) {
++  if (custom_backdrop_filters_ == filters) {
++    return;
++  }
++  custom_backdrop_filters_ = filters;
++  SetLayerBackgroundFilters();
++}
++
+ float Layer::GetTargetOpacity() const {
+   if (animator_ && animator_->IsAnimatingProperty(
+       LayerAnimationElement::OPACITY))
+Index: src/ui/compositor/layer.h
+===================================================================
+--- src.orig/ui/compositor/layer.h
++++ src/ui/compositor/layer.h
+@@ -22,6 +22,7 @@
+ #include "cc/layers/surface_layer.h"
+ #include "cc/layers/texture_layer_client.h"
+ #include "cc/paint/filter_operation.h"
++#include "cc/paint/filter_operations.h"
+ #include "components/viz/common/resources/transferable_resource.h"
+ #include "components/viz/common/surfaces/subtree_capture_id.h"
+ #include "third_party/skia/include/core/SkColor.h"
+@@ -347,6 +348,9 @@ class COMPOSITOR_EXPORT Layer : public L
+   // computation from the layer's size and rounded corners.
+   void SetBackdropFilterBounds(const SkPath& backdrop_filter_bounds);
+   void SetBackdropFilterBounds(const gfx::RRectF& backdrop_filter_bounds);
++  // Installs a reviewed custom backdrop effect after the standard backdrop
++  // controls. The filter list is retained across underlying cc::Layer swaps.
++  void SetCustomBackdropFilters(const cc::FilterOperations& filters);
+   // Clears any explicitly set backdrop filter bounds and re-enables automatic
+   // bounds computation from the layer's size and rounded corners.
+   void ClearBackdropFilterBounds();
+@@ -825,6 +829,7 @@ class COMPOSITOR_EXPORT Layer : public L
+   cc::Region paint_region_;
+ 
+   float background_blur_sigma_;
++  cc::FilterOperations custom_backdrop_filters_;
+ 
+   bool background_inverted_ = false;
+ 
+Index: src/components/viz/service/display/skia_renderer.cc
+===================================================================
+--- src.orig/components/viz/service/display/skia_renderer.cc
++++ src/components/viz/service/display/skia_renderer.cc
+@@ -34,6 +34,7 @@
+ #include "build/build_config.h"
+ #include "cc/base/math_util.h"
+ #include "cc/debug/debug_colors.h"
++#include "cc/paint/glassmorphic_paint_filter.h"
+ #include "cc/paint/render_surface_filters.h"
+ #include "cc/paint/tone_map_util.h"
+ #include "components/viz/common/display/renderer_settings.h"
+@@ -3158,6 +3159,12 @@ SkiaRenderer::DrawRPDQParams SkiaRendere
+   auto to_sk_image_filter =
+       [](sk_sp<cc::PaintFilter> paint_filter,
+          const SkMatrix& local_matrix) -> sk_sp<SkImageFilter> {
++    if (paint_filter &&
++        paint_filter->type() == cc::PaintFilter::Type::kGlassmorphic) {
++      return cc::MakeGlassmorphicImageFilter(
++          *static_cast<cc::GlassmorphicPaintFilter*>(paint_filter.get()),
++          local_matrix);
++    }
+     if (paint_filter && paint_filter->cached_sk_filter_) {
+       return paint_filter->cached_sk_filter_->makeWithLocalMatrix(local_matrix);
+     } else {
+Index: src/cc/paint/paint_filter_unittest.cc
+===================================================================
+--- src.orig/cc/paint/paint_filter_unittest.cc
++++ src/cc/paint/paint_filter_unittest.cc
+@@ -3,11 +3,14 @@
+ // found in the LICENSE file.
+ 
+ #include "cc/paint/paint_filter.h"
++#include "cc/paint/glassmorphic_paint_filter.h"
+ 
+ #include "cc/paint/image_provider.h"
+ #include "cc/paint/paint_op.h"
+ #include "cc/test/skia_common.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/skia/include/core/SkCanvas.h"
++#include "third_party/skia/include/core/SkSurface.h"
+ #include "third_party/skia/include/effects/SkLumaColorFilter.h"
+ 
+ namespace cc {
+@@ -132,6 +135,11 @@ sk_sp<PaintFilter> CreateTestFilter(Pain
+           PaintFilter::LightingType::kDiffuse, SkPoint3::Make(0.1f, 0.2f, 0.3f),
+           SkPoint3::Make(0.4f, 0.5f, 0.6f), 0.1f, 0.2f, SkColors::kWhite, 0.4f,
+           0.5f, 0.6f, image_filter, &crop_rect);
++    case PaintFilter::Type::kGlassmorphic: {
++      GlassmorphicFilterParams params;
++      params.resolution = params.panel_size = SkSize::Make(100, 100);
++      return sk_make_sp<GlassmorphicPaintFilter>(params, 20, &crop_rect);
++    }
+   }
+   NOTREACHED();
+ }
+@@ -149,11 +157,13 @@ INSTANTIATE_TEST_SUITE_P(
+     P,
+     PaintFilterTest,
+     ::testing::Range(static_cast<uint8_t>(PaintFilter::Type::kColorFilter),
+-                     static_cast<uint8_t>(PaintFilter::Type::kMaxValue)));
++                     static_cast<uint8_t>(
++                         static_cast<uint8_t>(PaintFilter::Type::kMaxValue) + 1)));
+ 
+ TEST_P(PaintFilterTest, HasDiscardableImagesYes) {
+-  // TurbulencePaintFilter can not embed images.
+-  if (GetParamType() == PaintFilter::Type::kTurbulence)
++  // These filters do not embed images.
++  if (GetParamType() == PaintFilter::Type::kTurbulence ||
++      GetParamType() == PaintFilter::Type::kGlassmorphic)
+     return;
+ 
+   EXPECT_TRUE(CreateTestFilter(GetParamType(), true)->has_discardable_images())
+@@ -170,8 +180,9 @@ TEST_P(PaintFilterTest, SnapshotWithImag
+   auto filter = CreateTestFilter(GetParamType(), true);
+   MockImageProvider image_provider;
+   auto snapshot_filter = filter->SnapshotWithImages(&image_provider);
+-  if (GetParamType() != PaintFilter::Type::kTurbulence) {
+-    // TurbulencePaintFilter can not embed images.
++  if (GetParamType() != PaintFilter::Type::kTurbulence &&
++      GetParamType() != PaintFilter::Type::kGlassmorphic) {
++    // These filters can embed images.
+     EXPECT_GT(image_provider.image_count_, 0)
+         << PaintFilter::TypeToString(GetParamType());
+   }
+@@ -190,4 +201,86 @@ TEST(PaintFilterTest, ImageAnalysisState
+             ImageAnalysisState::kNoAnimatedImages);
+ }
+ 
++TEST(PaintFilterTest, GlassmorphicBackdropAtDisplayScale) {
++  GlassmorphicFilterParams params;
++  params.resolution = params.panel_size = SkSize::Make(32, 32);
++  params.corner_radius = 4;
++  const SkRect crop = SkRect::MakeWH(32, 32);
++  GlassmorphicPaintFilter filter(params, 20, &crop);
++  for (float scale : {1.f, 1.5f, 2.f}) {
++    const SkMatrix matrix = SkMatrix::Scale(scale, scale);
++    auto scaled_filter = MakeGlassmorphicImageFilter(filter, matrix);
++    ASSERT_TRUE(scaled_filter);
++    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(128, 128));
++    ASSERT_TRUE(surface);
++    constexpr SkColor background = SkColorSetRGB(70, 90, 120);
++    auto* canvas = surface->getCanvas();
++    canvas->clear(background);
++    canvas->save();
++    canvas->translate(24, 24);
++    const SkRect bounds = matrix.mapRect(crop);
++    canvas->clipRect(bounds);
++    canvas->saveLayer(SkCanvas::SaveLayerRec(
++        &bounds, nullptr, scaled_filter.get(), 0));
++    canvas->restore();
++    canvas->restore();
++    SkPixmap pixels;
++    ASSERT_TRUE(surface->peekPixels(&pixels));
++    const int center = 24 + static_cast<int>(16 * scale);
++    EXPECT_NE(background, pixels.getColor(center, center)) << scale;
++    EXPECT_EQ(background, pixels.getColor(0, 0)) << scale;
++  }
++  EXPECT_FALSE(MakeGlassmorphicImageFilter(filter, SkMatrix::Scale(0, 2)));
++  EXPECT_FALSE(MakeGlassmorphicImageFilter(filter, SkMatrix::RotateDeg(30)));
++}
++
++TEST(PaintFilterTest, GlassmorphicBlurDoesNotDuplicateSharpLines) {
++  GlassmorphicFilterParams params;
++  params.resolution = params.panel_size = SkSize::Make(96, 96);
++  params.blur_radius = 10;
++  params.refraction = 0;
++  params.bulge = 0;
++  params.tint_strength = 0;
++  params.saturation = 1;
++  params.specular = 0;
++  params.grain = 0;
++  const SkRect crop = SkRect::MakeWH(96, 96);
++  GlassmorphicPaintFilter filter(params, 20, &crop);
++  for (float scale : {1.f, 1.5f, 2.f}) {
++    auto mapped = MakeGlassmorphicImageFilter(
++        filter, SkMatrix::Scale(scale, scale));
++    ASSERT_TRUE(mapped);
++    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(256, 256));
++    ASSERT_TRUE(surface);
++    auto* canvas = surface->getCanvas();
++    canvas->clear(SK_ColorBLACK);
++    const int center = 24 + static_cast<int>(48 * scale);
++    SkPaint line;
++    line.setColor(SK_ColorWHITE);
++    canvas->drawRect(SkRect::MakeXYWH(center, 0, 1, 256), line);
++    canvas->save();
++    canvas->translate(24, 24);
++    const SkRect bounds = SkRect::MakeWH(96 * scale, 96 * scale);
++    canvas->clipRect(bounds);
++    canvas->saveLayer(SkCanvas::SaveLayerRec(
++        &bounds, nullptr, mapped.get(), 0));
++    canvas->restore();
++    canvas->restore();
++    SkPixmap pixels;
++    ASSERT_TRUE(surface->peekPixels(&pixels));
++    // A single line must soften continuously, without bright satellite lines
++    // at the old sparse-kernel offsets of +/- blur_radius.
++    for (int direction : {-1, 1}) {
++      int previous = 255;
++      for (int distance = 0; distance <= 24 * scale; ++distance) {
++        const int value = SkColorGetR(
++            pixels.getColor(center + direction * distance, center));
++        EXPECT_LE(value, previous) << scale << ": " << distance;
++        previous = value;
++      }
++    }
++    EXPECT_GT(SkColorGetR(pixels.getColor(center + 2, center)), 0u);
++  }
++}
++
+ }  // namespace cc
+Index: src/cc/paint/BUILD.gn
+===================================================================
+--- src.orig/cc/paint/BUILD.gn
++++ src/cc/paint/BUILD.gn
+@@ -47,6 +47,7 @@ cc_component("paint") {
+     "paint_canvas.h",
+     "paint_export.h",
+     "paint_filter.cc",
++    "glassmorphic_paint_filter.h",
+     "paint_filter.h",
+     "paint_flags.cc",
+     "paint_flags.h",
+Index: src/cc/paint/glassmorphic_paint_filter.h
+===================================================================
+--- /dev/null
++++ src/cc/paint/glassmorphic_paint_filter.h
+@@ -0,0 +1,23 @@
++// Copyright 2026 The Helium Authors
++// Use of this source code is governed by the GPL-3.0 license.
++
++#ifndef CC_PAINT_GLASSMORPHIC_PAINT_FILTER_H_
++#define CC_PAINT_GLASSMORPHIC_PAINT_FILTER_H_
++
++#include "cc/paint/paint_export.h"
++#include "third_party/skia/include/core/SkRefCnt.h"
++
++class SkImageFilter;
++class SkMatrix;
++
++namespace cc {
++class GlassmorphicPaintFilter;
++
++// Runtime image filters reject Skia's scaled local-matrix wrapper. Map the
++// compositor coordinates in the shader, keeping material units in DIP.
++CC_PAINT_EXPORT sk_sp<SkImageFilter> MakeGlassmorphicImageFilter(
++    const GlassmorphicPaintFilter& paint_filter,
++    const SkMatrix& local_matrix);
++}  // namespace cc
++
++#endif  // CC_PAINT_GLASSMORPHIC_PAINT_FILTER_H_
+Index: src/chrome/browser/helium_flag_choices.h
+===================================================================
+--- src.orig/chrome/browser/helium_flag_choices.h
++++ src/chrome/browser/helium_flag_choices.h
+@@ -40,8 +40,16 @@ namespace helium {
+   constexpr const char kMiddleClickAutoscrollCommandLine[] = "middle-click-autoscroll";
+   constexpr const char kHeliumCompactLocationWidthCommandLine[] =
+       "helium-compact-location-width";
+-  constexpr const char kHeliumNativeFrameMaterialsCommandLine[] =
+-      "helium-native-frame-materials";
++
++  constexpr const char kArciumGlassBackendCommandLine[] =
++      "arcium-glass-backend";
++  constexpr const FeatureEntry::Choice kArciumGlassBackendChoices[] = {
++    {flags_ui::kGenericExperimentChoiceAutomatic, "", ""},
++    {"Prefer macOS Liquid Glass", kArciumGlassBackendCommandLine, "liquid-glass"},
++    {"Prefer macOS material", kArciumGlassBackendCommandLine, "material"},
++    {"Prefer Chromium refraction", kArciumGlassBackendCommandLine, "chromium"},
++    {"Opaque", kArciumGlassBackendCommandLine, "opaque"},
++  };
+ 
+ }  // namespace helium
+ 
+Index: src/chrome/browser/helium_flag_entries.h
+===================================================================
+--- src.orig/chrome/browser/helium_flag_entries.h
++++ src/chrome/browser/helium_flag_entries.h
+@@ -44,8 +44,8 @@
+      "Automatic address bar width in compact layout",
+      "Allows the location bar to automatically reduce its width in the compact browser layout. The omnibox may be uncomfortable to use. Helium flag.",
+      kOsDesktop, FEATURE_VALUE_TYPE(features::kHeliumCompactLocationWidth)},
+-    {helium::kHeliumNativeFrameMaterialsCommandLine,
+-     "Native frame materials",
+-     "Enables an option to apply native materials to the browser frame surfaces. May cause UI clarity issues. Helium flag.",
+-     kOsMac, FEATURE_VALUE_TYPE(features::kHeliumNativeFrameMaterials)},
++    {helium::kArciumGlassBackendCommandLine,
++     "Arcium glass backend",
++     "Selects the glass renderer used by supported Arcium surfaces. Unsupported component and backend combinations use an opaque fallback.",
++     kOsDesktop, MULTI_VALUE_TYPE(helium::kArciumGlassBackendChoices)},
+ #endif  /* CHROME_BROWSER_HELIUM_FLAG_ENTRIES_H_ */
+Index: src/chrome/browser/ui/views/helium/glass_surface_mac.h
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface_mac.h
+@@ -0,0 +1,23 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_MAC_H_
++#define CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_MAC_H_
++
++#import <Cocoa/Cocoa.h>
++
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/color/color_provider_key.h"
++
++namespace helium {
++
++NSView* CreateNativeGlassBackgroundView(
++    NSRect frame,
++    ui::ColorProviderKey::ColorMode color_mode,
++    SkColor tint_color);
++
++}  // namespace helium
++
++#endif  // CHROME_BROWSER_UI_VIEWS_HELIUM_GLASS_SURFACE_MAC_H_
+Index: src/chrome/browser/ui/views/helium/glass_surface_mac.mm
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface_mac.mm
+@@ -0,0 +1,69 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#import "chrome/browser/ui/views/helium/glass_surface_mac.h"
++
++#include "chrome/browser/ui/views/helium/native_frame_materials_mac.h"
++
++API_AVAILABLE(macos(26.0))
++@interface ArciumLiquidGlassBackgroundView : NSGlassEffectView
++@end
++
++@implementation ArciumLiquidGlassBackgroundView
++- (NSView*)hitTest:(NSPoint)point {
++  return nil;
++}
++@end
++
++namespace {
++
++NSColor* ColorFromSkColor(SkColor color, CGFloat alpha) {
++  return [NSColor colorWithSRGBRed:SkColorGetR(color) / 255.0
++                             green:SkColorGetG(color) / 255.0
++                              blue:SkColorGetB(color) / 255.0
++                             alpha:alpha];
++}
++
++}  // namespace
++
++namespace helium {
++
++bool GlassReduceTransparency() {
++  return NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
++}
++
++GlassBackendAvailability GetNativeFrameGlassAvailability() {
++  bool liquid_glass = false;
++  if (@available(macOS 26.0, *)) {
++    liquid_glass = true;
++  }
++  return {.native_liquid_glass = liquid_glass,
++          .native_material = true,
++          .reduce_transparency = GlassReduceTransparency()};
++}
++
++NSView* CreateNativeGlassBackgroundView(
++    NSRect frame,
++    ui::ColorProviderKey::ColorMode color_mode,
++    SkColor tint_color) {
++  const GlassBackend resolved =
++      ResolveGlassSurface(GlassHost::kNativeFrame).resolved;
++  if (resolved == GlassBackend::kNativeMaterial) {
++    return CreateNativeFrameMaterialBackgroundView(frame, color_mode,
++                                                   tint_color);
++  }
++  if (resolved == GlassBackend::kNativeLiquidGlass) {
++    if (@available(macOS 26.0, *)) {
++      NSGlassEffectView* glass_view =
++          [[ArciumLiquidGlassBackgroundView alloc] initWithFrame:frame];
++      glass_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
++      glass_view.style = NSGlassEffectViewStyleRegular;
++      glass_view.tintColor = ColorFromSkColor(tint_color, 0.40);
++      return glass_view;
++    }
++  }
++  return nil;
++}
++
++}  // namespace helium
+Index: src/chrome/browser/ui/views/helium/glass_surface_unittest.cc
+===================================================================
+--- /dev/null
++++ src/chrome/browser/ui/views/helium/glass_surface_unittest.cc
+@@ -0,0 +1,72 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license found in the LICENSE file.
++
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++
++#include "base/test/scoped_command_line.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace helium {
++
++TEST(GlassSurfaceTest, AutoUsesBestAvailableBackend) {
++  EXPECT_EQ(GlassBackend::kNativeLiquidGlass,
++            ResolveGlassBackend(
++                GlassBackend::kAuto,
++                {.native_liquid_glass = true,
++                 .native_material = true,
++                 .chromium = true}));
++  EXPECT_EQ(GlassBackend::kNativeMaterial,
++            ResolveGlassBackend(GlassBackend::kAuto,
++                                {.native_material = true,
++                                 .chromium = true}));
++  EXPECT_EQ(GlassBackend::kChromium,
++            ResolveGlassBackend(GlassBackend::kAuto, {.chromium = true}));
++  EXPECT_EQ(GlassBackend::kOpaque,
++            ResolveGlassBackend(GlassBackend::kAuto, {}));
++}
++
++TEST(GlassSurfaceTest, PreferencesFallBackToSupportedGlass) {
++  EXPECT_EQ(GlassBackend::kChromium,
++            ResolveGlassBackend(GlassBackend::kNativeLiquidGlass,
++                                {.chromium = true}));
++  EXPECT_EQ(GlassBackend::kNativeMaterial,
++            ResolveGlassBackend(GlassBackend::kChromium,
++                                {.native_material = true}));
++}
++
++TEST(GlassSurfaceTest, OpaqueAndAccessibilityOverrideEveryPreference) {
++  const GlassBackendAvailability all = {.native_liquid_glass = true,
++                                       .native_material = true,
++                                       .chromium = true};
++  EXPECT_EQ(GlassBackend::kOpaque,
++            ResolveGlassBackend(GlassBackend::kOpaque, all));
++  for (const auto preference : {GlassBackend::kAuto,
++                               GlassBackend::kNativeLiquidGlass,
++                               GlassBackend::kNativeMaterial,
++                               GlassBackend::kChromium}) {
++    auto reduced = all;
++    reduced.reduce_transparency = true;
++    EXPECT_EQ(GlassBackend::kOpaque,
++              ResolveGlassBackend(preference, reduced));
++    EXPECT_EQ(GlassBackend::kOpaque, ResolveGlassBackend(preference, {}));
++  }
++}
++
++TEST(GlassSurfaceTest, NativePreferenceFallsBackToOlderMacMaterial) {
++  EXPECT_EQ(GlassBackend::kNativeMaterial,
++            ResolveGlassBackend(GlassBackend::kNativeLiquidGlass,
++                                {.native_material = true}));
++  EXPECT_EQ(GlassBackend::kChromium,
++            ResolveGlassBackend(GlassBackend::kNativeMaterial,
++                                {.chromium = true}));
++}
++
++TEST(GlassSurfaceTest, CommandLineSelectsBackendWithoutRebuild) {
++  base::test::ScopedCommandLine command_line;
++  command_line.GetProcessCommandLine()->AppendSwitchASCII(
++      kArciumGlassBackendSwitch, "chromium");
++  EXPECT_EQ(GlassBackend::kChromium, GetRequestedGlassBackend());
++}
++
++}  // namespace helium
+Index: src/chrome/test/BUILD.gn
+===================================================================
+--- src.orig/chrome/test/BUILD.gn
++++ src/chrome/test/BUILD.gn
+@@ -8961,6 +8961,7 @@ test("unit_tests") {
+       "../browser/ui/views/extensions/extensions_toolbar_unittest.h",
+       "../browser/ui/views/frame/browser_frame_view_unittest.cc",
+       "../browser/ui/views/frame/browser_view_unittest.cc",
++      "../browser/ui/views/helium/glass_surface_unittest.cc",
+       "../browser/ui/views/frame/layout/browser_view_layout_params_unittest.cc",
+       "../browser/ui/views/frame/multi_contents_drop_target_view_unittest.cc",
+       "../browser/ui/views/frame/multi_contents_view_drop_target_controller_unittest.cc",
+Index: src/chrome/browser/ui/views/frame/browser_native_widget_mac.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_native_widget_mac.h
++++ src/chrome/browser/ui/views/frame/browser_native_widget_mac.h
+@@ -10,7 +10,6 @@
+ #include "base/memory/raw_ptr.h"
+ #include "chrome/browser/command_observer.h"
+ #include "chrome/browser/ui/views/frame/browser_native_widget.h"
+-#include "components/prefs/pref_change_registrar.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/mojom/window_show_state.mojom-forward.h"
+ #include "ui/color/color_provider_key.h"
+@@ -94,14 +93,12 @@ class BrowserNativeWidgetMac : public vi
+   raw_ptr<BrowserView> browser_view_;  // Weak. Our ClientView.
+   BrowserWindowTouchBarViewsDelegate* __strong touch_bar_delegate_;
+   NSView* __strong background_view_;
+-  PrefChangeRegistrar pref_change_registrar_;
+ 
+   std::optional<ui::ColorProviderKey::ColorMode> last_color_mode_;
+   std::optional<SkColor> last_theme_color_;
+ 
+-  void SetNativeFrameMaterialWindowState(NSWindow* ns_window, bool enabled);
++  void SetGlassFrameWindowState(NSWindow* ns_window, bool enabled);
+   void UpdateBackground();
+-  void OnNativeFrameMaterialsPrefChanged();
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NATIVE_WIDGET_MAC_H_
+Index: src/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ src/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -5,7 +5,6 @@
+ #import "chrome/browser/ui/views/frame/browser_native_widget_mac.h"
+ 
+ #import "base/apple/foundation_util.h"
+-#include "base/functional/bind.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/metrics/user_metrics.h"
+ #include "base/metrics/user_metrics_action.h"
+@@ -37,8 +36,8 @@
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
++#include "chrome/browser/ui/views/helium/glass_surface_mac.h"
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
+-#include "chrome/browser/ui/views/helium/native_frame_materials_mac.h"
+ #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_utils.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/common/pref_names.h"
+@@ -144,12 +143,6 @@ BrowserNativeWidgetMac::BrowserNativeWid
+     : views::NativeWidgetMac(browser_widget), browser_view_(browser_view) {
+   CHECK(browser_widget);
+   CHECK(browser_view);
+-  pref_change_registrar_.Init(browser_view_->GetProfile()->GetPrefs());
+-  pref_change_registrar_.Add(
+-      prefs::kHeliumNativeFrameMaterials,
+-      base::BindRepeating(
+-          &BrowserNativeWidgetMac::OnNativeFrameMaterialsPrefChanged,
+-          base::Unretained(this)));
+   if (GetRemoteCocoaApplicationHost()) {
+     // Only add observer on PWA.
+     chrome::AddCommandObserver(browser_view_->browser(), IDC_BACK, this);
+@@ -226,7 +219,6 @@ void BrowserNativeWidgetMac::OnWidgetDes
+   }
+   touch_bar_delegate_ = nullptr;
+   background_view_ = nil;
+-  pref_change_registrar_.Reset();
+   browser_view_ = nullptr;
+   last_color_mode_.reset();
+   last_theme_color_.reset();
+@@ -570,8 +562,9 @@ NativeWidgetMacNSWindow* BrowserNativeWi
+     const remote_cocoa::mojom::CreateWindowParams* params) {
+   CHECK(browser_view_);
+   NativeWidgetMacNSWindow* ns_window = NativeWidgetMac::CreateNSWindow(params);
+-  SetNativeFrameMaterialWindowState(
+-      ns_window, helium::ShouldUseNativeFrameMaterials(browser_view_));
++  SetGlassFrameWindowState(
++      ns_window,
++      helium::ShouldUseNativeFrameGlass(browser_view_));
+   touch_bar_delegate_ = [[BrowserWindowTouchBarViewsDelegate alloc]
+       initWithBrowser:browser_view_->browser()
+                window:ns_window];
+@@ -718,9 +711,8 @@ void BrowserNativeWidgetMac::AnnounceTex
+   }
+ }
+ 
+-void BrowserNativeWidgetMac::SetNativeFrameMaterialWindowState(
+-    NSWindow* ns_window,
+-    bool enabled) {
++void BrowserNativeWidgetMac::SetGlassFrameWindowState(NSWindow* ns_window,
++                                                      bool enabled) {
+   if (!ns_window) {
+     return;
+   }
+@@ -740,12 +732,11 @@ void BrowserNativeWidgetMac::SetNativeFr
+ 
+ void BrowserNativeWidgetMac::UpdateBackground() {
+   NSWindow* ns_window = GetNSWindowHost()->GetInProcessNSWindow();
+-  const bool should_use_native_frame_materials =
+-      helium::ShouldUseNativeFrameMaterials(browser_view_);
+-  SetNativeFrameMaterialWindowState(ns_window,
+-                                    should_use_native_frame_materials);
++  const bool should_use_native_glass =
++      helium::ShouldUseNativeFrameGlass(browser_view_);
++  SetGlassFrameWindowState(ns_window, should_use_native_glass);
+ 
+-  if (!should_use_native_frame_materials) {
++  if (!should_use_native_glass) {
+     if (background_view_) {
+       [background_view_ removeFromSuperview];
+     }
+@@ -757,6 +748,7 @@ void BrowserNativeWidgetMac::UpdateBackg
+ 
+   views::Widget* widget = GetWidget();
+   if (!widget) {
++    SetGlassFrameWindowState(ns_window, false);
+     return;
+   }
+ 
+@@ -782,16 +774,15 @@ void BrowserNativeWidgetMac::UpdateBackg
+ 
+   NSView* content_view = [ns_window contentView];
+ 
+-  background_view_ = helium::CreateNativeFrameMaterialBackgroundView(
++  background_view_ = helium::CreateNativeGlassBackgroundView(
+       content_view.bounds, color_mode, theme_color);
+-  [content_view addSubview:background_view_
+-                positioned:NSWindowBelow
+-                relativeTo:nil];
+-}
+-
+-void BrowserNativeWidgetMac::OnNativeFrameMaterialsPrefChanged() {
+-  UpdateBackground();
+-  if (browser_view_ && browser_view_->GetWidget()) {
+-    browser_view_->GetWidget()->ThemeChanged();
++  if (background_view_) {
++    [content_view addSubview:background_view_
++                  positioned:NSWindowBelow
++                  relativeTo:nil];
++  } else {
++    SetGlassFrameWindowState(ns_window, false);
++    last_color_mode_.reset();
++    last_theme_color_.reset();
+   }
+ }
+Index: src/chrome/browser/ui/views/helium/native_frame_materials.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/native_frame_materials.cc
++++ src/chrome/browser/ui/views/helium/native_frame_materials.cc
+@@ -5,20 +5,20 @@
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ 
+ #include "build/build_config.h"
+-#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+-#include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+-#include "chrome/common/pref_names.h"
+-#include "components/prefs/pref_service.h"
+ #include "ui/views/view.h"
+ #include "ui/views/widget/widget.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#endif
++
+ namespace helium {
+ 
+-bool ShouldUseNativeFrameMaterials(const BrowserView* browser_view) {
++bool ShouldUseNativeFrameGlass(const BrowserView* browser_view) {
+ #if BUILDFLAG(IS_MAC)
+-  if (!features::HeliumNativeFrameAvailable() || !browser_view) {
++  if (!browser_view) {
+     return false;
+   }
+ 
+@@ -27,22 +27,23 @@ bool ShouldUseNativeFrameMaterials(const
+     return false;
+   }
+ 
+-  const Profile* profile = browser_view->GetProfile();
+-  return profile &&
+-         profile->GetPrefs()->GetBoolean(prefs::kHeliumNativeFrameMaterials);
++  const GlassBackend backend =
++      ResolveGlassSurface(GlassHost::kNativeFrame).resolved;
++  return backend == GlassBackend::kNativeLiquidGlass ||
++         backend == GlassBackend::kNativeMaterial;
+ #else
+   return false;
+ #endif
+ }
+ 
+-bool ShouldUseNativeFrameMaterials(const BrowserWindowInterface* browser) {
+-  return ShouldUseNativeFrameMaterials(
++bool ShouldUseNativeFrameGlass(const BrowserWindowInterface* browser) {
++  return ShouldUseNativeFrameGlass(
+       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr);
+ }
+ 
+-bool ShouldUseNativeFrameMaterials(const views::View* view) {
++bool ShouldUseNativeFrameGlass(const views::View* view) {
+   const views::Widget* widget = view ? view->GetWidget() : nullptr;
+-  return ShouldUseNativeFrameMaterials(
++  return ShouldUseNativeFrameGlass(
+       widget ? BrowserView::GetBrowserViewForNativeWindow(
+                    widget->GetNativeWindow())
+              : nullptr);
+Index: src/chrome/browser/ui/views/frame/browser_widget.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_widget.cc
++++ src/chrome/browser/ui/views/frame/browser_widget.cc
+@@ -203,11 +203,10 @@ void BrowserWidget::InitBrowserWidget()
+     }
+   }
+ 
+-  // The widget must enter the translucent compositing path at creation time so
+-  // the native-materials pref can be toggled live. If an initially opaque
+-  // widget is made translucent later, the Chromium layer tree can keep painting
+-  // the opaque active-frame fallback color until the window is recreated.
+-  if (features::HeliumNativeFrameAvailable()) {
++  // Configure the compositor for the glass policy before creating the window.
++  // An initially opaque widget can keep painting an opaque frame even after
++  // AppKit installs a native glass background.
++  if (helium::ShouldUseNativeFrameGlass(browser_view_)) {
+     params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
+   }
+ 
+Index: src/chrome/app/settings_strings.grdp
+===================================================================
+--- src.orig/chrome/app/settings_strings.grdp
++++ src/chrome/app/settings_strings.grdp
+@@ -280,12 +280,6 @@
+     <message name="IDS_SETTINGS_ROUNDED_FRAME" desc="Label for the toggle which enables or disables a rounded frame around web contents.">
+       Show a rounded frame around web contents
+     </message>
+-    <message name="IDS_SETTINGS_NATIVE_FRAME_MATERIALS" desc="Label for the toggle which enables or disables native system materials on the browser frame.">
+-      Use native frame materials (experimental)
+-    </message>
+-    <message name="IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION" desc="Description for the toggle which enables native system materials on the browser frame.">
+-      Applies native materials to the browser frame surfaces. May cause UI clarity issues.
+-    </message>
+     <message name="IDS_SETTINGS_BROWSER_LAYOUT" desc="Label for the browser layout dropdown that controls how the browser UI is displayed.">
+       Browser layout
+     </message>
+Index: src/chrome/browser/extensions/api/settings_private/prefs_util.cc
+===================================================================
+--- src.orig/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ src/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -223,8 +223,6 @@ const PrefsUtil::TypedPrefMap& PrefsUtil
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHeliumZenModeTopChromePinned] =
+       settings_api::PrefType::kBoolean;
+-  (*s_allowlist)[::prefs::kHeliumNativeFrameMaterials] =
+-      settings_api::PrefType::kBoolean;
+ 
+   // Miscellaneous
+   (*s_allowlist)[::embedder_support::kAlternateErrorPagesEnabled] =
+Index: src/chrome/browser/resources/settings/appearance_page/appearance_page.html
+===================================================================
+--- src.orig/chrome/browser/resources/settings/appearance_page/appearance_page.html
++++ src/chrome/browser/resources/settings/appearance_page/appearance_page.html
+@@ -149,12 +149,6 @@
+             pref="{{prefs.helium.browser.rounded_frame}}"
+             label="$i18n{roundedFrame}">
+         </settings-toggle-button>
+-        <settings-toggle-button class="hr"
+-            hidden="[[!showNativeFrameMaterialsOption_]]"
+-            pref="{{prefs.helium.browser.native_frame_materials}}"
+-            label="$i18n{nativeFrameMaterials}"
+-            sub-label="$i18n{nativeFrameMaterialsDescription}">
+-        </settings-toggle-button>
+         <settings-toggle-button class="hr" elide-label
+             hidden="[[!pageVisibility.homeButton]]"
+             pref="{{prefs.browser.show_home_button}}"
+Index: src/chrome/browser/resources/settings/appearance_page/appearance_page.ts
+===================================================================
+--- src.orig/chrome/browser/resources/settings/appearance_page/appearance_page.ts
++++ src/chrome/browser/resources/settings/appearance_page/appearance_page.ts
+@@ -239,13 +239,6 @@ export class SettingsAppearancePageEleme
+         },
+       },
+ 
+-      showNativeFrameMaterialsOption_: {
+-        type: Boolean,
+-        value() {
+-          return loadTimeData.getBoolean('showNativeFrameMaterialsOption');
+-        },
+-      },
+-
+       ntpSimplificationBookmarksBarEnabled_: {
+         type: Boolean,
+         value() {
+@@ -373,7 +366,6 @@ export class SettingsAppearancePageEleme
+   // </if>
+ 
+   declare private showVerticalTabsEnabled_: boolean;
+-  declare private showNativeFrameMaterialsOption_: boolean;
+   declare private showVerticalSettings_: boolean;
+   declare private ntpSimplificationBookmarksBarEnabled_: boolean;
+   declare private bookmarksBarOptions_: DropdownMenuOptionList;
+Index: src/chrome/browser/ui/browser_ui_prefs.cc
+===================================================================
+--- src.orig/chrome/browser/ui/browser_ui_prefs.cc
++++ src/chrome/browser/ui/browser_ui_prefs.cc
+@@ -130,8 +130,6 @@ void RegisterBrowserUserPrefs(user_prefs
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
+ 
+-  registry->RegisterBooleanPref(prefs::kHeliumNativeFrameMaterials, false);
+-
+   registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumMinimalLocationBar, false);
+Index: src/chrome/browser/ui/ui_features.cc
+===================================================================
+--- src.orig/chrome/browser/ui/ui_features.cc
++++ src/chrome/browser/ui/ui_features.cc
+@@ -39,16 +39,6 @@ bool HeliumUseCompactLocationWidth() {
+   return base::FeatureList::IsEnabled(kHeliumCompactLocationWidth);
+ }
+ 
+-BASE_FEATURE(kHeliumNativeFrameMaterials, base::FEATURE_DISABLED_BY_DEFAULT);
+-
+-bool HeliumNativeFrameAvailable() {
+-#if BUILDFLAG(IS_MAC)
+-  return base::FeatureList::IsEnabled(kHeliumNativeFrameMaterials);
+-#else
+-  return false;
+-#endif
+-}
+-
+ // Enables the use of WGC for the Eye Dropper screen capture.
+ BASE_FEATURE(kAllowEyeDropperWGCScreenCapture,
+ #if BUILDFLAG(IS_WIN)
+Index: src/chrome/browser/ui/ui_features.h
+===================================================================
+--- src.orig/chrome/browser/ui/ui_features.h
++++ src/chrome/browser/ui/ui_features.h
+@@ -24,9 +24,6 @@ BASE_DECLARE_FEATURE(kUseActionsForBrows
+ BASE_DECLARE_FEATURE(kHeliumCompactLocationWidth);
+ bool HeliumUseCompactLocationWidth();
+ 
+-BASE_DECLARE_FEATURE(kHeliumNativeFrameMaterials);
+-bool HeliumNativeFrameAvailable();
+-
+ BASE_DECLARE_FEATURE(kAllowEyeDropperWGCScreenCapture);
+ 
+ // Enables a compositor-driven rotation animation for the tab load throbber.
+Index: src/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
++++ src/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
+@@ -110,7 +110,7 @@ BrowserFrameViewMac::BrowserFrameViewMac
+     }
+   }
+ 
+-  if (helium::ShouldUseNativeFrameMaterials(browser_view)) {
++  if (helium::ShouldUseNativeFrameGlass(browser_view)) {
+     SetPaintToLayer();
+     layer()->SetFillsBoundsOpaquely(false);
+   }
+@@ -325,7 +325,7 @@ void BrowserFrameViewMac::PaintAsActiveC
+ }
+ 
+ void BrowserFrameViewMac::OnThemeChanged() {
+-  if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
++  if (helium::ShouldUseNativeFrameGlass(GetBrowserView())) {
+     if (!layer()) {
+       SetPaintToLayer();
+     }
+@@ -495,7 +495,7 @@ void BrowserFrameViewMac::OnPaint(gfx::C
+     return;
+   }
+ 
+-  if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
++  if (helium::ShouldUseNativeFrameGlass(GetBrowserView())) {
+     return;
+   }
+ 
+@@ -576,7 +576,7 @@ void BrowserFrameViewMac::UpdateCaptionB
+   if (caption_button_placeholder_container_) {
+     caption_button_placeholder_container_->SetBackground(
+         views::CreateSolidBackground(
+-            helium::ShouldUseNativeFrameMaterials(GetBrowserView())
++            helium::ShouldUseNativeFrameGlass(GetBrowserView())
+                 ? SK_ColorTRANSPARENT
+                 : GetColorProvider()->GetColor(kColorToolbar)));
+   }
+Index: src/chrome/browser/ui/views/frame/custom_corners_background.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/custom_corners_background.cc
++++ src/chrome/browser/ui/views/frame/custom_corners_background.cc
+@@ -247,7 +247,7 @@ void CustomCornersBackground::Paint(gfx:
+   if (!visible_) {
+     return;
+   }
+-  if (helium::ShouldUseNativeFrameMaterials(&browser_view()) &&
++  if (helium::ShouldUseNativeFrameGlass(&browser_view()) &&
+       !paint_with_native_frame_materials_) {
+     return;
+   }
+Index: src/chrome/browser/ui/views/frame/multi_contents_background_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/multi_contents_background_view.cc
++++ src/chrome/browser/ui/views/frame/multi_contents_background_view.cc
+@@ -14,7 +14,7 @@ MultiContentsBackgroundView::MultiConten
+     BrowserView* browser_view)
+     : browser_view_(browser_view) {
+   const bool use_native_materials =
+-      helium::ShouldUseNativeFrameMaterials(browser_view_);
++      helium::ShouldUseNativeFrameGlass(browser_view_);
+   SetPaintToLayer(use_native_materials ? ui::LAYER_TEXTURED
+                                        : ui::LAYER_SOLID_COLOR);
+   if (use_native_materials) {
+@@ -49,7 +49,7 @@ void MultiContentsBackgroundView::OnThem
+ 
+ void MultiContentsBackgroundView::OnPaint(gfx::Canvas* canvas) {
+   CHECK_EQ(layer()->type(), ui::LAYER_TEXTURED);
+-  if (helium::ShouldUseNativeFrameMaterials(browser_view_)) {
++  if (helium::ShouldUseNativeFrameGlass(browser_view_)) {
+     return;
+   }
+   ThemedBackground::PaintBackground(canvas, this, browser_view_);
+@@ -57,7 +57,7 @@ void MultiContentsBackgroundView::OnPain
+ 
+ ui::LayerType MultiContentsBackgroundView::CalculateLayerType() const {
+   const bool use_native_materials =
+-      helium::ShouldUseNativeFrameMaterials(browser_view_);
++      helium::ShouldUseNativeFrameGlass(browser_view_);
+   const bool has_custom_image =
+       !ThemedBackground::GetBackgroundColor(this, browser_view_).has_value();
+ 
+Index: src/chrome/browser/ui/views/frame/themed_background.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/frame/themed_background.cc
++++ src/chrome/browser/ui/views/frame/themed_background.cc
+@@ -43,7 +43,7 @@ bool IsTransparentWhenNativeMaterial(
+     const BrowserView* browser_view,
+     ThemedBackground::ThemeChoice theme_choice) {
+   return theme_choice == ThemedBackground::ThemeChoice::kToolbarTheme &&
+-         helium::ShouldUseNativeFrameMaterials(browser_view);
++         helium::ShouldUseNativeFrameGlass(browser_view);
+ }
+ 
+ }  // namespace
+Index: src/chrome/browser/ui/views/helium/native_frame_materials.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/helium/native_frame_materials.h
++++ src/chrome/browser/ui/views/helium/native_frame_materials.h
+@@ -14,9 +14,9 @@ class View;
+ 
+ namespace helium {
+ 
+-bool ShouldUseNativeFrameMaterials(const BrowserView* browser_view);
+-bool ShouldUseNativeFrameMaterials(const BrowserWindowInterface* browser);
+-bool ShouldUseNativeFrameMaterials(const views::View* view);
++bool ShouldUseNativeFrameGlass(const BrowserView* browser_view);
++bool ShouldUseNativeFrameGlass(const BrowserWindowInterface* browser);
++bool ShouldUseNativeFrameGlass(const views::View* view);
+ 
+ }  // namespace helium
+ 
+Index: src/chrome/browser/ui/views/infobars/infobar_container_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/infobars/infobar_container_view.cc
++++ src/chrome/browser/ui/views/infobars/infobar_container_view.cc
+@@ -258,7 +258,7 @@ void InfoBarContainerView::PlatformSpeci
+ void InfoBarContainerView::UpdateBackground() {
+   const ui::ColorId color_id =
+       rounded_frame_enabled_ ? kColorToolbar : kColorInfoBarContentAreaSeparator;
+-  if (helium::ShouldUseNativeFrameMaterials(this)) {
++  if (helium::ShouldUseNativeFrameGlass(this)) {
+     SetBackground(nullptr);
+     return;
+   }
+Index: src/chrome/browser/ui/views/infobars/infobar_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/infobars/infobar_view.cc
++++ src/chrome/browser/ui/views/infobars/infobar_view.cc
+@@ -293,7 +293,7 @@ void InfoBarView::OnThemeChanged() {
+   views::View::OnThemeChanged();
+   const auto* cp = GetColorProvider();
+   const bool should_use_native_frame_materials =
+-      helium::ShouldUseNativeFrameMaterials(this);
++      helium::ShouldUseNativeFrameGlass(this);
+   const SkColor background_theme_color =
+       should_use_native_frame_materials ? SK_ColorTRANSPARENT
+                                         : cp->GetColor(kColorInfoBarBackground);
+Index: src/chrome/browser/ui/views/tabs/common/tab_view.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ src/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -285,7 +285,7 @@ bool TabView::IsHoverAnimationActive() c
+ std::optional<SkColor> TabView::GetBackgroundColor() {
+   const TabStyle::TabSelectionState selection_state = GetSelectionState();
+   const bool hover_animation_active = IsHoverAnimationActive();
+-  if (ShouldUseNativeFrameMaterials() &&
++  if (ShouldUseNativeFrameGlass() &&
+       selection_state != TabStyle::TabSelectionState::kActive) {
+     if (!hover_animation_active) {
+       return std::nullopt;
+@@ -606,7 +606,7 @@ void TabView::PaintTabBackgroundFill(
+                                     hovered)) {
+     cc::PaintFlags flags;
+     flags.setAntiAlias(true);
+-    if (ShouldUseNativeFrameMaterials() &&
++    if (ShouldUseNativeFrameGlass() &&
+         selection_state != TabStyle::TabSelectionState::kActive) {
+       flags.setColor(
+           GetNativeFrameMaterialTabBackgroundColor(selection_state));
+@@ -629,7 +629,7 @@ bool TabView::ShouldPaintTabBackgroundCo
+     TabStyle::TabSelectionState selection_state,
+     bool has_custom_background,
+     bool hovered) const {
+-  if (ShouldUseNativeFrameMaterials()) {
++  if (ShouldUseNativeFrameGlass()) {
+     return selection_state == TabStyle::TabSelectionState::kActive ||
+            GetHoverAnimationValue() > 0.0;
+   }
+@@ -920,7 +920,7 @@ bool TabView::IsApparentlyActive() const
+   if (active_) {
+     return true;
+   }
+-  if (!ShouldUseNativeFrameMaterials() && hovered_) {
++  if (!ShouldUseNativeFrameGlass() && hovered_) {
+     return GetHoverOpacity() > 0.5f;
+   }
+   return selected_;
+@@ -1184,7 +1184,7 @@ void TabView::UpdateThemeColors() {
+   if (!tab_interface) {
+     return;
+   }
+-  if (helium::ShouldUseNativeFrameMaterials(
++  if (helium::ShouldUseNativeFrameGlass(
+           tab_interface->GetBrowserWindowInterface())) {
+     active_tab_fill_id_.reset();
+     inactive_tab_fill_id_.reset();
+@@ -1314,13 +1314,13 @@ SkColor TabView::GetNativeFrameMaterialT
+       static_cast<float>(GetHoverAnimationValue()));
+ }
+ 
+-bool TabView::ShouldUseNativeFrameMaterials() const {
++bool TabView::ShouldUseNativeFrameGlass() const {
+   if (!collection_node_) {
+     return false;
+   }
+ 
+   const tabs::TabInterface* tab_interface = GetTabInterface();
+-  return tab_interface && helium::ShouldUseNativeFrameMaterials(
++  return tab_interface && helium::ShouldUseNativeFrameGlass(
+                               tab_interface->GetBrowserWindowInterface());
+ }
+ 
+Index: src/chrome/browser/ui/views/tabs/common/tab_view.h
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/common/tab_view.h
++++ src/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -201,7 +201,7 @@ class TabView : public views::View,
+   TabStyle::TabSelectionState GetSelectionState() const;
+   SkColor GetNativeFrameMaterialTabBackgroundColor(
+       TabStyle::TabSelectionState selection_state) const;
+-  bool ShouldUseNativeFrameMaterials() const;
++  bool ShouldUseNativeFrameGlass() const;
+ 
+   bool IsDragging() const;
+ 
+Index: src/chrome/browser/ui/views/tabs/new_tab_button.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/new_tab_button.cc
++++ src/chrome/browser/ui/views/tabs/new_tab_button.cc
+@@ -67,7 +67,7 @@ void NewTabButton::ShowContextMenuForVie
+ }
+ 
+ void NewTabButton::UpdateBackground() {
+-  if (helium::ShouldUseNativeFrameMaterials(browser_)) {
++  if (helium::ShouldUseNativeFrameGlass(browser_)) {
+     SetBackground(views::CreateSolidBackground(SK_ColorTRANSPARENT));
+     return;
+   }
+Index: src/chrome/browser/ui/views/tabs/tab_style_views.cc
+===================================================================
+--- src.orig/chrome/browser/ui/views/tabs/tab_style_views.cc
++++ src/chrome/browser/ui/views/tabs/tab_style_views.cc
+@@ -557,7 +557,7 @@ bool TabStyleViewsImpl::IsApparentlyActi
+   if (selection_state == TabStyle::TabSelectionState::kActive) {
+     return true;
+   }
+-  if (!helium::ShouldUseNativeFrameMaterials(
++  if (!helium::ShouldUseNativeFrameGlass(
+           tab_->controller()->GetBrowserWindowInterface()) &&
+       IsHovering()) {
+     return GetHoverOpacity() > 0.5f;
+@@ -805,7 +805,7 @@ int TabStyleViewsImpl::GetStrokeThicknes
+ bool TabStyleViewsImpl::ShouldPaintTabBackgroundColor(
+     TabStyle::TabSelectionState selection_state,
+     bool has_custom_background) const {
+-  if (helium::ShouldUseNativeFrameMaterials(
++  if (helium::ShouldUseNativeFrameGlass(
+           tab_->controller()->GetBrowserWindowInterface())) {
+     return selection_state == TabStyle::TabSelectionState::kActive ||
+            GetHoverAnimationValue() > 0.0;
+@@ -851,7 +851,7 @@ SkColor TabStyleViewsImpl::GetCurrentTab
+       tab()->GetWidget() ? tab()->GetWidget()->ShouldPaintAsActive() : true;
+   const ui::ColorProvider* color_provider = tab()->GetColorProvider();
+ 
+-  if (helium::ShouldUseNativeFrameMaterials(
++  if (helium::ShouldUseNativeFrameGlass(
+           tab_->controller()->GetBrowserWindowInterface()) &&
+       selection_state != TabStyle::TabSelectionState::kActive) {
+     const SkColor color = tab_style()->GetTabBackgroundColor(
+@@ -915,7 +915,7 @@ void TabStyleViewsImpl::PaintTabBackgrou
+ 
+     SkColor color = GetCurrentTabBackgroundColor(selection_state, hovered);
+     if (features::IsGlassFrameEnabled() &&
+-        !helium::ShouldUseNativeFrameMaterials(
++        !helium::ShouldUseNativeFrameGlass(
+             tab_->controller()->GetBrowserWindowInterface()) &&
+         selection_state == TabStyle::TabSelectionState::kSelected) {
+       color =
+@@ -928,7 +928,7 @@ void TabStyleViewsImpl::PaintTabBackgrou
+   }
+ 
+   if (fill_id.has_value() &&
+-      (!helium::ShouldUseNativeFrameMaterials(
++      (!helium::ShouldUseNativeFrameGlass(
+            tab_->controller()->GetBrowserWindowInterface()) ||
+        selection_state == TabStyle::TabSelectionState::kActive)) {
+     gfx::ScopedCanvas scale_scoper(canvas);
+@@ -952,7 +952,7 @@ void TabStyleViewsImpl::PaintBackgroundH
+       GetCurrentTabBackgroundColor(GetSelectionState(), /*hovered=*/true);
+ 
+   if (features::IsGlassFrameEnabled() &&
+-      !helium::ShouldUseNativeFrameMaterials(
++      !helium::ShouldUseNativeFrameGlass(
+           tab_->controller()->GetBrowserWindowInterface()) &&
+       GetSelectionState() != TabStyle::TabSelectionState::kActive) {
+     hover_color = SkColorSetA(
+Index: src/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+===================================================================
+--- src.orig/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ src/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -569,9 +569,6 @@ void AddAppearanceStrings(content::WebUI
+       {"openNewTabNextToActive", IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON},
+       {"cycleTabsInMRUOrder", IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER},
+       {"roundedFrame", IDS_SETTINGS_ROUNDED_FRAME},
+-      {"nativeFrameMaterials", IDS_SETTINGS_NATIVE_FRAME_MATERIALS},
+-      {"nativeFrameMaterialsDescription",
+-       IDS_SETTINGS_NATIVE_FRAME_MATERIALS_DESCRIPTION},
+       {"browserLayout", IDS_SETTINGS_BROWSER_LAYOUT},
+       {"browserLayoutClassic", IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC},
+       {"browserLayoutDynamic", IDS_SETTINGS_BROWSER_LAYOUT_DYNAMIC},
+@@ -679,8 +676,6 @@ void AddAppearanceStrings(content::WebUI
+ 
+   html_source->AddBoolean("showCtrlTabMru",
+                           base::FeatureList::IsEnabled(features::kCtrlTabMru));
+-  html_source->AddBoolean("showNativeFrameMaterialsOption",
+-                          features::HeliumNativeFrameAvailable());
+ 
+   std::string configurable_alignments_json;
+   base::JSONWriter::Write(
+Index: src/chrome/common/pref_names.h
+===================================================================
+--- src.orig/chrome/common/pref_names.h
++++ src/chrome/common/pref_names.h
+@@ -622,11 +622,6 @@ inline constexpr char kShowZoomIndicator
+ // frame.
+ inline constexpr char kHeliumRoundedFrame[] = "helium.browser.rounded_frame";
+ 
+-// A boolean pref set to true if browser frame surfaces should use native system
+-// materials instead of opaque fills.
+-inline constexpr char kHeliumNativeFrameMaterials[] =
+-    "helium.browser.native_frame_materials";
+-
+ // An enum (HeliumLayoutType) pref that controls the browser layout.
+ inline constexpr char kHeliumLayout[] = "helium.browser.layout";
+ 
