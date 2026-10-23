@@ -6,4 +6,4 @@ Current macOS releases, documentation, screenshots, and build instructions live 
 - [Import from Arc](https://github.com/dr-baker/Arcium-macOS/blob/main/docs/import-from-arc.md)
 - [Report an issue](https://github.com/dr-baker/Arcium-macOS/issues)
 
-This repository preserves the earlier preview and its [historical releases](https://github.com/dr-baker/Arcium-browser/releases). Use the canonical repositories above for current source and downloads.
+This temporary repository is retired and archived. Its preview downloads have been removed. Use Arcium-macOS for releases and Arcium for shared browser source.
